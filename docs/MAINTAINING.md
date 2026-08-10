@@ -45,3 +45,4 @@ git push origin main   # push 后 Actions 会自动重新构建
 ## 版本与标签
 
 `git tag` 包含上游发布的所有版本标签（v1.0.0 ~ v2.5.1）。`app/build.gradle.kts` 中的 `versionCode` / `versionName` 与上游保持一致。
+- 最近一次触发验证时间：17:00:55Z
