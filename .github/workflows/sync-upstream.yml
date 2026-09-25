@@ -1,0 +1,89 @@
+name: Sync Upstream Eta
+
+on:
+  # 每 4 小时检查 Eta 上游更新（UTC 1/5/9/13/17/21 = 北京 9/13/17/21/1/5 点）
+  # 错开 sync-build.yml 的时间避免同时跑
+  schedule:
+    - cron: '0 1,5,9,13,17,21 * * *'
+  # 手动触发
+  workflow_dispatch:
+  # 接收外部 webhook
+  repository_dispatch:
+    types: [eta-upstream-updated]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync-upstream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/Mangi-11/Eta.git 2>/dev/null || true
+          git fetch upstream main
+
+      - name: Check for upstream changes
+        id: check
+        run: |
+          LOCAL_SHA=$(git rev-parse HEAD)
+          UPSTREAM_SHA=$(git rev-parse upstream/main)
+          BEHIND=$(git rev-list --count HEAD..upstream/main)
+
+          echo "local=$LOCAL_SHA"
+          echo "upstream=$UPSTREAM_SHA"
+          echo "behind=$BEHIND"
+
+          if [[ "$BEHIND" -gt 0 ]]; then
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
+            echo "Upstream is $BEHIND commits ahead"
+          else
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+            echo "Already up to date with upstream"
+          fi
+
+      - name: Merge upstream changes
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 尝试 merge，保留本地自定义（hanshuang-eta-skills 等）
+          git merge upstream/main --no-edit
+
+          # 检查是否有冲突
+          if git diff --quiet --name-only --diff-filter=U; then
+            echo "Merge successful, no conflicts"
+          else
+            echo "::error::Merge conflicts detected. Manual resolution required."
+            echo "Conflicting files:"
+            git diff --name-only --diff-filter=U
+            git merge --abort
+            exit 1
+          fi
+
+      - name: Push merged changes
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          git push origin main
+          echo "Upstream changes merged and pushed successfully"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [[ "${{ steps.check.outputs.has_updates }}" == "true" ]]; then
+            echo "::notice::Synced Eta upstream changes to fork"
+          else
+            echo "::notice::Fork is already up to date with upstream"
+          fi
