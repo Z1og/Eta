@@ -98,8 +98,8 @@ jobs:
       - name: Commit skill changes
         if: steps.check_changes.outputs.has_changes == 'true' || inputs.force_sync == true
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "Z1og"
+          git config user.email "59019705+Z1og@users.noreply.github.com"
           git add hanshuang-eta-skills/ app/src/main/assets/builtin_skills/
           git commit -m "chore(skills): sync from hanshuang-codex ($(date +%Y-%m-%d))" || echo "Nothing to commit"
           git push

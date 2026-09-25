@@ -56,8 +56,8 @@ jobs:
       - name: Merge upstream changes
         if: steps.check.outputs.has_updates == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "Z1og"
+          git config user.email "59019705+Z1og@users.noreply.github.com"
 
           # 尝试 merge，保留本地自定义（hanshuang-eta-skills 等）
           git merge upstream/main --no-edit
