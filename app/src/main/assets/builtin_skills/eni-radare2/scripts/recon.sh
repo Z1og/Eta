@@ -1,91 +1,85 @@
-#!/usr/bin/env bash
-# recon.sh — radare2 快速侦察（二进制基本信息、节区、导入导出、字符串）
-# 等价于 Windows 版的 recon.ps1
-#
-# 用法:
-#   bash recon.sh <target_file> [--strings-limit 40] [--imports-limit 80] [--analyze]
+#!/bin/sh
+# Auto-converted from PowerShell to Shell for Eta Alpine Linux
 
-set -euo pipefail
+﻿param(
+    [Parameter(Mandatory = $true)]
+    [string]$TARGETPATH,
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KALI_BOOTSTRAP="$(cd "$SCRIPT_DIR/../../../kali/scripts" 2>/dev/null && pwd)/bootstrap-reverse.sh"
+    [int]$STRINGSLIMIT = 40,
 
-# ─── 参数 ──────────────────────────────────────────────────────────────────────────
+    [int]$IMPORTSLIMIT = 80,
 
-TARGET=""
-STRINGS_LIMIT=40
-IMPORTS_LIMIT=80
-RUN_ANALYSIS=false
+    [switch]$RUNANALYSIS
+)
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --strings-limit) STRINGS_LIMIT="$2"; shift 2 ;;
-        --imports-limit) IMPORTS_LIMIT="$2"; shift 2 ;;
-        --analyze) RUN_ANALYSIS=true; shift ;;
-        -*) echo "未知选项: $1"; exit 1 ;;
-        *) TARGET="$1"; shift ;;
-    esac
-done
+# 强制当前脚本使用 UTF-8 输出，尽量减少中文标题乱码。
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OUTPUTENCODING = [System.Text.UTF8Encoding]::new($false)
 
-if [[ -z "$TARGET" ]]; then
-    echo "用法: $0 <target_file> [--strings-limit N] [--imports-limit N] [--analyze]"
-    exit 1
-fi
 
-if [[ ! -f "$TARGET" ]]; then
-    echo "ERR: 文件不存在: $TARGET"
-    exit 1
-fi
+. ($PSSCRIPTROOT/'..\..\scripts\lib\ToolDiscovery.ps1')
 
-# ─── 工具检测 ──────────────────────────────────────────────────────────────────────
+$bootstrapScript = $PSSCRIPTROOT/'..\..\scripts\bootstrap-reverse.ps1'
 
-ensure_tool() {
-    local name="$1"
-    if command -v "$name" &>/dev/null; then
-        return 0
-    fi
-    echo "INFO: $name 未找到，尝试安装..."
-    if [[ -x "$KALI_BOOTSTRAP" ]]; then
-        bash "$KALI_BOOTSTRAP" r2 --skip-refresh 2>/dev/null || true
-    fi
-    if ! command -v "$name" &>/dev/null; then
-        echo "ERR: $name 不可用。安装: apt install radare2"
-        exit 1
-    fi
+function Get-RequiredToolSpec {
+        [Parameter(Mandatory = $true)]
+        [string]$NAME
+    )
+
+    $spec = Resolve-ReverseToolSpec -Name $NAME
+    if (-not $spec.Available) {
+        # Attempt auto-bootstrap
+        if (test -e -LiteralPath $bootstrapScript) {
+            Write-Output "INFO: $NAME not found, attempting auto-bootstrap..."
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bootstrapScript -Capability @($NAME) -SkipRefresh
+            $spec = Resolve-ReverseToolSpec -Name $NAME
+        }
+        if (-not $spec.Available) {
+            throw "缺少命令：$NAME — 自动安装失败，请手动安装。参考: https://github.com/radareorg/radare2"
+        }
+    }
+return $spec
 }
 
-ensure_tool "rabin2"
-[[ "$RUN_ANALYSIS" == "true" ]] && ensure_tool "r2"
+function Write-Section {
+        [Parameter(Mandatory = $true)]
+    [string]$TITLE
+    )
 
-# ─── 绝对路径 ──────────────────────────────────────────────────────────────────────
+    # 用固定分段标题，方便人看，也方便后续 grep。
+    ""
+    "=== $TITLE ==="
+}
 
-TARGET="$(realpath "$TARGET")"
-echo "目标文件: $TARGET"
+$rabin2 = Get-RequiredToolSpec -Name 'rabin2'
+$r2 = $null
+if ($RUNANALYSIS) {
+    $r2 = Get-RequiredToolSpec -Name 'r2'
+}
 
-# ─── 侦察 ─────────────────────────────────────────────────────────────────────────
+# 将输入路径规范化成绝对路径，避免 r2/rabin2 在相对路径下歧义解析。
+$resolvedPath = Resolve-Path -LiteralPath $TARGETPATH
+$target = $resolvedPath.Path
 
-echo ""
-echo "=== 基本信息 ==="
-rabin2 -I -- "$TARGET"
+"目标文件: $target"
 
-echo ""
-echo "=== 节区 ==="
-rabin2 -S -- "$TARGET"
+Write-Section -Title '基本信息'
+& $rabin2.Command @($rabin2.PrefixArgs + @('-I', '--', $target))
 
-echo ""
-echo "=== 导入 ==="
-rabin2 -i -- "$TARGET" | head -n "$IMPORTS_LIMIT"
+Write-Section -Title '节区'
+& $rabin2.Command @($rabin2.PrefixArgs + @('-S', '--', $target))
 
-echo ""
-echo "=== 导出 ==="
-rabin2 -E -- "$TARGET"
+Write-Section -Title '导入'
+& $rabin2.Command @($rabin2.PrefixArgs + @('-i', '--', $target)) | Select-Object -First $IMPORTSLIMIT
 
-echo ""
-echo "=== 字符串 ==="
-rabin2 -zz -- "$TARGET" | head -n "$STRINGS_LIMIT"
+Write-Section -Title '导出'
+& $rabin2.Command @($rabin2.PrefixArgs + @('-E', '--', $target))
 
-if [[ "$RUN_ANALYSIS" == "true" ]]; then
-    echo ""
-    echo "=== 函数与入口分析 ==="
-    r2 -A -q -c 's entry0;afl;iz;ii;q' -- "$TARGET"
-fi
+Write-Section -Title '字符串'
+& $rabin2.Command @($rabin2.PrefixArgs + @('-zz', '--', $target)) | Select-Object -First $STRINGSLIMIT
+
+if ($RUNANALYSIS) {
+    Write-Section -Title '函数与入口分析'
+    & $r2.Command @($r2.PrefixArgs + @('-A', '-q', '-c', 's entry0;afl;iz;ii;q', '--', $target))
+}
