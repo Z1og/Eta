@@ -70,17 +70,18 @@ jobs:
       - name: Fetch and adapt skills
         id: adapt
         run: |
-          python3 hanshuang-to-eta.py --skip-fetch 2>&1 || {
+          # 先尝试带缓存运行
+          if ! python3 hanshuang-to-eta.py --skip-fetch 2>&1; then
             echo "First run or cache invalid, fetching from remote..."
             rm -rf .cache/hanshuang-codex
             python3 hanshuang-to-eta.py 2>&1
-          }
+          fi
 
-          # 同时部署到 builtin_skills（编译打包用）
+          # 部署到 builtin_skills（编译打包用）
           python3 hanshuang-to-eta.py --skip-fetch --builtin 2>&1
 
-          # 输出 skill 数量
-          SKILL_COUNT=$(python3 -c "import json; print(len(json.load(open('hanshuang-eta-skills/manifest.json'))['skills']))")
+          # 输出 skill 数量（从 builtin_skills manifest 读取，确保准确）
+          SKILL_COUNT=$(python3 -c "import json; print(len(json.load(open('app/src/main/assets/builtin_skills/manifest.json'))['skills']))")
           echo "skill_count=$SKILL_COUNT" >> "$GITHUB_OUTPUT"
           echo "Adapted $SKILL_COUNT skills"
 
