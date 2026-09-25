@@ -1,115 +1,52 @@
 ---
 name: binary-analysis
-description: |
-  静态二进制逆向工程（Eta 适配版）：PE/ELF 结构分析、模式扫描、反汇编、补丁生成。
-  触发：二进制分析、PE分析、ELF分析、节表、导入表、导出表、模式扫描、反汇编。
-compatibility: Requires Eta root shell + Alpine Linux with radare2/binutils.
-metadata:
+description: Static binary reverse engineering, PE/ELF structural analysis, pattern scanning, disassembly, and binary patch generation.
+compatibility: Requires Eta root shell + Alpine Linux.metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
 ---
 
-# 静态二进制分析（Eta 适配版）
 
-## 工具安装
+# Binary Analysis Skill
 
-```bash
-# Alpine
-apk add binutils file radare2
-pip install capstone lief pyelftools pefile
-```
+This skill provides step-by-step procedures for static binary reverse engineering and analysis.
 
-## 文件类型识别
+## Eta 环境说明
 
-```bash
-file target_binary
-readelf -h target_binary    # ELF 头
-xxd target_binary | head -4  # 魔数
-```
+本 Skill 运行在 Eta Agent Runtime 上（Android root shell + Alpine Linux）：
+- 工具安装：`apk add` / `pip install`
+- Shell 命令通过 Eta 的终端工具执行
+- Frida 直接在本机运行（不需要 USB 模式）
+- 文件通过 Eta 的文件工具读写
 
-## ELF 分析
+## Core Capabilities
 
-```bash
-# 节表
-readelf -S target_binary
+1. **PE/ELF Structure Parsing**:
+   Inspect headers, sections, exported symbols, imported DLLs, and EntryPoint:
+   ```bash
+   python .agents/tools/re-toolkit/cli.py parse-pe <target_file> --json
+   ```
 
-# 符号表
-readelf -s target_binary
-nm target_binary
+2. **Instruction Disassembly**:
+   Disassemble raw binary or specific section offsets:
+   ```bash
+   python .agents/tools/re-toolkit/cli.py disasm <target_file> --offset 0x1000 --length 128 --arch x86_64
+   ```
 
-# 导入/导出
-readelf -r target_binary     # 重定位
-objdump -T target_binary     # 动态符号
-objdump -d target_binary     # 反汇编
+3. **Pattern Scanning (AOB Scanner)**:
+   Locate code patterns across memory sections with wildcards:
+   ```python
+   from pe_parser import PEParser
+   from disasm import pattern_scan
 
-# 依赖库
-readelf -d target_binary | grep NEEDED
-ldd target_binary
-```
+   with open("target.exe", "rb") as f:
+       data = f.read()
+   offsets = pattern_scan(data, "48 89 5c 24 ?? 55 48 83 ec")
+   print("Found offsets:", [hex(o) for o in offsets])
+   ```
 
-## PE 分析
-
-```bash
-# Python pefile
-python3 -c "
-import pefile
-pe = pefile.PE('target.exe')
-print('Sections:')
-for s in pe.sections:
-    print(f'  {s.Name.decode()}: VirtualSize={s.Misc_VirtualSize}')
-print('Imports:')
-for entry in pe.DIRECTORY_ENTRY_IMPORT:
-    print(f'  {entry.dll.decode()}')
-    for imp in entry.imports:
-        print(f'    {imp.name}')
-"
-```
-
-## radare2 深度分析
-
-```bash
-r2 -A target_binary
-
-# 结构概览
-ii          # 导入
-iE          # 导出
-is          # 符号
-iz          # 字符串
-iS          # 段
-
-# 函数分析
-afl          # 列出所有函数
-af @ sym.main
-pdf @ sym.main
-
-# 交叉引用
-axt @ addr
-axf @ addr
-
-# 搜索
-/w keyword
-/x 41424344  # 搜索字节模式
-
-# 反编译（r2ghidra）
-pdg @ sym.main
-```
-
-## 补丁生成
-
-```bash
-# radare2 补丁
-r2 -w target_binary
-/a search_pattern   # 搜索
-s addr             # 跳转
-wa nop             # 写汇编
-wx 90909090        # 写字节
-r2 -c "s 0x401000; wx 90909090" -w target_binary
-```
-
-## 路由上下文
-
-**上游入口**: `hanshuang-router`
-**下游出口**:
-- 需要 Ghidra/IDA 反编译 → `ida-reverse`
-- 需要动态分析 → `dynamic-instrumentation`
-- 需要漏洞利用 → `pentest-tools`
+4. **Instruction Micro-Emulation**:
+   Test and execute arithmetic / logic routines in isolation without running target binaries:
+   ```bash
+   python .agents/tools/re-toolkit/cli.py emulate --code "B82A000000505BC3"
+   ```
