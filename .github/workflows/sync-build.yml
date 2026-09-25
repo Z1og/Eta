@@ -1,0 +1,239 @@
+name: Sync Skills & Build APK
+
+on:
+  # 每天北京时间 08:00 (UTC 00:00) 自动同步
+  schedule:
+    - cron: '0 0 * * *'
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: false
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+      force_sync:
+        description: 'Force full re-sync even without upstream changes'
+        required: false
+        default: false
+        type: boolean
+  # 推送到 main 时也构建
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/workflows/*.yml'
+
+env:
+  JAVA_DISTRIBUTION: temurin
+  JAVA_VERSION: 21
+  # Release 签名通过 GitHub Secrets 注入，缺失时回退 debug 签名
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: 同步 + 适配 hanshuang-codex Skills
+  # ──────────────────────────────────────────────
+  sync-skills:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check_changes.outputs.has_changes }}
+      skill_count: ${{ steps.adapt.outputs.skill_count }}
+    steps:
+      - name: Checkout Eta
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Cache hanshuang-codex repo
+        uses: actions/cache@v4
+        with:
+          path: .cache/hanshuang-codex
+          key: hanshuang-codex-${{ github.run_id }}
+          restore-keys: |
+            hanshuang-codex-
+
+      - name: Fetch and adapt skills
+        id: adapt
+        run: |
+          python3 hanshuang-to-eta.py --skip-fetch 2>&1 || {
+            echo "First run or cache invalid, fetching from remote..."
+            rm -rf .cache/hanshuang-codex
+            python3 hanshuang-to-eta.py 2>&1
+          }
+
+          # 同时部署到 builtin_skills（编译打包用）
+          python3 hanshuang-to-eta.py --skip-fetch --builtin 2>&1
+
+          # 输出 skill 数量
+          SKILL_COUNT=$(python3 -c "import json; print(len(json.load(open('hanshuang-eta-skills/manifest.json'))['skills']))")
+          echo "skill_count=$SKILL_COUNT" >> "$GITHUB_OUTPUT"
+          echo "Adapted $SKILL_COUNT skills"
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet hanshuang-eta-skills/ app/src/main/assets/builtin_skills/; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No skill changes detected"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            # 显示变更摘要
+            git diff --stat hanshuang-eta-skills/ app/src/main/assets/builtin_skills/ | tail -5
+          fi
+
+      - name: Commit skill changes
+        if: steps.check_changes.outputs.has_changes == 'true' || inputs.force_sync == true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add hanshuang-eta-skills/ app/src/main/assets/builtin_skills/
+          git commit -m "chore(skills): sync from hanshuang-codex ($(date +%Y-%m-%d))" || echo "Nothing to commit"
+          git push
+
+  # ──────────────────────────────────────────────
+  # Job 2: 编译 APK
+  # ──────────────────────────────────────────────
+  build-apk:
+    needs: sync-skills
+    if: always()  # 即使 sync 没变化也允许手动触发构建
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 创建 Release 需要
+    steps:
+      - name: Checkout Eta
+        uses: actions/checkout@v4
+
+      - name: Determine build type
+        id: build_type
+        run: |
+          if [[ "${{ inputs.build_type }}" == "release" ]]; then
+            echo "type=release" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "type=debug" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=debug" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses 2>/dev/null || true
+
+      - name: Install Android SDK components
+        run: |
+          sdkmanager "platforms;android-37"
+          sdkmanager "build-tools;37.0.0"
+          sdkmanager "platform-tools"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-
+
+      - name: Create debug keystore (for debug builds)
+        if: steps.build_type.outputs.type == 'debug'
+        run: |
+          keytool -genkeypair -v \
+            -keystore app/debug.keystore \
+            -alias debug \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Debug,O=Debug,C=US"
+
+      - name: Build debug APK
+        if: steps.build_type.outputs.type == 'debug'
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+          echo "APK_PATH=app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        if: steps.build_type.outputs.type == 'release'
+        env:
+          ETA_RELEASE_STORE_FILE: ${{ secrets.ETA_RELEASE_STORE_FILE }}
+          ETA_RELEASE_STORE_PASSWORD: ${{ secrets.ETA_RELEASE_STORE_PASSWORD }}
+          ETA_RELEASE_KEY_ALIAS: ${{ secrets.ETA_RELEASE_KEY_ALIAS }}
+          ETA_RELEASE_KEY_PASSWORD: ${{ secrets.ETA_RELEASE_KEY_PASSWORD }}
+        run: |
+          # 如果提供了签名密钥，解码并使用
+          if [[ -n "$ETA_RELEASE_STORE_FILE" ]]; then
+            echo "${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
+            export ETA_RELEASE_STORE_FILE="app/release.keystore"
+          fi
+
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace
+          echo "APK_PATH=app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_ENV"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Eta-${{ steps.build_type.outputs.type }}-${{ github.sha }}
+          path: ${{ env.APK_PATH }}
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: steps.build_type.outputs.type == 'release' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}-build
+          name: "Eta Build #${{ github.run_number }}"
+          body: |
+            Automated build from commit `${{ github.sha }}`
+
+            **Skills**: ${{ needs.sync-skills.outputs.skill_count || 'N/A' }} adapted from hanshuang-codex
+            **Build type**: ${{ steps.build_type.outputs.type }}
+            **Date**: ${{ github.event.head_commit.timestamp || 'manual trigger' }}
+          files: ${{ env.APK_PATH }}
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ──────────────────────────────────────────────
+  # Job 3: 检查上游更新（仅通知，不阻塞）
+  # ──────────────────────────────────────────────
+  check-upstream:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Check for upstream changes
+        run: |
+          # 获取上游最新 commit
+          UPSTREAM_SHA=$(curl -s "https://api.github.com/repos/aimeoa/hanshuang-codex/commits/main" | jq -r '.sha')
+          echo "Upstream latest: $UPSTREAM_SHA"
+
+          if [[ -n "$UPSTREAM_SHA" && "$UPSTREAM_SHA" != "null" ]]; then
+            echo "Upstream has commit: $UPSTREAM_SHA"
+            echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_ENV"
+          else
+            echo "Could not fetch upstream SHA"
+          fi
+
+      - name: Notify if update available
+        if: env.upstream_sha != ''
+        run: |
+          echo "::notice::hanshuang-codex upstream has new commits ($upstream_sha). Skills will be synced in the next build."

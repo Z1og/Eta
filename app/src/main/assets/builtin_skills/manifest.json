@@ -29,6 +29,126 @@
       "hasReferences": false,
       "hasAssets": false,
       "hasEvals": false
+    },
+    {
+      "id": "hanshuang-router",
+      "name": "hanshuang-router",
+      "description": "寒霜安全技能路由总控（Eta 适配版）。根据用户意图自动路由到对应的安全研究 Skill。覆盖逆向、破解、渗透、外挂、APK分析、Frida、IDA、协议逆向等。",
+      "assetPath": "builtin_skills/hanshuang-router",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "reverse-engineering",
+      "name": "reverse-engineering",
+      "description": "逆向工程技术参考（Eta 适配版）。用于理解编译后、混淆、加壳或虚拟化目标。覆盖二进制、APK、WASM、固件、自定义VM、反调试/反分析。",
+      "assetPath": "builtin_skills/reverse-engineering",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "apk-reverse",
+      "name": "apk-reverse",
+      "description": "在 Eta Android 环境下做 APK 逆向：解包、Java反编译、smali修改、重打包、Frida动态Hook、native分析。利用root shell和Alpine Linux直接在设备上操作。",
+      "assetPath": "builtin_skills/apk-reverse",
+      "hasScripts": true,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "crack-keygen",
+      "name": "crack-keygen",
+      "description": "软件授权分析与许可研究（Eta 适配版）：反汇编、反编译、补丁、注册机、序列号算法、许可绕过、DRM、试用重置。触发：破解、crackme、keygen、卡密。",
+      "assetPath": "builtin_skills/crack-keygen",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "pentest-tools",
+      "name": "pentest-tools",
+      "description": "主动渗透测试工具链（Eta 适配版）。覆盖信息收集、端口扫描、漏洞扫描、Web渗透、SQL注入、目录爆破、密码破解。运行在Alpine Linux环境中。",
+      "assetPath": "builtin_skills/pentest-tools",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "game-cheat",
+      "name": "game-cheat",
+      "description": "游戏客户端工程（Eta 适配版）：进程内存、注入、渲染、输入、检测绕过。在Android设备上通过root shell和Frida实现游戏修改器。",
+      "assetPath": "builtin_skills/game-cheat",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "mobile-reverse",
+      "name": "mobile-reverse",
+      "description": "Android/iOS逆向工程（Eta 适配版）：APK/IPA分析、Frida/Objection工作流、SSL pinning绕过、root检测绕过、运行时Hook。",
+      "assetPath": "builtin_skills/mobile-reverse",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "dynamic-instrumentation",
+      "name": "dynamic-instrumentation",
+      "description": "Frida动态Hook、内存补丁、API参数追踪、反调试绕过脚本生成（Eta 适配版）。在Android设备上通过Frida直接操作目标进程。",
+      "assetPath": "builtin_skills/dynamic-instrumentation",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "ida-reverse",
+      "name": "ida-reverse",
+      "description": "IDA Pro逆向分析辅助（Eta 适配版）。通过radare2+r2ghidra作为本地替代，或远程IDA实例操作。触发：IDA、Hex-Rays、反编译。",
+      "assetPath": "builtin_skills/ida-reverse",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "protocol-reversing",
+      "name": "protocol-reversing",
+      "description": "网络流量解密、Protobuf格式解析、TLV二进制包分析、API模拟（Eta 适配版）。利用root权限直接抓包和hook网络请求。",
+      "assetPath": "builtin_skills/protocol-reversing",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "network-pentest",
+      "name": "network-pentest",
+      "description": "网络安全评估（Eta 适配版）：信息收集、扫描、漏洞识别、利用。利用Android网络栈直接进行网络渗透测试。",
+      "assetPath": "builtin_skills/network-pentest",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "binary-analysis",
+      "name": "binary-analysis",
+      "description": "静态二进制逆向工程（Eta 适配版）：PE/ELF结构分析、模式扫描、反汇编、补丁生成。触发：二进制分析、PE分析、ELF分析。",
+      "assetPath": "builtin_skills/binary-analysis",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
     }
   ]
 }
