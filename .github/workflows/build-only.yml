@@ -34,9 +34,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept licenses & install SDK
+      - name: Install SDK components
         run: |
-          yes | sdkmanager --licenses 2>/dev/null || true
+          sdkmanager --licenses 2>/dev/null || true
           sdkmanager "platforms;android-37" "build-tools;37.0.0" "platform-tools"
 
       - name: Cache Gradle

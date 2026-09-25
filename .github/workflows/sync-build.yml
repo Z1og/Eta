@@ -39,6 +39,8 @@ jobs:
   # ──────────────────────────────────────────────
   sync-skills:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 允许 bot push commit
     outputs:
       has_changes: ${{ steps.check_changes.outputs.has_changes }}
       skill_count: ${{ steps.adapt.outputs.skill_count }}
@@ -47,6 +49,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true  # 允许后续 git push
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -132,11 +135,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses 2>/dev/null || true
-
       - name: Install Android SDK components
         run: |
+          sdkmanager --licenses 2>/dev/null || true
           sdkmanager "platforms;android-37"
           sdkmanager "build-tools;37.0.0"
           sdkmanager "platform-tools"
