@@ -1,9 +1,12 @@
 name: Sync Skills & Build APK
 
 on:
-  # 每天北京时间 08:00 (UTC 00:00) 自动同步
+  # 每 4 小时自动同步（UTC 0/4/8/12/16/20 = 北京 8/12/16/20/0/4 点）
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0,4,8,12,16,20 * * *'
+  # 接收外部 webhook 触发（上游更新时可用 curl 触发）
+  repository_dispatch:
+    types: [hanshuang-codex-updated]
   # 手动触发
   workflow_dispatch:
     inputs:
