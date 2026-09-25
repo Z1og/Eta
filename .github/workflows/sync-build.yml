@@ -100,9 +100,18 @@ jobs:
         run: |
           git config user.name "Z1og"
           git config user.email "59019705+Z1og@users.noreply.github.com"
+
+          # 先 fetch rebase，避免 push 被远程新提交拒
+          git fetch origin main
+          git rebase origin/main || {
+            echo "::warning::Rebase failed, attempting merge"
+            git rebase --abort
+            git merge --no-edit origin/main
+          }
+
           git add hanshuang-eta-skills/ app/src/main/assets/builtin_skills/
           git commit -m "chore(skills): sync from hanshuang-codex ($(date +%Y-%m-%d))" || echo "Nothing to commit"
-          git push
+          git push origin HEAD:main
 
   # ──────────────────────────────────────────────
   # Job 2: 编译 APK（照搬上游已验证配置）
@@ -183,8 +192,8 @@ jobs:
         if: steps.build_type.outputs.type == 'release' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}-build
-          name: "Eta Build #${{ github.run_number }}"
+          tag_name: v${{ github.run_number }}-${{ github.event.head_commit.timestamp || 'manual' }}
+          name: "Eta v${{ github.run_number }} - ${{ steps.build_type.outputs.type }}"
           body: |
             Automated build from commit `${{ github.sha }}`
 
@@ -193,7 +202,9 @@ jobs:
             **Date**: ${{ github.event.head_commit.timestamp || 'manual trigger' }}
           files: ${{ env.APK_PATH }}
           draft: false
-          prerelease: true
+          prerelease: false
+          generate_release_notes: true
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
