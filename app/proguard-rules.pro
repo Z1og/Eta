@@ -24,7 +24,7 @@
 # 允许入口类混淆时，需要同步改写 java_init.list，避免 release 裁剪后模块失效。
 -dontwarn io.github.libxposed.annotation.**
 -adaptresourcefilecontents META-INF/xposed/java_init.list
--keep,allowoptimization,allowobfuscation class fuck.andes.ModuleMain {
+-keep,allowoptimization,allowobfuscation class io.github.mangi.eta.ModuleMain {
     public <init>();
 }
 
@@ -40,17 +40,17 @@
 # ── Release 日志策略 ────────────────────────────────────────────────────────
 # 仅删除 Eta 自有代码中的 Android VERBOSE/DEBUG 调用；INFO/WARN/ERROR 必须保留，
 # 第三方依赖的日志策略由依赖自身决定。
--maximumremovedandroidloglevel 3 class fuck.andes.** { *; }
+-maximumremovedandroidloglevel 3 class io.github.mangi.eta.** { *; }
 
 # XposedModule.log 不是 android.util.Log，R8 无法通过上面的规则识别。
 # debug supplier 是纯观察 API；禁止在 supplier 内执行任何业务副作用。
--assumenosideeffects interface fuck.andes.core.AgentLogger {
+-assumenosideeffects interface io.github.mangi.eta.core.AgentLogger {
     public abstract void debug(kotlin.jvm.functions.Function0);
 }
--assumenosideeffects class fuck.andes.core.AndroidAgentLogger {
+-assumenosideeffects class io.github.mangi.eta.core.AndroidAgentLogger {
     public void debug(kotlin.jvm.functions.Function0);
 }
--assumenosideeffects class fuck.andes.core.ModuleLogger {
+-assumenosideeffects class io.github.mangi.eta.core.ModuleLogger {
     public void debug(kotlin.jvm.functions.Function0);
 }
 

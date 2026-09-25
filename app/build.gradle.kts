@@ -23,15 +23,17 @@ java {
 }
 
 android {
-    namespace = "fuck.andes"
+    namespace = "io.github.mangi.eta"
     compileSdk = 37
+    ndkVersion = libs.versions.ndk.get()
 
     defaultConfig {
-        applicationId = "fuck.andes"
+        applicationId = "io.github.mangi.eta"
         minSdk = 34
         targetSdk = 36
-        versionCode = 251
-        versionName = "2.5.1"
+        // versionCode 规则：yyyyMMdd + 两位当日序号（01 起），发版时随 versionName 一起手动递增。
+        versionCode = 2026092301
+        versionName = "3.0.5"
     }
 
     signingConfigs {
@@ -48,6 +50,7 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = false
+            isPseudoLocalesEnabled = true
         }
         release {
             signingConfig = signingConfigs.findByName("release")
@@ -70,7 +73,15 @@ android {
         compose = true
     }
 
+    androidResources {
+        localeFilters += listOf("en", "b+zh+Hans", "b+zh+Hant")
+    }
+
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += setOf("**/libproot_exec.so", "**/libproot_loader.so", "**/libeta_pty.so")
+        }
         resources {
             // 合并 Xposed 模块声明，避免 release 裁剪后模块入口失效
             merges += "META-INF/xposed/*"
@@ -85,24 +96,34 @@ android {
         abortOnError = true
         checkReleaseBuilds = false
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
+    implementation(libs.commons.compress)
+    implementation(libs.xz)
     compileOnly(libs.libxposed.api)
     // UI 侧 RemotePreferences 写入桥：通过 XposedService 将配置提交到 LSPosed 数据库；
     // Hook 侧用 XposedInterface.getRemotePreferences 读取当前进程持有的配置缓存。
     implementation(libs.libxposed.service)
+    implementation(libs.dexkit)
     implementation(libs.miuix.ui)
     implementation(libs.miuix.blur)
+    implementation(libs.miuix.nav)
     implementation(libs.miuix.preference)
-    implementation(libs.miuix.navigation3.ui)
-    implementation(libs.lucide.icons)
-    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.material.icons.extended)
+    implementation(libs.androidx.navigationevent)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.activity.compose)
     implementation(libs.markdown.renderer)
     implementation(libs.markdown.renderer.m3)
     // markdown-renderer-m3 将 material3 作为 compileOnly，需显式引入以满足运行时依赖
     implementation(libs.material3)
+    implementation(libs.hidden.api.bypass)
 
     // DataStore：Provider / Model 结构化 JSON 与当前选中 ID 等键值
     implementation(libs.datastore.preferences)
