@@ -1,12 +1,12 @@
-# Eta
+# Eta + hanshuang-codex
 
 **简体中文** | [English](README_EN.md)
 
-<p><a href="https://github.com/Mangi-11/Eta/releases"><img src="https://img.shields.io/github/downloads/Mangi-11/Eta/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"></p>
+<p><a href="https://github.com/Mangi-11/Eta/releases"><img src="https://img.shields.io/github/downloads/Mangi-11/Eta/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"> <img src="https://img.shields.io/badge/Skills-153%20adapted-7F52FF" alt="153 adapted security skills"></p>
 
-**面向 Android 的第三方系统级 AI 助手**
+**面向 Android 的第三方系统级 AI 助手 + 153 个适配安全技能**
 
-Eta 是为手机和移动设备设计的 AI Agent，结合了 [Codex](https://openai.com/codex/) 这类 Coding Agent 自主规划与执行任务的能力，以及[豆包手机助手](https://o.doubao.com/)所展示的 GUI Agent 跨应用操作方式。它可以处理文件、执行命令、编写代码，也可以通过系统与厂商应用适配，直接调用系统 API，检索通知、日程、照片等本机信息。
+本项目是 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 和 [aimeoa/hanshuang-codex](https://github.com/aimeoa/hanshuang-codex) 的合并版本。Eta 提供系统级 AI Agent 运行时，hanshuang-codex 提供桌面端安全技能包——通过自动化适配脚本将 153 个安全技能转换为 Android Root Shell + Alpine Linux 环境可用格式，实现两个项目的优势互补。
 
 **系统级能力**：
 
@@ -175,12 +175,44 @@ Eta 先从现有 Android 上的模型、上下文与工具做起。真正落地�
 - [HyperOS 系统入口](docs/HYPEROS_SYSTEM_ENTRY.md)：电源键、一圈即搜的适配条件与验证边界。
 - [终端原生组件](docs/TERMINAL_NATIVE.md)：PTY、PRoot 及随包源码的构建方式。
 
+## 安全技能（hanshuang-codex 适配）
+
+本项目从 [aimeoa/hanshuang-codex](https://github.com/aimeoa/hanshuang-codex) 自动适配了 **153 个安全技能**，涵盖逆向工程、渗透测试、漏洞利用、游戏安全、移动安全等方向。所有技能已针对 Eta 的 Android Root Shell + Alpine Linux 环境重新转换：
+
+- **适配转换**：PowerShell → Shell、winget/brew → apk add、Docker → Alpine 直装、`frida -U` → 本地模式
+- **移除内容**：桌面端 persona、中转站保护等不适配移动端的模块
+- **Eta 原生集成**：技能可直接调用 Eta 的 shell、文件、设备、浏览器等工具
+
+适配脚本：[`hanshuang-to-eta.py`](hanshuang-to-eta.py)
+
+```
+python3 hanshuang-to-eta.py           # 拉取上游 + 适配 + 部署
+python3 hanshuang-to-eta.py --builtin  # 同时部署到内置技能目录
+python3 hanshuang-to-eta.py --dry-run  # 仅预览，不写文件
+```
+
+技能分类（部分）：逆向工程、APK 逆向、二进制分析、IDA 逆向、协议逆向、动态插桩、渗透工具、网络渗透、破解/keygen、游戏安全、移动安全、EDR 绕过、漏洞利用、固件渗透 等。
+
+完整技能列表见 [`hanshuang-eta-skills/`](hanshuang-eta-skills/) 和 [`app/src/main/assets/builtin_skills/`](app/src/main/assets/builtin_skills/)。
+
+## 自动同步与编译
+
+本项目配置了 CI/CD 自动化，上游项目更新时自动适配并编译 APK：
+
+| 上游来源 | 同步机制 | 延迟 |
+|---------|---------|------|
+| [Mangi-11/Eta](https://github.com/Mangi-11/Eta) | `sync-upstream.yml` 每 4h 检测 → 自动 merge | ≤4h |
+| [aimeoa/hanshuang-codex](https://github.com/aimeoa/hanshuang-codex) | `sync-build.yml` 每 4h 检测 → 适配 → 编译 | ≤4h |
+
+也支持 `repository_dispatch` Webhook 即时触发，以及手动触发 debug/release 构建。详见 [`.github/workflows/`](.github/workflows/)。
+
 ## 参考与致谢
 
 - [Pi Coding Agent](https://github.com/earendil-works/pi)：Eta Agent Runtime 的核心参考，包括 Agent Loop、Tool Calling、steering 与 transcript 状态管理。
 - [OmniBot](https://github.com/omnimind-ai/OmniBot)：Android AI Agent 方向的参考项目。
 - [libxposed API](https://github.com/libxposed/api)：现代 Xposed API。
 - [Miuix](https://github.com/compose-miuix-ui/miuix)：UI 组件库。
+- [hanshuang-codex](https://github.com/aimeoa/hanshuang-codex)：153 个安全技能的原始来源，由 aimeoa 维护。
 
 ## 许可证
 

@@ -1,12 +1,12 @@
-# Eta
+# Eta + hanshuang-codex
 
 [简体中文](README.md) | **English**
 
-<p><a href="https://github.com/Mangi-11/Eta/releases"><img src="https://img.shields.io/github/downloads/Mangi-11/Eta/total?logo=github&amp;label=Downloads&amp;color=1677FF" alt="Total GitHub Releases downloads"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"></p>
+<p><a href="https://github.com/Mangi-11/Eta/releases"><img src="https://img.shields.io/github/downloads/Mangi-11/Eta/total?logo=github&amp;label=Downloads&amp;color=1677FF" alt="Total GitHub Releases downloads"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"> <img src="https://img.shields.io/badge/Skills-153%20adapted-7F52FF" alt="153 adapted security skills"></p>
 
-**A third-party, system-level AI assistant for Android**
+**A third-party, system-level AI assistant for Android + 153 adapted security skills**
 
-Eta is an AI agent designed for phones and other mobile devices. It pairs the autonomous task planning and execution familiar from coding agents such as [Codex](https://openai.com/codex/) with the GUI-driven, cross-app interaction demonstrated by [Doubao Phone Assistant](https://o.doubao.com/). It can work with files, run commands, and write code. Integrations with Android and OEM apps also let it call system APIs directly and retrieve information from notifications, calendars, photos, and other local sources.
+This project merges [Mangi-11/Eta](https://github.com/Mangi-11/Eta) with [aimeoa/hanshuang-codex](https://github.com/aimeoa/hanshuang-codex). Eta provides the system-level AI Agent runtime, while hanshuang-codex provides a desktop security skill pack — 153 skills have been automatically adapted for Android Root Shell + Alpine Linux environments, combining the strengths of both projects.
 
 **System-level capabilities:**
 
@@ -171,12 +171,44 @@ These implementation notes are currently in Chinese:
 - [HyperOS system entry points](docs/HYPEROS_SYSTEM_ENTRY.md): power-button and Circle to Search integration, requirements, and validation coverage.
 - [Native terminal components](docs/TERMINAL_NATIVE.md): PTY and PRoot components, and rebuilding the bundled source.
 
+## Security Skills (adapted from hanshuang-codex)
+
+This project automatically adapts **153 security skills** from [aimeoa/hanshuang-codex](https://github.com/aimeoa/hanshuang-codex), covering reverse engineering, penetration testing, exploit development, game security, mobile security, and more. All skills have been converted for Eta's Android Root Shell + Alpine Linux environment:
+
+- **Adaptations**: PowerShell → Shell, winget/brew → apk add, Docker → Alpine direct install, `frida -U` → local mode
+- **Removed**: Desktop-only persona modules and protections not applicable to mobile
+- **Eta integration**: Skills can directly use Eta's shell, file, device, and browser tools
+
+Adaptation script: [`hanshuang-to-eta.py`](hanshuang-to-eta.py)
+
+```
+python3 hanshuang-to-eta.py           # Fetch upstream + adapt + deploy
+python3 hanshuang-to-eta.py --builtin  # Also deploy to builtin skills directory
+python3 hanshuang-to-eta.py --dry-run  # Preview only, no file writes
+```
+
+Skill categories (partial): reverse engineering, APK reverse, binary analysis, IDA reverse, protocol reverse, dynamic instrumentation, pentest tools, network pentest, crack/keygen, game security, mobile security, EDR bypass, exploit chain, firmware pentest, and more.
+
+Full skill list: [`hanshuang-eta-skills/`](hanshuang-eta-skills/) and [`app/src/main/assets/builtin_skills/`](app/src/main/assets/builtin_skills/).
+
+## Auto Sync & Build
+
+CI/CD automation keeps this fork up to date with both upstream projects:
+
+| Upstream | Sync mechanism | Latency |
+|----------|---------------|---------|
+| [Mangi-11/Eta](https://github.com/Mangi-11/Eta) | `sync-upstream.yml` checks every 4h → auto merge | ≤4h |
+| [aimeoa/hanshuang-codex](https://github.com/aimeoa/hanshuang-codex) | `sync-build.yml` checks every 4h → adapt → build APK | ≤4h |
+
+Also supports `repository_dispatch` webhook for instant triggering, and manual debug/release builds. See [`.github/workflows/`](.github/workflows/).
+
 ## References and acknowledgements
 
 - [Pi Coding Agent](https://github.com/earendil-works/pi): the main reference for Eta's agent runtime, including the agent loop, tool calling, steering, and transcript state management.
 - [OmniBot](https://github.com/omnimind-ai/OmniBot): a reference project for AI agents on Android.
 - [libxposed API](https://github.com/libxposed/api): the modern Xposed API.
 - [Miuix](https://github.com/compose-miuix-ui/miuix): the UI component library.
+- [hanshuang-codex](https://github.com/aimeoa/hanshuang-codex): the original source of 153 security skills, maintained by aimeoa.
 
 ## License
 
