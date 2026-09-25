@@ -13,11 +13,11 @@ on:
       build_type:
         description: 'Build type'
         required: false
-        default: 'debug'
+        default: 'release'
         type: choice
         options:
-          - debug
           - release
+          - debug
       force_sync:
         description: 'Force full re-sync even without upstream changes'
         required: false
