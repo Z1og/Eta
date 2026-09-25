@@ -31,10 +31,12 @@ on:
       - '*.md'
       - '.github/workflows/*.yml'
 
-env:
-  JAVA_DISTRIBUTION: temurin
-  JAVA_VERSION: 21
-  # Release 签名通过 GitHub Secrets 注入，缺失时回退 debug 签名
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ──────────────────────────────────────────────
@@ -42,8 +44,6 @@ jobs:
   # ──────────────────────────────────────────────
   sync-skills:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write  # 允许 bot push commit
     outputs:
       has_changes: ${{ steps.check_changes.outputs.has_changes }}
       skill_count: ${{ steps.adapt.outputs.skill_count }}
@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true  # 允许后续 git push
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -92,7 +92,6 @@ jobs:
             echo "No skill changes detected"
           else
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            # 显示变更摘要
             git diff --stat hanshuang-eta-skills/ app/src/main/assets/builtin_skills/ | tail -5
           fi
 
@@ -106,14 +105,13 @@ jobs:
           git push
 
   # ──────────────────────────────────────────────
-  # Job 2: 编译 APK
+  # Job 2: 编译 APK（照搬上游已验证配置）
   # ──────────────────────────────────────────────
   build-apk:
     needs: sync-skills
-    if: always()  # 即使 sync 没变化也允许手动触发构建
+    if: always()
     runs-on: ubuntu-latest
-    permissions:
-      contents: write  # 创建 Release 需要
+    timeout-minutes: 40
     steps:
       - name: Checkout Eta
         uses: actions/checkout@v4
@@ -123,88 +121,55 @@ jobs:
         run: |
           if [[ "${{ inputs.build_type }}" == "release" ]]; then
             echo "type=release" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" == "push" ]]; then
-            echo "type=debug" >> "$GITHUB_OUTPUT"
           else
             echo "type=debug" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Set up JDK
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
-          distribution: ${{ env.JAVA_DISTRIBUTION }}
-          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          java-version: '25'
 
-      - name: Install Android SDK
-        run: |
-          # 下载并安装 cmdline-tools（手动控制，跳过有问题的 setup-android@v3）
-          ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
-          if [[ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" ]]; then
-            echo "Installing Android cmdline-tools..."
-            sudo mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-            cd /tmp
-            curl -sLO https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
-            sudo unzip -q commandlinetools-linux-13114758_latest.zip -d /tmp/cmdline-tools
-            sudo mv /tmp/cmdline-tools/cmdline-tools "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-            cd -
-          fi
-          export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-
-          # 接受所有 license
-          yes | sdkmanager --licenses 2>/dev/null || true
-
-          # 安装必需组件
-          sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"
-
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-          echo "PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH" >> "$GITHUB_ENV"
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
-          restore-keys: gradle-
+          cache-provider: basic
 
-      - name: Create debug keystore (for debug builds)
-        if: steps.build_type.outputs.type == 'debug'
-        run: |
-          keytool -genkeypair -v \
-            -keystore app/debug.keystore \
-            -alias debug \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=Debug,O=Debug,C=US"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android SDK 37
+        run: sdkmanager --channel=3 "platforms;android-37.0"
 
       - name: Build debug APK
         if: steps.build_type.outputs.type == 'debug'
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew --no-daemon --no-configuration-cache :app:assembleDebug --stacktrace
           echo "APK_PATH=app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
 
       - name: Build release APK
         if: steps.build_type.outputs.type == 'release'
         env:
-          ETA_RELEASE_STORE_FILE: ${{ secrets.ETA_RELEASE_STORE_FILE }}
+          ETA_RELEASE_KEYSTORE_BASE64: ${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}
           ETA_RELEASE_STORE_PASSWORD: ${{ secrets.ETA_RELEASE_STORE_PASSWORD }}
           ETA_RELEASE_KEY_ALIAS: ${{ secrets.ETA_RELEASE_KEY_ALIAS }}
           ETA_RELEASE_KEY_PASSWORD: ${{ secrets.ETA_RELEASE_KEY_PASSWORD }}
         run: |
-          # 如果提供了签名密钥，解码并使用
-          if [[ -n "$ETA_RELEASE_STORE_FILE" ]]; then
-            echo "${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
-            export ETA_RELEASE_STORE_FILE="app/release.keystore"
+          if [[ -z "$ETA_RELEASE_KEYSTORE_BASE64" || -z "$ETA_RELEASE_STORE_PASSWORD" || \
+                -z "$ETA_RELEASE_KEY_ALIAS" || -z "$ETA_RELEASE_KEY_PASSWORD" ]]; then
+            echo "::error::Missing release signing secrets"
+            exit 1
           fi
+          printf '%s' "$ETA_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/eta-release.jks"
 
+          export ETA_RELEASE_STORE_FILE="$RUNNER_TEMP/eta-release.jks"
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew --no-daemon --no-configuration-cache :app:assembleRelease --stacktrace
           echo "APK_PATH=app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_ENV"
 
       - name: Upload APK artifact
@@ -241,15 +206,10 @@ jobs:
     steps:
       - name: Check for upstream changes
         run: |
-          # 获取上游最新 commit
           UPSTREAM_SHA=$(curl -s "https://api.github.com/repos/aimeoa/hanshuang-codex/commits/main" | jq -r '.sha')
           echo "Upstream latest: $UPSTREAM_SHA"
-
           if [[ -n "$UPSTREAM_SHA" && "$UPSTREAM_SHA" != "null" ]]; then
-            echo "Upstream has commit: $UPSTREAM_SHA"
             echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_ENV"
-          else
-            echo "Could not fetch upstream SHA"
           fi
 
       - name: Notify if update available

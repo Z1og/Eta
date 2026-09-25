@@ -12,76 +12,64 @@ on:
           - debug
           - release
 
-env:
-  JAVA_DISTRIBUTION: temurin
-  JAVA_VERSION: 21
+permissions:
+  contents: write
+
+concurrency:
+  group: build-only-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
-          distribution: ${{ env.JAVA_DISTRIBUTION }}
-          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          java-version: '25'
 
-      - name: Install Android SDK
-        run: |
-          # 下载并安装 cmdline-tools（手动控制，跳过有问题的 setup-android@v3）
-          ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
-          if [[ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" ]]; then
-            echo "Installing Android cmdline-tools..."
-            sudo mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-            cd /tmp
-            curl -sLO https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
-            sudo unzip -q commandlinetools-linux-13114758_latest.zip -d /tmp/cmdline-tools
-            sudo mv /tmp/cmdline-tools/cmdline-tools "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-            cd -
-          fi
-          export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-
-          yes | sdkmanager --licenses 2>/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"
-
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-          echo "PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH" >> "$GITHUB_ENV"
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
-          restore-keys: gradle-
+          cache-provider: basic
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android SDK 37
+        run: sdkmanager --channel=3 "platforms;android-37.0"
 
       - name: Build debug APK
         if: inputs.build_type == 'debug'
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew --no-daemon --no-configuration-cache :app:assembleDebug --stacktrace
 
       - name: Build release APK
         if: inputs.build_type == 'release'
         env:
-          ETA_RELEASE_STORE_FILE: ${{ secrets.ETA_RELEASE_STORE_FILE }}
+          ETA_RELEASE_KEYSTORE_BASE64: ${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}
           ETA_RELEASE_STORE_PASSWORD: ${{ secrets.ETA_RELEASE_STORE_PASSWORD }}
           ETA_RELEASE_KEY_ALIAS: ${{ secrets.ETA_RELEASE_KEY_ALIAS }}
           ETA_RELEASE_KEY_PASSWORD: ${{ secrets.ETA_RELEASE_KEY_PASSWORD }}
         run: |
-          if [[ -n "$ETA_RELEASE_STORE_FILE" ]]; then
-            echo "${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
-            export ETA_RELEASE_STORE_FILE="app/release.keystore"
+          if [[ -z "$ETA_RELEASE_KEYSTORE_BASE64" || -z "$ETA_RELEASE_STORE_PASSWORD" || \
+                -z "$ETA_RELEASE_KEY_ALIAS" || -z "$ETA_RELEASE_KEY_PASSWORD" ]]; then
+            echo "::error::Missing release signing secrets"
+            exit 1
           fi
+          printf '%s' "$ETA_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/eta-release.jks"
+          export ETA_RELEASE_STORE_FILE="$RUNNER_TEMP/eta-release.jks"
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew --no-daemon --no-configuration-cache :app:assembleRelease --stacktrace
 
       - name: Upload debug APK
         if: inputs.build_type == 'debug'
