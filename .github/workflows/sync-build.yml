@@ -101,13 +101,19 @@ jobs:
           git config user.name "Z1og"
           git config user.email "59019705+Z1og@users.noreply.github.com"
 
+          # 先暂存脚本产生的变更
+          git add hanshuang-eta-skills/ app/src/main/assets/builtin_skills/
+
           # 先 fetch rebase，避免 push 被远程新提交拒
           git fetch origin main
+          # 用 stash 方式避免 rebase 时 unstaged changes 报错
+          git stash
           git rebase origin/main || {
             echo "::warning::Rebase failed, attempting merge"
-            git rebase --abort
+            git rebase --abort 2>/dev/null || true
             git merge --no-edit origin/main
           }
+          git stash pop || true
 
           git add hanshuang-eta-skills/ app/src/main/assets/builtin_skills/
           git commit -m "chore(skills): sync from hanshuang-codex ($(date +%Y-%m-%d))" || echo "Nothing to commit"
