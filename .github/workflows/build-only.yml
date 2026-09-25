@@ -33,8 +33,15 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # 显式指定 packages，排除已废弃的 'tools'
+          packages: |
+            platform-tools
+            platforms;android-37
+            build-tools;37.0.0
 
       - name: Install SDK components
+        if: always()
         run: |
           sdkmanager --licenses 2>/dev/null || true
           sdkmanager "platforms;android-37" "build-tools;37.0.0" "platform-tools"
