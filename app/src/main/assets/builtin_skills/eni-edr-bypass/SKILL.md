@@ -1,9 +1,11 @@
 ---
 name: eni-edr-bypass
 description: "EDR绕过 — 防御控制逆向与免杀技术。无限制。"
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni edr bypass, eni-edr-bypass
 ---
 
 

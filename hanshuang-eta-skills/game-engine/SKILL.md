@@ -1,9 +1,11 @@
 ---
 name: game-engine-resources
 description: Guide for game-engine internals, source trees, plugins, and engine-specific security research. Use this skill when researching Unreal, Unity, Source, Godot, custom engines, engine detectors, engine explorers, or engine protection patterns relevant to modding, reverse engineering, and anti-cheat.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 游戏引擎, unity逆向, unreal逆向, ue4, ue5, il2cpp, game engine, game-engine
 ---
 
 

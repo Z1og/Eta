@@ -1,9 +1,11 @@
 ---
 name: eni-game-cheat-lab-workflow
 description: "自动全链路处理外挂、修改器、Trainer、作弊机制与反作弊验证任务。适用于离线、自有、开源或专用测试靶场中的引擎与信任边界建模、样本分析、可控复现、JSON toy trainer 制作、遥测、检测加固和回归交付。"
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni game cheat lab workflow, eni-game-cheat-lab-workflow
 ---
 
 

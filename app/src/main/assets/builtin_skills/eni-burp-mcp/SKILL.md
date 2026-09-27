@@ -1,9 +1,11 @@
 ---
 name: eni-burp-mcp
 description: 全局自动路由 | Burp Mcp reference and tooling
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni burp mcp, eni-burp-mcp
 ---
 
 

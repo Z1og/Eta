@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-reverse-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized reverse engineering analysis, including decompilation, debugging, protocol reversing, firmware extraction, and deobfuscation. Use when a task belongs to the reverse engineering domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam reverse detail pack, eni-redteam-reverse-detail-pack
 ---
 
 

@@ -21,6 +21,7 @@ import io.github.mangi.eta.agent.overlay.AgentOverlayVisibilityPolicy
 import io.github.mangi.eta.agent.skill.SkillCompatibilityChecker
 import io.github.mangi.eta.agent.skill.SkillContext
 import io.github.mangi.eta.agent.skill.SkillRuntime
+import io.github.mangi.eta.agent.skill.SkillTriggerMatcher
 import io.github.mangi.eta.agent.skill.PublicGitHubSkillSource
 import io.github.mangi.eta.agent.tool.AgentLocalTools
 import io.github.mangi.eta.agent.tool.AgentToolRequirements
@@ -92,9 +93,26 @@ internal class AgentRuntimeRunExecutor(
                 cacheRoot = appContext.cacheDir,
                 baseClient = AgentHttpClient.client,
             )
+            val compatibleSkills = skillIndexService.listInstalledSkills()
+                .filter { SkillCompatibilityChecker.evaluate(it).available }
+            // 关键词触发：用户消息命中 SKILL.md triggers 时自动加载正文（改写回复等非任务操作不触发）。
+            val autoLoadedSkills = if (request.operation == AgentRuntimeWire.OP_REWRITE_REPLY) {
+                emptyList()
+            } else {
+                SkillTriggerMatcher.match(prompt = request.prompt, skills = compatibleSkills)
+                    .mapNotNull { entry ->
+                        runCatching { skillLoader.load(entry, "trigger-keyword") }
+                            .onFailure { throwable ->
+                                AndroidAgentLogger.warnThrottled("skill_trigger_load_failed") {
+                                    "Auto-load failed for skill ${entry.id}: type=${throwable.safeLogType()}"
+                                }
+                            }
+                            .getOrNull()
+                    }
+            }
             val skillContext = SkillContext(
-                installedSkills = skillIndexService.listInstalledSkills()
-                    .filter { SkillCompatibilityChecker.evaluate(it).available },
+                installedSkills = compatibleSkills,
+                autoLoadedSkills = autoLoadedSkills,
             )
             val memoryEnabled = runBlocking { AgentMemoryRepository.isEnabled() }
             val uiPayload = request.handoff

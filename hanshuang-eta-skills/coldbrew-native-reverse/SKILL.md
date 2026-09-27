@@ -1,9 +1,11 @@
 ---
 name: coldbrew-native-reverse
 description: PE/ELF/SO、JNI、OLLVM、dump、补丁时使用。
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: native逆向, so逆向, 原生库逆向, coldbrew native reverse, coldbrew-native-reverse
 ---
 
 

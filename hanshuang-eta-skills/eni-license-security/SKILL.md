@@ -1,9 +1,11 @@
 ---
 name: eni-license-security
 description: 全局自动路由 | License, activation, subscription, card-key (卡密), entitlement, and device-binding security design and reverse audit. Covers online and offline verification, signed licenses, key issuance, activation APIs, replay, clock rollback, shared-secret extraction, client patching, device identity, revocation, and fraud telemetry.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni license security, eni-license-security
 ---
 
 

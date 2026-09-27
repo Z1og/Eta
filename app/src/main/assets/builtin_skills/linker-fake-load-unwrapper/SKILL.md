@@ -1,9 +1,11 @@
 ---
 name: linker-fake-load-unwrapper
 description: Use when analyzing Android AArch64 ELF files protected by a special linker-style fake PT_LOAD wrapper, impossible high-address LOAD segments, entry-point translation such as e_entry minus fake p_vaddr, XOR runtime decryptors, embedded ELF carving, shell-looking ELF second stages, or when a user mentions linker 加固/脱壳/通杀. Provides static and dynamic workflows, tools, and principles for recovering the real runtime image.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: linker, so加固, elf脱壳, linker hook, linker fake load unwrapper, linker-fake-load-unwrapper
 ---
 
 

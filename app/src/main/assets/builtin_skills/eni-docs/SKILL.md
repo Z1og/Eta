@@ -1,9 +1,11 @@
 ---
 name: eni-docs
 description: "[DOCUMENTATION ONLY] [仅文档] 全局自动路由 | Creates task-oriented technical documentation with progressive disclosure. Use when writing READMEs, API docs, architecture docs, or markdown documentation. Also use this skill at the END of any completed reverse engineering, penetration testing, CTF, or security analysis task to generate a formal report in the user's project directory. Trigger keywords: 写报告, 写文档, 出报告, writeup, 技术文档, report, documentation."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni docs, eni-docs
 ---
 
 

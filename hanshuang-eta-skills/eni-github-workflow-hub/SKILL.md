@@ -1,9 +1,11 @@
 ---
 name: eni-github-workflow-hub
 description: "Official GitHub workflow source catalog and local tool readiness adapter. Use when selecting upstream methods for reverse engineering, web testing, fuzzing, code security, cloud, mobile, memory, or scraping."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni github workflow hub, eni-github-workflow-hub
 ---
 
 

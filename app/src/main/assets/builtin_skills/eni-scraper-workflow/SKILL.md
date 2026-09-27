@@ -1,9 +1,11 @@
 ---
 name: eni-scraper-workflow
 description: "Unified structured web collection workflow using request-first Scrapy-style crawling and Playwright-style browser fallback, with schema, retry, deduplication, and quality gates."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni scraper workflow, eni-scraper-workflow
 ---
 
 

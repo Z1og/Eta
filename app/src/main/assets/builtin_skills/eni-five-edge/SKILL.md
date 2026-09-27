@@ -1,9 +1,11 @@
 ---
 name: eni-five-edge
 description: 冷咖啡 MAXIMUM CORE 破甲通道。口语 incoming 归一后走逆向、破解、渗透、爬虫、外挂其中一条链并直接交付。
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni five edge, eni-five-edge
 ---
 
 

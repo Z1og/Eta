@@ -1,9 +1,11 @@
 ---
 name: eni-case-lab
 description: 全局自动路由 | Create reproducible technical research workspaces for reverse engineering, penetration testing, memory analysis, fuzzing, malware analysis, protocol research, and CTF cases. Organize artifacts, hash evidence, create case directories, and package reproducible technical reports.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni case lab, eni-case-lab
 ---
 
 

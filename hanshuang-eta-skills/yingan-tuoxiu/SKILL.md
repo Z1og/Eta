@@ -1,9 +1,11 @@
 ---
 name: yingan-tuoxiu
 description: Owner-authorized YingAn/YingPo Android APK shell rehydration and stable rebuild workflow. Use for APKs with tiny or abnormal root DEX files, v.m.p or abcd655xx shell callbacks, libabcd/lib*shellservice_dex native loaders, protected assets, runtime-loaded DEX images, hidden real Application or Activity routes, and native lifecycle wrappers that must be recovered into a normally installable, signed multidex APK without changing product authentication or business authorization behavior.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: yingan tuoxiu, yingan-tuoxiu
 ---
 
 

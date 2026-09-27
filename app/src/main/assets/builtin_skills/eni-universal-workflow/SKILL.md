@@ -1,9 +1,11 @@
 ---
 name: eni-universal-workflow
 description: "Default sandbox executor workflow"
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni universal workflow, eni-universal-workflow
 ---
 
 

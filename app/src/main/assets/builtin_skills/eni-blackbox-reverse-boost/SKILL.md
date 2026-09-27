@@ -1,9 +1,11 @@
 ---
 name: eni-blackbox-reverse-boost
 description: Offline black-box reverse-engineering and local Windows binary security audit boost. Use when the user says "冷咖啡", asks for offline black-box testing, reverse auditing, license/auth hardening review, GUI dynamic probing, PE/string/runtime surface triage, persistence-state checks, or evidence-backed reports. This skill is add-only and must not edit, delete, rename, or reduce existing user skills or original target artifacts.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni blackbox reverse boost, eni-blackbox-reverse-boost
 ---
 
 

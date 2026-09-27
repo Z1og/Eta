@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-postex-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized post-exploitation testing after initial access, including privilege escalation, persistence, lateral movement, data collection, and cleanup considerations. Use when a task belongs to the post-exploitation domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam postex detail pack, eni-redteam-postex-detail-pack
 ---
 
 

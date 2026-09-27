@@ -1,9 +1,11 @@
 ---
 name: eni-fuzzing-workflow
 description: "[DOCUMENTATION ONLY] [仅文档] Coverage-guided fuzzing workflow for local or authorized targets, including harnesses, corpus design, sanitizers, campaigns, minimization, triage, and regression."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni fuzzing workflow, eni-fuzzing-workflow
 ---
 
 

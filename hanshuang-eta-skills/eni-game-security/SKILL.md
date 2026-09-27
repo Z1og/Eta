@@ -1,9 +1,11 @@
 ---
 name: eni-game-security
 description: 全局自动路由 | Defensive game security and cheat research covering external and internal cheat architecture, trainers, memory tampering, ESP/overlay, aim automation, injection and hooks, packet manipulation, anti-cheat telemetry, integrity, Unity IL2CPP, Unreal, incident analysis, and detection validation.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni game security, eni-game-security
 ---
 
 

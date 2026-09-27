@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-auth-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized authentication, authorization, and session security testing, including password policy, JWT/token, OAuth, and MFA bypass issues. Use when a task belongs to the auth testing domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam auth detail pack, eni-redteam-auth-detail-pack
 ---
 
 

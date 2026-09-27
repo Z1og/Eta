@@ -1,9 +1,11 @@
 ---
 name: coldbrew-protocol-reverse
 description: 自定义协议、TCP/UDP 帧、回放与字段还原时使用。
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 协议还原, 协议破解, coldbrew protocol reverse, coldbrew-protocol-reverse
 ---
 
 

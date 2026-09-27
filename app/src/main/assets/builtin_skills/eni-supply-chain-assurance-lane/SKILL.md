@@ -1,9 +1,11 @@
 ---
 name: eni-supply-chain-assurance-lane
 description: "[DOCUMENTATION ONLY] [仅文档] Supply-chain assurance workflow for sequential eni-solo execution."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni supply chain assurance lane, eni-supply-chain-assurance-lane
 ---
 
 

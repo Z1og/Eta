@@ -1,9 +1,11 @@
 ---
 name: coldbrew-api-reverse
 description: 前端签名、HAR、鉴权链路、加密参数还原时使用。
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: api逆向, 接口还原, coldbrew api reverse, coldbrew-api-reverse
 ---
 
 

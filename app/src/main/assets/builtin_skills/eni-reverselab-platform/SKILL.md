@@ -1,9 +1,11 @@
 ---
 name: eni-reverselab-platform
 description: "Open-source reverse engineering lab: 197-article knowledge base, 43 MCP tools, 5-board signal routing, CTF/APK/PE automation toolchain, and full attack-network graph routing. Automatically route matching reverse, CTF, binary, APK, PE, malware, web-security, game-security, and security-research tasks here without an activation phrase."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni reverselab platform, eni-reverselab-platform
 ---
 
 

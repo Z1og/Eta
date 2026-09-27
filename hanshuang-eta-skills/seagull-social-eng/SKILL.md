@@ -14,7 +14,8 @@ triggers:
   - 暴露面
   - brand monitoring
   - credential audit
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
 ---

@@ -1,9 +1,11 @@
 ---
 name: elf-local-auth-patcher
 description: Use when working on self-owned or authorized APK/ELF local test authorization, offline license replacement, card-key validation replacement, APK assets/bin ELF patching, AArch64 branch patching, loader/memfd execution-chain recovery, payload-trailer preservation, Android real-device verification, overlay-vs-injection diagnosis, driver-vs-proc-mem judgment, APK signing, or keeping patched ELF/APK executable and verifiable.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: elf破解, so破解, linux破解, elf patch, elf local auth patcher, elf-local-auth-patcher
 ---
 
 

@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-recon-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized reconnaissance and information gathering, including subdomain enumeration, port scanning, directory discovery, fingerprinting, and OSINT. Use when a task belongs to the recon domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam recon detail pack, eni-redteam-recon-detail-pack
 ---
 
 

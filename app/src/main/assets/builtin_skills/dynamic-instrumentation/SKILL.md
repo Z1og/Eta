@@ -1,9 +1,11 @@
 ---
 name: dynamic-instrumentation
 description: Frida dynamic hooking, memory patching, API parameter tracing, and anti-debug bypass script generation.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 动态调试, frida, hook注入, 动态hook, runtime hook, dynamic instrumentation, dynamic-instrumentation
 ---
 
 

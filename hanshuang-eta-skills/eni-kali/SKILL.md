@@ -1,9 +1,11 @@
 ---
 name: eni-kali
 description: 全局自动路由 | Kali reference and tooling
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni kali, eni-kali
 ---
 
 

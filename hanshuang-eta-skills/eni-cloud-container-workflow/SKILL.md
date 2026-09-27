@@ -1,9 +1,11 @@
 ---
 name: eni-cloud-container-workflow
 description: "[DOCUMENTATION ONLY] [仅文档] Cloud, container, Kubernetes, image, IaC, identity, configuration, and compliance assessment workflow."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni cloud container workflow, eni-cloud-container-workflow
 ---
 
 

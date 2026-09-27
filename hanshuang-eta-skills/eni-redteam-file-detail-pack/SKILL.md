@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-file-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized file operation vulnerability testing, including path traversal, arbitrary file read/write/upload, and LFI/RFI. Use when a task belongs to the file vulnerability domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam file detail pack, eni-redteam-file-detail-pack
 ---
 
 

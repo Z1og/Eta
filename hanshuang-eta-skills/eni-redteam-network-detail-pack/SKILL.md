@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-network-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized network-layer security testing, including exposed services, protocol downgrade, man-in-the-middle risks, and segmentation bypasses. Use when a task belongs to the network testing domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam network detail pack, eni-redteam-network-detail-pack
 ---
 
 

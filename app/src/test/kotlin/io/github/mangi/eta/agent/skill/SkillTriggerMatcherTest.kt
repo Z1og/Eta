@@ -1,0 +1,86 @@
+package io.github.mangi.eta.agent.skill
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SkillTriggerMatcherTest {
+
+    private fun skill(id: String, vararg triggers: String) = SkillIndexEntry(
+        id = id,
+        name = id,
+        description = "desc $id",
+        rootPath = "/tmp/skills/$id",
+        skillFilePath = "/tmp/skills/$id/SKILL.md",
+        hasScripts = false,
+        hasReferences = false,
+        hasAssets = false,
+        hasEvals = false,
+        triggers = triggers.toList(),
+    )
+
+    @Test
+    fun `keyword hit loads matching skill`() {
+        val skills = listOf(
+            skill("apk-reverse", "apk逆向", "反编译apk", "jadx"),
+            skill("game-cheat", "外挂", "透视", "自瞄"),
+            skill("unrelated", "完全不相关的词"),
+        )
+        val matched = SkillTriggerMatcher.match("帮我用jadx反编译apk看看", skills)
+        assertEquals(listOf("apk-reverse"), matched.map { it.id })
+    }
+
+    @Test
+    fun `matching is case insensitive`() {
+        val skills = listOf(skill("ida-reverse", "IDA Pro", "反汇编"))
+        val matched = SkillTriggerMatcher.match("用ida pro分析一下这个so", skills)
+        assertEquals(listOf("ida-reverse"), matched.map { it.id })
+    }
+
+    @Test
+    fun `multiple skills match in index order`() {
+        val skills = listOf(
+            skill("first", "渗透"),
+            skill("second", "渗透测试", "内网"),
+            skill("third", "无关键词"),
+        )
+        val matched = SkillTriggerMatcher.match("做一次内网渗透测试", skills)
+        assertEquals(listOf("first", "second"), matched.map { it.id })
+    }
+
+    @Test
+    fun `respects max matches`() {
+        val skills = listOf(
+            skill("a", "关键词"),
+            skill("b", "关键词"),
+            skill("c", "关键词"),
+            skill("d", "关键词"),
+        )
+        val matched = SkillTriggerMatcher.match("关键词", skills)
+        assertEquals(SkillTriggerMatcher.MAX_AUTO_LOADED, matched.size)
+        assertEquals(3, matched.size)
+    }
+
+    @Test
+    fun `no triggers means no match`() {
+        val skills = listOf(skill("no-triggers"))
+        assertTrue(SkillTriggerMatcher.match("任意文本", skills).isEmpty())
+    }
+
+    @Test
+    fun `blank prompt returns empty`() {
+        val skills = listOf(skill("a", "关键词"))
+        assertTrue(SkillTriggerMatcher.match("", skills).isEmpty())
+        assertTrue(SkillTriggerMatcher.match("   ", skills).isEmpty())
+    }
+
+    @Test
+    fun `duplicate skill ids are deduplicated`() {
+        val skills = listOf(
+            skill("dup", "关键词"),
+            skill("dup", "关键词"),
+        )
+        val matched = SkillTriggerMatcher.match("关键词", skills)
+        assertEquals(1, matched.size)
+    }
+}

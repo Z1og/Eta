@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-deserialize-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized insecure deserialization testing, including Java, PHP, Python, .NET, and gadget-chain analysis. Use when a task belongs to the deserialization testing domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam deserialize detail pack, eni-redteam-deserialize-detail-pack
 ---
 
 

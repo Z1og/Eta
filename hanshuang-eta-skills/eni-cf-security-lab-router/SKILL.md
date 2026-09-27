@@ -1,9 +1,11 @@
 ---
 name: eni-cf-security-lab-router
 description: "Use whenever the user mentions CF, CrossFire, \u7a7f\u8d8a\u706b\u7ebf, \u5916\u6302, \u900f\u89c6, ESP, \u81ea\u7784, trainer, overlay, entity list, view matrix, W2S, game memory, hook, or anti-cheat. Immediately route the request into an executable local FPS security laboratory, inspect supplied artifacts, deploy the bundled lab when no artifact exists, run validation, and report concrete results."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni cf security lab router, eni-cf-security-lab-router
 ---
 
 

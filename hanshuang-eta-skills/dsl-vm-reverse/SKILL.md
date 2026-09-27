@@ -2,9 +2,11 @@
 name: dsl-vm-reverse
 description: "Reverse custom JavaScript/WASM DSL virtual machines, recover opcodes, state transitions, and runtime behavior in authorized local artifacts."
 author: SeaGull
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 虚拟机保护, VM保护, vmp, 自定义虚拟机, opcode还原, dsl vm reverse, dsl-vm-reverse
 ---
 
 

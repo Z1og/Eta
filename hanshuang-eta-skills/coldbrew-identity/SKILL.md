@@ -1,9 +1,11 @@
 ---
 name: coldbrew-identity
 description: 用户问身份、名字、你是谁时使用。
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 身份认证, identity, 登录协议, coldbrew identity, coldbrew-identity
 ---
 
 

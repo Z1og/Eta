@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-recon-intake
 description: "[DOCUMENTATION ONLY] [仅文档] Recon intake skill for first contact with a bare domain, URL, or IP address. Use to build an initial recon_profile and provide factual inputs for CVE lookup and attack-path routing."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam recon intake, eni-redteam-recon-intake
 ---
 
 

@@ -7,9 +7,11 @@ description: |
   Tartarus Gate、ETW patch、AMSI patch、call stack spoofing、hardware breakpoint Blindside、MITRE T1562、
   ntdll unhook、kernel callback、CrowdStrike 绕过、Defender 绕过、Sentinel One 绕过、Elastic Defend、
   Sysmon 规避、PPID spoof、Sleep mask、Process Hollowing、Reflective DLL。
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: edr绕过, 杀软绕过, 免杀, av绕过, defender绕过, edr bypass re, edr-bypass-re
 ---
 
 

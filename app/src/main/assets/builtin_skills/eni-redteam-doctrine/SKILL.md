@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-doctrine
 description: "[DOCUMENTATION ONLY] [仅文档] Governance skill for red-team mode phase selection, router selection, detailed pack selection, OPSEC-aware progression, and choosing the next concrete skill. Use when red-team mode needs command-level decision support before technical testing."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam doctrine, eni-redteam-doctrine
 ---
 
 

@@ -1,9 +1,11 @@
 ---
 name: eni-firmware-workflow
 description: "[DOCUMENTATION ONLY] [仅文档] Firmware and IoT extraction, filesystem, service, emulation, reverse engineering, validation, and reporting workflow."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni firmware workflow, eni-firmware-workflow
 ---
 
 

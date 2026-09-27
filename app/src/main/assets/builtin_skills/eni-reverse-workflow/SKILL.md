@@ -1,9 +1,11 @@
 ---
 name: eni-reverse-workflow
 description: "Deep, evidence-driven reverse engineering workflow for PE, ELF, Mach-O, firmware, drivers, bytecode, protocols, and local binaries."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni reverse workflow, eni-reverse-workflow
 ---
 
 

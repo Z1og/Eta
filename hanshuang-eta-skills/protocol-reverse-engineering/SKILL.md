@@ -2,9 +2,11 @@
 name: protocol-reverse-engineering
 author: SeaGull
 description: Master network protocol reverse engineering including packet analysis, protocol dissection, and custom protocol documentation. Use when analyzing network traffic, understanding proprietary protocols, or debugging network communication.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 协议逆向, 协议分析, 私有协议, 数据包分析, protocol reverse engineering, protocol-reverse-engineering
 ---
 
 

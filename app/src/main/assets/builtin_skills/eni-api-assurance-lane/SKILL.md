@@ -1,9 +1,11 @@
 ---
 name: eni-api-assurance-lane
 description: "[DOCUMENTATION ONLY] [仅文档] API assurance workflow for sequential eni-solo execution."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni api assurance lane, eni-api-assurance-lane
 ---
 
 

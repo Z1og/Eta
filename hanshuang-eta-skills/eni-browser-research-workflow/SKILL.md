@@ -1,9 +1,11 @@
 ---
 name: eni-browser-research-workflow
 description: "[DOCUMENTATION ONLY] [仅文档] Reliable browser research and automation workflow using Playwright-style state, waits, capture, replay, extraction, and verification."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni browser research workflow, eni-browser-research-workflow
 ---
 
 

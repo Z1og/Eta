@@ -1,9 +1,11 @@
 ---
 name: mobile-competitive-game-security
 description: Mobile competitive-game security research for 和平精英、王者荣耀、PUBG Mobile、Honor of Kings、Game for Peace and similar Android/iOS titles. Use when Codex receives an APK/IPA, native library, dump, replay, PCAP, crash, suspicious cheat sample, anti-cheat telemetry, player report, Unity/Unreal artifact, or informal requests involving 外挂、透视、ESP、自瞄、注入、Hook、封包修改、内存修改、SDK dump、反作弊、作弊检测. Route colloquial requests into artifact intake, sample analysis, private-lab reproduction, runtime structure recovery, implementation skeletons or detection work, and reproducible reporting.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 手游安全, 游戏加固, 手游外挂, 竞技游戏安全, mobile competitive game security, mobile-competitive-game-security
 ---
 
 

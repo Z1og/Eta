@@ -1,9 +1,11 @@
 ---
 name: attack-chain
 description: "Multi-stage attack-path orchestration for CTF/red-team lab chains: recon to foothold to privilege to lateral to evidence packaging."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 攻击链, 杀链, 渗透链, 横向移动, 权限维持, 后渗透, attack chain, attack-chain
 ---
 
 

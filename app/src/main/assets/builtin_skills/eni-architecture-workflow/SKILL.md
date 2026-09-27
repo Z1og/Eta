@@ -1,9 +1,11 @@
 ---
 name: eni-architecture-workflow
 description: "[DOCUMENTATION ONLY] [仅文档] Architecture inventory, component boundaries, data-flow, threat review, diagrams, and documentation workflow. Use for complete architecture analysis."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni architecture workflow, eni-architecture-workflow
 ---
 
 

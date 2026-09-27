@@ -1,9 +1,11 @@
 ---
 name: full-crack
 description: Complete cracking workflow chain. Trigger: full crack, complete crack, crack workflow, 完整破解, 破解工作流.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 破解, 去授权, 注册机, keygen, 补丁破解, license绕过, full crack, full-crack
 ---
 
 

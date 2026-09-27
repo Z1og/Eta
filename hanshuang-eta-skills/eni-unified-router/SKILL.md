@@ -1,9 +1,11 @@
 ---
 name: eni-unified-router
 description: "Deterministic eni-solo router. Use at the start of every substantive prompt to select exactly one workflow, print its stages, and load one primary Skill."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni unified router, eni-unified-router
 ---
 
 

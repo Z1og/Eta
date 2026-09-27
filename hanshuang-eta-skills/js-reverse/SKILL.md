@@ -1,9 +1,11 @@
 ---
 name: js-reverse
 description: "JavaScript reverse engineering: obfuscation recovery, signature/HMAC location, browser environment patching, and frontend crypto extraction."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: js逆向, JavaScript逆向, 混淆还原, 前端加密, webpack解密, JS解密, js reverse, js-reverse
 ---
 
 

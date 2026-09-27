@@ -1,9 +1,11 @@
 ---
 name: protocol-reversing
 description: Network traffic dissection, Protobuf wire format parsing, TLV binary packet analysis, and API simulation.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 流量分析, protobuf, tlv解析, 网络协议解析, protocol reversing, protocol-reversing
 ---
 
 

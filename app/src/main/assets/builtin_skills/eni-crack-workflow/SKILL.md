@@ -1,9 +1,11 @@
 ---
 name: eni-crack-workflow
 description: "[DOCUMENTATION ONLY] [仅文档] Owned crackme, validation logic, license research, compatibility patch, and challenge workflow using preserved copies, static analysis, dynamic traces, and regression evidence."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni crack workflow, eni-crack-workflow
 ---
 
 

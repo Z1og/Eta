@@ -1,9 +1,11 @@
 ---
 name: xigong-funk-hikari
 description: Evidence-driven Hikari-LLVM/OLLVM deobfuscation and plaintext recovery for ELF/SO, especially Android/Linux AArch64 PIE executables that use MBA, BCF/opaque predicates, relocation-backed BR/BLR dispatch, function wrappers/FCO, runtime string decoding, high-entropy containers, flat anonymous RX/RO/RW inner images without a primary ELF magic, embedded auxiliary ELFs, and custom mmap/mprotect loaders. Use when the user asks for Hikari identification, complete deobfuscation, lossless plaintext restoration, searchable strings, runtime payload dumping/rebuilding, an IDA-ready inner ELF, a directly runnable plaintext-bearing single file, or a loader-free rebuild. Produces hash-bound layer artifacts, reversible register-preserving patch manifests, runtime materialization evidence, and structure/semantic/runtime/equivalence verification.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: xigong funk hikari, xigong-funk-hikari
 ---
 
 

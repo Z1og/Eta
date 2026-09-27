@@ -15,7 +15,8 @@ triggers:
   - 游戏逆向
   - game mod
   - 游戏研究
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
 ---

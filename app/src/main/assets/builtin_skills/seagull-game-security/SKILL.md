@@ -10,7 +10,8 @@ triggers:
   - 游戏防护
   - 完整性校验
   - 遥测分析
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
 ---

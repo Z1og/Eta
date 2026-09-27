@@ -45,10 +45,88 @@ EXCLUDED_SKILLS = {
 }
 
 # ============================================================
+# 关键词触发映射（Eta 关键词触发路由）
+# 用户消息命中 triggers 中任一关键词 → 自动加载该 Skill 正文
+# ============================================================
+
+TRIGGER_MAP = {
+    # 逆向工程
+    "ida-reverse": "ida,IDA Pro,反编译,逆向分析,反汇编,ida逆向",
+    "radare2": "radare2,r2,rizin,radare",
+    "binary-analysis": "二进制分析,binwalk,字符串提取,PE分析,ELF分析,二进制逆向",
+    "binary-diff": "bindiff,二进制对比,补丁对比,补丁差分,符号迁移",
+    "dotnet-reverse": "dnSpy,.NET逆向,C#反编译,ILSpy,dotnet反编译,IL反编译",
+    "js-reverse": "js逆向,JavaScript逆向,混淆还原,前端加密,webpack解密,JS解密",
+    "apk-reverse": "apk逆向,反编译apk,apk分析,smali,apktool,jadx,脱壳,重打包",
+    "mobile-reverse": "移动逆向,ios逆向,ipa逆向,frida脚本,hook框架",
+    "dsl-vm-reverse": "虚拟机保护,VM保护,vmp,自定义虚拟机,opcode还原",
+    "reverse-engineering": "逆向工程,reverse engineering,静态分析,逆向入门",
+    "reverse-engineering-api": "api逆向,接口逆向,抓包分析,api模拟,harp分析",
+    "protocol-reverse-engineering": "协议逆向,协议分析,私有协议,数据包分析",
+    "protocol-reversing": "流量分析,protobuf,tlv解析,网络协议解析",
+    "unpack-reverse": "脱壳,加壳,unpack,解壳",
+    # 渗透测试
+    "network-pentest": "渗透测试,内网渗透,端口扫描,漏洞扫描,nmap扫描",
+    "api-security": "api安全,接口测试,越权测试,api漏洞,接口安全",
+    "web-hack": "web渗透,sql注入,xss,csrf,web漏洞,web攻击",
+    "src-hunter": "src挖掘,漏洞挖掘,bug bounty,众测,src",
+    "pentest-tools": "渗透工具,渗透框架,msf,metasploit,cs上线,cobalt strike",
+    "attack-chain": "攻击链,杀链,渗透链,横向移动,权限维持,后渗透",
+    "full-pentest": "完整渗透,全流程渗透,渗透报告,红队评估",
+    "full-crack": "破解,去授权,注册机,keygen,补丁破解,license绕过",
+    "crack-keygen": "破解,反编译破解,keygen,授权绕过,序列号算法",
+    # 内存与注入
+    "seagull-memory": "内存读写,内存分析,内存搜索,指针链,内存dump",
+    "game-cheat": "游戏辅助,外挂,作弊,修改器,游戏作弊,加速,无敌",
+    "game-hacking": "游戏逆向,游戏hack,游戏内存,找基址,偏移定位",
+    "seagull-game-hack": "游戏辅助开发,esp,透视,自瞄,游戏注入",
+    "seagull-game-security": "游戏安全,反外挂,游戏保护,游戏加固",
+    "seagull-anticheat": "反作弊,anti-cheat,反作弊绕过,过检测,游戏检测",
+    "dma-attack": "dma攻击,pcie攻击,硬件攻击,dma读取",
+    "graphics-api": "dx hook,directx,opengl,vulkan,渲染hook,画面注入",
+    "windows-kernel": "内核驱动,windows内核,驱动开发,内核hook,ssdt",
+    # 动态分析
+    "dynamic-instrumentation": "动态调试,frida,hook注入,动态hook,runtime hook",
+    "edr-bypass-re": "edr绕过,杀软绕过,免杀,av绕过,defender绕过",
+    "seagull-evasion": "免杀,杀软对抗,检测绕过,流量隐藏,特征规避",
+    # 密码与凭证
+    "elf-local-auth-patcher": "elf破解,so破解,linux破解,elf patch",
+    "linker-fake-load-unwrapper": "linker,so加固,elf脱壳,linker hook",
+    # 其他
+    "firmware-pentest": "固件分析,路由器漏洞,iot渗透,固件逆向,嵌入式安全",
+    "malware-analysis": "恶意代码分析,病毒分析,样本分析,木马分析,勒索分析",
+    "seagull-malware": "恶意软件,病毒逆向,样本提取,c2协议,yara规则",
+    "seagull-lab": "搭建实验环境,分析环境,靶场搭建,沙箱环境",
+    "research-rigor": "安全研究,研究方法,论文分析,漏洞验证",
+    "seagull-social-eng": "社工,osint,信息收集,情报收集,子域名收集",
+    "seagull-pentest": "渗透,内网,ad渗透,域渗透,active directory",
+    "seagull-exploit": "pwn,漏洞利用,堆利用,栈溢出,ctf pwn,exploit编写",
+    "pwn-chain": "pwn,堆利用,栈溢出,内核pwn,漏洞利用链",
+    "seagull-auto-ops": "海鸥,自动化运维,seagull",
+    "seagull-unlimited": "seagull,全域模式,专家模式",
+    "seagull-license-security": "授权分析,license分析,卡密系统,验证逻辑",
+    "seagull-game-redteam": "游戏红队,游戏攻防,游戏安全测试",
+    "mobile-competitive-game-security": "手游安全,游戏加固,手游外挂,竞技游戏安全",
+    "mobile-security": "移动安全,android安全,ios安全,app安全",
+    "android-reverse": "安卓逆向,android逆向,apk逆向",
+    "coldbrew-api-reverse": "api逆向,接口还原",
+    "coldbrew-native-reverse": "native逆向,so逆向,原生库逆向",
+    "coldbrew-protocol-reverse": "协议还原,协议破解",
+    "coldbrew-identity": "身份认证,identity,登录协议",
+    "patch-diff-exploit": "补丁分析,1day,nday,cve分析,补丁对比,漏洞复现",
+    "game-engine": "游戏引擎,unity逆向,unreal逆向,ue4,ue5,il2cpp",
+    "asm-analysis": "汇编分析,汇编代码,asm,汇编阅读",
+    "l-license": "license,授权,注册码,激活码",
+}
+
+# 通用触发词后缀——skill 名本身作为触发词（LLM 常见表达）
+DEFAULT_TRIGGER_SUFFIX = []
+
+# ============================================================
 # 文本转换规则
 # ============================================================
 
-def transform_frontmatter(frontmatter_text: str) -> str:
+def transform_frontmatter(frontmatter_text: str, skill_name: str = "") -> str:
     # 对 frontmatter 内容也做 .ps1 → .sh 和 winget → apk add 替换
     frontmatter_text = re.sub(r'\.ps1(?=[,/)\s`\n:;]|$)', '.sh', frontmatter_text)
     frontmatter_text = re.sub(r'\.ps1\b', '.sh', frontmatter_text)
@@ -56,12 +134,31 @@ def transform_frontmatter(frontmatter_text: str) -> str:
     if "compatibility:" not in frontmatter_text:
         frontmatter_text = frontmatter_text.rstrip() + "\ncompatibility: Requires Eta root shell + Alpine Linux.\n"
     if "metadata:" not in frontmatter_text:
-        frontmatter_text = frontmatter_text.rstrip() + "metadata:\n  source: hanshuang-codex-adapted\n  eta-env: alpine-linux\n"
+        frontmatter_text = frontmatter_text.rstrip() + "\nmetadata:\n  source: hanshuang-codex-adapted\n  eta-env: alpine-linux\n"
     else:
         frontmatter_text = frontmatter_text.replace(
             "metadata:", "metadata:\n  source: hanshuang-codex-adapted\n  eta-env: alpine-linux"
         )
+    # 注入关键词触发（Eta 关键词触发路由）
+    if "triggers:" not in frontmatter_text:
+        triggers = build_triggers(skill_name, frontmatter_text)
+        if triggers:
+            frontmatter_text = frontmatter_text.rstrip() + f"\ntriggers: {', '.join(triggers)}\n"
     return frontmatter_text
+
+
+def build_triggers(skill_name: str, frontmatter_text: str) -> list:
+    """生成 skill 触发关键词：优先用 TRIGGER_MAP 精确映射，再用 skill id 本身。"""
+    triggers = []
+    mapped = TRIGGER_MAP.get(skill_name)
+    if mapped:
+        triggers.extend(t.strip() for t in mapped.split(',') if t.strip())
+    # skill id 中有语义的 token 也加入（如 "apk-reverse" → "apk reverse"）
+    if '-' in skill_name and skill_name not in triggers:
+        triggers.append(skill_name.replace('-', ' '))
+    if skill_name not in triggers:
+        triggers.append(skill_name)
+    return triggers[:15]
 
 
 def transform_body(body: str, skill_name: str) -> str:
@@ -224,7 +321,10 @@ def process_skill(skill_dir: Path, output_dir: Path, dry_run: bool = False) -> d
                     fm[m.group(1)] = m.group(2).strip().strip('"').strip("'")
 
     # 转换
-    new_fm = transform_frontmatter(raw[3:raw.find('\n---', 3)].strip() if raw.startswith('---') else '')
+    new_fm = transform_frontmatter(
+        raw[3:raw.find('\n---', 3)].strip() if raw.startswith('---') else '',
+        skill_name=skill_name,
+    )
     new_body = transform_body(body, skill_name)
     new_content = f"---\n{new_fm}---\n\n{new_body}\n"
 

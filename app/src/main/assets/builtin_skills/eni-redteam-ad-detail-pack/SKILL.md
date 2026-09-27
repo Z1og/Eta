@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-ad-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized Active Directory red-team security testing, including Kerberos attacks, domain privilege escalation, lateral movement, and GPO abuse. Use when a task belongs to the AD testing domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam ad detail pack, eni-redteam-ad-detail-pack
 ---
 
 

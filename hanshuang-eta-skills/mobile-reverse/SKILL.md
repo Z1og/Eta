@@ -1,9 +1,11 @@
 ---
 name: mobile-reverse
 description: "Android/iOS reverse engineering: APK/IPA analysis, Frida/Objection workflows, SSL pinning/root-detection research, and runtime hooks."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 移动逆向, ios逆向, ipa逆向, frida脚本, hook框架, mobile reverse, mobile-reverse
 ---
 
 

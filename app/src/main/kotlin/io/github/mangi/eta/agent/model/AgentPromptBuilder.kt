@@ -143,7 +143,7 @@ internal object AgentPromptBuilder {
         }
         roleplayContext?.personaMessage()?.let(messages::put)
         buildMemorySystemMessage(memoryContext, writable = roleplayContext == null)?.let(messages::put)
-        buildSkillSystemMessage(skillContext)?.let(messages::put)
+        buildSkillSystemMessage(skillContext).forEach(messages::put)
         return messages
     }
 
@@ -177,12 +177,28 @@ internal object AgentPromptBuilder {
         return systemMessage(body)
     }
 
-    private fun buildSkillSystemMessage(skillContext: SkillContext): JSONObject? {
+    private fun buildSkillSystemMessage(skillContext: SkillContext): List<JSONObject> {
+        val messages = mutableListOf<JSONObject>()
+        // 关键词触发的 Skill 正文直接注入，模型无需再调用 skills_read。
+        skillContext.autoLoadedSkills.forEach { resolved ->
+            val body = resolved.bodyMarkdown.trim()
+            if (body.isBlank()) return@forEach
+            val text = buildString {
+                appendLine("用户消息命中关键词，以下 Skill 已自动加载，按其指引执行任务：")
+                appendLine("<skill id=\"${resolved.skillId}\" trigger=\"${resolved.triggerReason}\">")
+                append(body)
+                appendLine()
+                append("</skill>")
+            }
+            messages += systemMessage(text)
+        }
         val installed = skillContext.installedSkills
-        if (installed.isEmpty()) return null
+        if (installed.isEmpty()) return messages
+        val autoLoadedIds = skillContext.autoLoadedSkills.mapTo(mutableSetOf()) { it.skillId }
         val body = buildString {
             appendLine("已启用 Skills 索引（仅元信息，正文按需加载）：")
             installed.forEach { skill ->
+                if (skill.id in autoLoadedIds) return@forEach
                 val capabilities = buildList {
                     if (skill.hasScripts) add("scripts")
                     if (skill.hasReferences) add("references")
@@ -202,10 +218,12 @@ internal object AgentPromptBuilder {
             appendLine()
             append(
                 "只把上面的索引当作目录；需要某个 skill 的具体步骤、脚本或引用时，先调用 skills_read 读取对应 SKILL.md，" +
-                    "正文引用其他文本资源时再调用 skills_read_resource；不要为了读取 Skill 资源而开启终端，也不要凭索引臆测正文细节。"
+                    "正文引用其他文本资源时再调用 skills_read_resource；不要为了读取 Skill 资源而开启终端，也不要凭索引臆测正文细节。" +
+                    "已在其他 system 消息中给出正文的 Skill 无需重复读取。"
             )
         }
-        return systemMessage(body)
+        messages += systemMessage(body)
+        return messages
     }
 
     private fun systemMessage(content: String): JSONObject =

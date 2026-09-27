@@ -8,7 +8,8 @@ triggers:
   - 脱壳
   - hook
   - 逆向工程
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
 ---

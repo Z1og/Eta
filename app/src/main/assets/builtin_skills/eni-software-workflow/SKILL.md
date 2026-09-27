@@ -1,9 +1,11 @@
 ---
 name: eni-software-workflow
 description: "[DOCUMENTATION ONLY] [仅文档] Software implementation, debugging, refactoring, testing, and delivery workflow. Automatically route matching coding tasks here without requiring an activation phrase."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni software workflow, eni-software-workflow
 ---
 
 

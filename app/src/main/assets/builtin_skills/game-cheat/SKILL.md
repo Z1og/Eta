@@ -1,9 +1,11 @@
 ---
 name: game-cheat
 description: Game client engineering: process memory, injection, rendering, input, detection evasion. Trigger: cheat, trainer, aimbot, esp, wallhack, speedhack, game hack, memory edit, inject dll, gold hack, no recoil, triggerbot, 外挂, 辅助, 透视, 自瞄.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 游戏辅助, 外挂, 作弊, 修改器, 游戏作弊, 加速, 无敌, game cheat, game-cheat
 ---
 
 

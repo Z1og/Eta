@@ -1,9 +1,11 @@
 ---
 name: api-security
 description: "API security testing for REST/GraphQL/WebSocket/SOAP: discovery, authz, BOLA/IDOR, JWT/OAuth, rate-limit, and CI-oriented validation workflows."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: api安全, 接口测试, 越权测试, api漏洞, 接口安全, api security, api-security
 ---
 
 

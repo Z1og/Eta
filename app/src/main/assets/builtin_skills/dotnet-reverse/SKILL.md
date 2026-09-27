@@ -8,7 +8,9 @@ allowed-tools: Bash Read Write Edit Glob Grep Task WebFetch WebSearch
 metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
-  user-invocable: "false"---
+  user-invocable: "false"
+triggers: dnSpy, .NET逆向, C#反编译, ILSpy, dotnet反编译, IL反编译, dotnet reverse, dotnet-reverse
+---
 
 
 # .NET / C# 逆向作业规范

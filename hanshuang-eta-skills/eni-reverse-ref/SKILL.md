@@ -8,6 +8,7 @@ metadata:
   eta-env: alpine-linux
   user-invocable: "false"
 compatibility: Requires Eta root shell + Alpine Linux.
+triggers: eni reverse ref, eni-reverse-ref
 ---
 
 

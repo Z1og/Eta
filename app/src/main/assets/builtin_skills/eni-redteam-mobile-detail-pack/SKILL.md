@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-mobile-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized mobile application security testing, including insecure storage, certificate pinning bypass, exposed components, and binary reverse engineering. Use when a task belongs to the mobile testing domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam mobile detail pack, eni-redteam-mobile-detail-pack
 ---
 
 

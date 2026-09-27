@@ -1,9 +1,11 @@
 ---
 name: eni-reverselab-bridge
 description: "原创外部依赖桥接：把 Open ReverseLab（LING71671/open-reverselab，GPL-3.0）作为可选外部工具链接入本包，不捆绑其任何内容。路由、安装、配置与退出条件都在本文件内，反向/CTF/APK/PE 任务命中时按需接入。"
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni reverselab bridge, eni-reverselab-bridge
 ---
 
 

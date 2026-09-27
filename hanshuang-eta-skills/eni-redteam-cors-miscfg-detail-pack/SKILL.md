@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-cors-miscfg-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized CORS misconfiguration testing, including reflected origins, null origins, subdomain trust, and credential exposure. Use when a task belongs to the CORS testing domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam cors miscfg detail pack, eni-redteam-cors-miscfg-detail-pack
 ---
 
 

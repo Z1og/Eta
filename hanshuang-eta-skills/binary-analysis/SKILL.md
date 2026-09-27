@@ -1,9 +1,11 @@
 ---
 name: binary-analysis
 description: Static binary reverse engineering, PE/ELF structural analysis, pattern scanning, disassembly, and binary patch generation.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: 二进制分析, binwalk, 字符串提取, PE分析, ELF分析, 二进制逆向, binary analysis, binary-analysis
 ---
 
 

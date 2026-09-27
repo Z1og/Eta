@@ -1,9 +1,11 @@
 ---
 name: eni-unpack-reverse-lab
 description: Offline Windows PE packing, unpacking triage, and evidence-backed reverse-engineering workflow. Use when the user says "冷咖啡" and asks to inspect a local EXE/DLL, identify packers or protectors, triage UPX/PyInstaller/.NET/native/VM-protected binaries, audit local reverse tools, create a copy-only analysis case, decompile or dynamically observe a local binary, or verify whether an authorization state is real, persistent, and cross-machine.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni unpack reverse lab, eni-unpack-reverse-lab
 ---
 
 

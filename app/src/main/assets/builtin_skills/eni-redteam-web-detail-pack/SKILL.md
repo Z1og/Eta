@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-web-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Routing and boundary guidance for authorized general web application security testing. Use as a web testing router when the attack surface should be dispatched to more specific web vulnerability skills."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam web detail pack, eni-redteam-web-detail-pack
 ---
 
 

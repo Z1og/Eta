@@ -11,7 +11,8 @@ triggers:
   - license
   - patch license
   - 授权验证
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
 ---

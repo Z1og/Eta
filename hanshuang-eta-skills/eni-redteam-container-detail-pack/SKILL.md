@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-container-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized container and orchestration security testing, including Docker escape, Kubernetes privilege escalation, image vulnerabilities, and service mesh bypasses. Use when a task belongs to the container testing domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam container detail pack, eni-redteam-container-detail-pack
 ---
 
 

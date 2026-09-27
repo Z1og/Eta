@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-csrf-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized CSRF testing, including token bypasses, SameSite bypasses, and JSON CSRF. Use when a task belongs to the CSRF testing domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam csrf detail pack, eni-redteam-csrf-detail-pack
 ---
 
 

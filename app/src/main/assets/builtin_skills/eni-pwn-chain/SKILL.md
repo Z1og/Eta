@@ -1,9 +1,11 @@
 ---
 name: eni-pwn-chain
 description: "[DOCUMENTATION ONLY] [???] Binary exploitation engineering methodology from triage through verified reproduction."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni pwn chain, eni-pwn-chain
 ---
 
 

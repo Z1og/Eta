@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-subdomain-takeover-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized subdomain takeover testing, including dangling CNAME records, NS takeover, and cloud service takeover paths such as S3, Azure, and Heroku. Use when a task belongs to the subdomain takeover domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam subdomain takeover detail pack, eni-redteam-subdomain-takeover-detail-pack
 ---
 
 

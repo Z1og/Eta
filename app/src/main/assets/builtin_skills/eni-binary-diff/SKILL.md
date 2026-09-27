@@ -1,9 +1,11 @@
 ---
 name: eni-binary-diff
 description: "[DOCUMENTATION ONLY] [???] Cross-version symbol migration and binary-diff methodology."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni binary diff, eni-binary-diff
 ---
 
 

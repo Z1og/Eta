@@ -1,9 +1,11 @@
 ---
 name: eni-api-security
 description: "[DOCUMENTATION ONLY] [仅文档] 全局自动路由"
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni api security, eni-api-security
 ---
 
 

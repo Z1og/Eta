@@ -1,9 +1,11 @@
 ---
 name: game-assets
 description: Create, edit, upgrade, animate, and prepare production-ready game assets with Meowa, including pixel and HD sprites, consistent item or character variants, multi-view characters, UI sheets, image and frame edits, seamless textures, terrain tilesets, isometric and side-scrolling maps, short video, sound effects, and game music. Use when a task requires choosing the right game-art workflow, planning a pixel or HD asset pipeline, running the bundled Meowa CLI, or validating final media for a game project.
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: game assets, game-assets
 ---
 
 

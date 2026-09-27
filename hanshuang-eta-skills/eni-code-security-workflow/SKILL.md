@@ -1,9 +1,11 @@
 ---
 name: eni-code-security-workflow
 description: "[DOCUMENTATION ONLY] [仅文档] Source, dependency, supply-chain, SAST, SCA, and remediation workflow for operator-owned repositories."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni code security workflow, eni-code-security-workflow
 ---
 
 

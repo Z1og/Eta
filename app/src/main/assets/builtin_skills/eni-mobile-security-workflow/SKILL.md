@@ -1,9 +1,11 @@
 ---
 name: eni-mobile-security-workflow
 description: "[DOCUMENTATION ONLY] [仅文档] Android and iOS static and dynamic analysis workflow using MobSF-style triage and Frida-style runtime observation."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni mobile security workflow, eni-mobile-security-workflow
 ---
 
 

@@ -1,9 +1,11 @@
 ---
 name: eni-ctf-orchestrator
 description: "[DOCUMENTATION ONLY] [仅文档入口] Single-entry CTF workflow for sandbox challenges across web, pwn, reverse, crypto, forensics, mobile, cloud, identity, protocol, firmware, and agent tasks."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni ctf orchestrator, eni-ctf-orchestrator
 ---
 
 

@@ -1,9 +1,11 @@
 ---
 name: eni-field-journal
 description: "[DOCUMENTATION ONLY] [仅文档] 全局自动路由 | Field Journal reference and tooling"
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni field journal, eni-field-journal
 ---
 
 

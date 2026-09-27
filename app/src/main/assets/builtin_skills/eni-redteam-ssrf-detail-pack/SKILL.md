@@ -1,9 +1,11 @@
 ---
 name: eni-redteam-ssrf-detail-pack
 description: "[DOCUMENTATION ONLY] [仅文档] Domain routing and boundary guidance for authorized SSRF testing, including basic SSRF, blind SSRF, protocol smuggling, and cloud metadata access paths. Use when a task belongs to the SSRF domain and needs scope, evidence, pivot, or exit criteria."
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni redteam ssrf detail pack, eni-redteam-ssrf-detail-pack
 ---
 
 

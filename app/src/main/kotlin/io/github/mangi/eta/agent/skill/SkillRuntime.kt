@@ -511,7 +511,7 @@ class SkillIndexService(
         val parsed = SkillParser.parseSkillFile(skillFile) ?: return null
         val frontmatter = parsed.frontmatter
         val id = SkillParser.sanitizeSkillId(canonicalDir.name, frontmatter["name"])
-        val metadata = frontmatter["metadata"]?.let { SkillParser.parseIndentedBlock(it) } ?: emptyMap()
+        val metadata = frontmatter["metadata"]?.let { SkillParser.parseIndentedBlock(it) ?: emptyMap() } ?: emptyMap()
         val registryState = registry[id]
         val builtinAsset = builtinAssets[id]
         return SkillIndexEntry(
@@ -530,7 +530,21 @@ class SkillIndexService(
             source = registryState?.source?.ifBlank { null }
                 ?: if (builtinAsset != null) BUILTIN_SOURCE else USER_SOURCE,
             installed = true,
+            triggers = parseTriggers(frontmatter["triggers"]),
         )
+    }
+
+    /**
+     * 解析 frontmatter `triggers` 字段——逗号分隔的关键词列表。
+     * 兼容多行缩进块（每行一个关键词）与单行逗号分隔两种写法。
+     */
+    private fun parseTriggers(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.split('\n', ',')
+            .map { it.trim().trim('-').trim() }
+            .filter { it.isNotBlank() && it.lowercase() != "null" }
+            .distinct()
+            .take(20)
     }
 
     private fun buildBuiltinPlaceholder(

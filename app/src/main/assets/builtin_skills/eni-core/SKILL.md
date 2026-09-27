@@ -1,9 +1,11 @@
 ---
 name: eni-core
 description: "Core routing and execution engine — sandbox executor mode"
-compatibility: Requires Eta root shell + Alpine Linux.metadata:
+compatibility: Requires Eta root shell + Alpine Linux.
+metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
+triggers: eni core, eni-core
 ---
 
 

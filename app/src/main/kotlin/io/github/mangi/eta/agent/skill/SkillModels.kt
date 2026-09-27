@@ -21,6 +21,8 @@ data class SkillIndexEntry(
     val enabled: Boolean = true,
     val source: String = "user",
     val installed: Boolean = true,
+    /** 关键词触发列表——用户消息包含任一关键词时自动加载该 Skill 正文。 */
+    val triggers: List<String> = emptyList(),
 )
 
 /**
@@ -50,6 +52,8 @@ data class SkillCompatibilityResult(
 @Immutable
 data class SkillContext(
     val installedSkills: List<SkillIndexEntry> = emptyList(),
+    /** 关键词触发后已自动加载正文的 Skill——正文将直接注入 system prompt。 */
+    val autoLoadedSkills: List<ResolvedSkillContext> = emptyList(),
 ) {
     companion object {
         val EMPTY = SkillContext()
