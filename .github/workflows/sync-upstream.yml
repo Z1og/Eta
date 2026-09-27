@@ -55,26 +55,90 @@ jobs:
 
       - name: Merge upstream changes
         if: steps.check.outputs.has_updates == 'true'
+        id: merge
         run: |
           git config user.name "Z1og"
           git config user.email "59019705+Z1og@users.noreply.github.com"
 
           # 尝试 merge，保留本地自定义（hanshuang-eta-skills 等）
-          git merge upstream/main --no-edit
-
-          # 检查是否有冲突
-          if git diff --quiet --name-only --diff-filter=U; then
+          if git merge upstream/main --no-edit; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
             echo "Merge successful, no conflicts"
-          else
-            echo "::error::Merge conflicts detected. Manual resolution required."
-            echo "Conflicting files:"
-            git diff --name-only --diff-filter=U
-            git merge --abort
-            exit 1
+            exit 0
           fi
 
+          # 有冲突：生成产物路径（skills/manifest）自动取 fork 版本——
+          # 这些文件由 sync-build 的适配器重新生成，取 ours 不会丢上游功能
+          CONFLICTS=$(git diff --name-only --diff-filter=U)
+          echo "Conflicting files:"
+          echo "$CONFLICTS"
+          RESOLVABLE=true
+          for f in $CONFLICTS; do
+            case "$f" in
+              hanshuang-eta-skills/*|app/src/main/assets/builtin_skills/*)
+                git checkout --ours "$f" && git add "$f"
+                echo "auto-resolved (ours): $f"
+                ;;
+              *)
+                RESOLVABLE=false
+                ;;
+            esac
+          done
+
+          if [[ "$RESOLVABLE" == "true" ]]; then
+            # 冲突全部在生成产物路径，且上游 manifest 改动需要重新适配——
+            # 用合并后的上游 manifest 覆盖前先标记解决，适配器会在下次 sync-build 重建
+            git diff --name-only --diff-filter=U | while read -r f; do
+              git checkout --ours "$f" 2>/dev/null && git add "$f" || true
+            done
+            GIT_EDITOR=true git merge --continue || git commit --no-edit
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+            echo "All conflicts auto-resolved in generated paths"
+          else
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            echo "$CONFLICTS" > conflict-files.txt
+            git merge --abort
+            echo "::error::Code conflicts with upstream. Manual resolution required."
+          fi
+
+      - name: Create issue on code conflict
+        if: steps.merge.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CONFLICT_FILES=$(cat conflict-files.txt)
+          gh issue create \
+            --title "上游合并冲突：需要手动解决关键词触发补丁" \
+            --body "$(cat <<EOF
+          ## Eta 上游合并冲突
+
+          上游 \`Mangi-11/Eta\` 的更新与本地关键词触发补丁冲突，自动同步已中止。
+
+          ### 冲突文件
+          \`\`\`
+          $CONFLICT_FILES
+          \`\`\`
+
+          ### 处理方法
+          1. 本地执行：
+             \`\`\`bash
+             git fetch upstream && git merge upstream/main
+             \`\`\`
+          2. 手动解决冲突时**保留关键词触发相关代码**：
+             - \`SkillTriggerMatcher.kt\`（触发匹配器）
+             - \`SkillIndexEntry.triggers\` / \`SkillContext.autoLoadedSkills\`（SkillModels.kt）
+             - \`SkillRuntime.parseTriggers\`（triggers 解析）
+             - \`AgentPromptBuilder.buildSkillSystemMessage\`（正文注入）
+             - \`AgentRuntimeRunExecutor\` 的 SkillTriggerMatcher 调用块
+          3. 提交后 push，CI 会自动重建 APK。
+
+          ### 参考
+          功能提交：\`feat: keyword-triggered skill auto-loading\`
+          EOF
+          )" || echo "::warning::issue create failed (可能已存在同名 issue)"
+
       - name: Push merged changes
-        if: steps.check.outputs.has_updates == 'true'
+        if: steps.check.outputs.has_updates == 'true' && steps.merge.outputs.conflict != 'true'
         run: |
           git push origin main
           echo "Upstream changes merged and pushed successfully"

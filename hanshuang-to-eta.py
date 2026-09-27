@@ -117,6 +117,8 @@ TRIGGER_MAP = {
     "game-engine": "游戏引擎,unity逆向,unreal逆向,ue4,ue5,il2cpp",
     "asm-analysis": "汇编分析,汇编代码,asm,汇编阅读",
     "l-license": "license,授权,注册码,激活码",
+    # 总控路由：原生关键词触发已接管分流，只留窄触发词避免抢占自动加载名额
+    "hanshuang-router": "寒霜总控,寒霜路由",
 }
 
 # 通用触发词后缀——skill 名本身作为触发词（LLM 常见表达）
@@ -458,17 +460,70 @@ def main():
     print(f"\n[3/4] 转换...")
     manifest_entries = []
 
-    # 保留原有 Eta 内置 Skill
+    # 保留非 hanshuang 来源的内置 Skill（Eta 上游原生 skill，动态保留而非硬编码 ID，
+    # 这样上游新增内置 skill 时 manifest 不会丢条目）
+    hanshuang_dir_names = {d.name for d in skill_dirs}
     if builtin_dir.exists():
         mf = builtin_dir / "manifest.json"
         if mf.exists():
             try:
                 existing = json.loads(mf.read_text(encoding='utf-8'))
                 for entry in existing.get("skills", []):
-                    if entry.get("id") in ("self-improving-agent", "skill-creator", "skill-installer"):
+                    entry_id = entry.get("id", "")
+                    asset_path = entry.get("assetPath", "")
+                    # 跳过 hanshuang 适配的条目（稍后由适配器重新生成）
+                    dir_name = asset_path.rsplit("/", 1)[-1] if asset_path else entry_id
+                    if dir_name in hanshuang_dir_names or entry_id in hanshuang_dir_names:
+                        continue
+                    # 目录仍存在才保留（防止上游删除后残留）
+                    if (builtin_dir / dir_name / "SKILL.md").exists():
                         manifest_entries.append(entry)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"  [警告] 解析现有 manifest 失败: {e}")
+
+        # 兜底：扫描 builtin_dir 中有 SKILL.md 但 manifest 未覆盖的目录
+        # （上游新增 skill 但还没写进 manifest 的情况）
+        covered = {e.get("id") for e in manifest_entries}
+        try:
+            for child in sorted(builtin_dir.iterdir()):
+                if not child.is_dir() or child.name.startswith('.') or child.name in hanshuang_dir_names:
+                    continue
+                if not (child / "SKILL.md").exists():
+                    continue
+                if child.name in covered:
+                    continue
+                print(f"  [补录] 上游内置 Skill 缺 manifest 条目: {child.name}")
+                # 孤儿 skill 若在 TRIGGER_MAP 中且缺 triggers，注入触发词
+                skill_file = child / "SKILL.md"
+                triggers = []
+                mapped = TRIGGER_MAP.get(child.name)
+                if mapped:
+                    triggers = [t.strip() for t in mapped.split(',') if t.strip()]
+                    try:
+                        text = skill_file.read_text(encoding='utf-8')
+                        if "triggers:" not in text and text.startswith('---'):
+                            end = text.find('\n---', 3)
+                            if end > 0:
+                                fm_text = text[3:end].rstrip()
+                                fm_text += f"\ntriggers: {', '.join(triggers[:15])}"
+                                skill_file.write_text(
+                                    f"---\n{fm_text}\n---{text[end + 4:]}",
+                                    encoding='utf-8',
+                                )
+                    except Exception as e:
+                        print(f"  [警告] 注入 triggers 失败: {e}")
+                manifest_entries.append({
+                    "id": child.name,
+                    "name": child.name,
+                    "description": f"Eta upstream builtin skill: {child.name}",
+                    "assetPath": f"builtin_skills/{child.name}",
+                    "hasScripts": (child / "scripts").is_dir(),
+                    "hasReferences": (child / "references").is_dir(),
+                    "hasAssets": (child / "assets").is_dir(),
+                    "hasEvals": (child / "evals").is_dir(),
+                })
+        except Exception as e:
+            print(f"  [警告] 扫描 builtin_dir 失败: {e}")
 
     for skill_dir in skill_dirs:
         entry = process_skill(skill_dir, output_dir, dry_run=args.dry_run)
@@ -490,6 +545,20 @@ def main():
 
     if not args.dry_run:
         (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding='utf-8')
+
+        # 同步孤儿内置 skill 到镜像目录，保证 manifest 与目录一致
+        # （补录的上游 skill 只存在于 builtin_dir，镜像分发目录也需要它）
+        # 仅处理 id 与目录名一致的条目——hanshuang skill 的目录名由 process_skill
+        # 写入镜像，若按 entry.id 复制会给"frontmatter 名 ≠ 目录名"的 skill
+        # 生成改名副本，经 deploy 回写后在 builtin 产生重复目录
+        for entry in unique:
+            src = builtin_dir / entry["assetPath"].rsplit("/", 1)[-1]
+            dst = output_dir / src.name
+            if (src.name == entry["id"] and src.exists()
+                    and (src / "SKILL.md").exists() and not dst.exists()
+                    and src.name not in hanshuang_dir_names):
+                shutil.copytree(src, dst)
+                print(f"  [镜像] 补充孤儿 skill: {src.name}")
 
         if args.builtin and builtin_dir.exists():
             (builtin_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding='utf-8')

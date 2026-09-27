@@ -31,6 +31,16 @@
       "hasEvals": false
     },
     {
+      "id": "hanshuang-router",
+      "name": "hanshuang-router",
+      "description": "Eta upstream builtin skill: hanshuang-router",
+      "assetPath": "builtin_skills/hanshuang-router",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
       "id": "anti-cheat-systems",
       "name": "anti-cheat-systems",
       "description": "Guide for modern game anti-cheat architecture, Windows kernel monitoring, and detection tradeoffs. Use this skill when analyzing EAC, BattlEye, Vanguard, FACEIT AC, kernel callbacks, handle protection",

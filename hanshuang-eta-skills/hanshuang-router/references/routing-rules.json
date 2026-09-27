@@ -1,0 +1,22 @@
+{
+  "version": "eta-v1",
+  "rules": [
+    {"priority": 200, "keywords": ["ctf", "夺旗", "靶场", "challenge", "flag"], "workflow": "ctf", "skill": "reverse-engineering"},
+    {"priority": 190, "keywords": ["破解", "crackme", "keygen", "注册机", "序列号", "许可证", "卡密", "license", "激活", "去验证", "授权码"], "workflow": "crack", "skill": "crack-keygen"},
+    {"priority": 185, "keywords": ["逆向", "反编译", "反汇编", "二进制", "pe", "elf", "mach-o", "dll", "exe", "unpack", "ghidra", "ida", "radare"], "workflow": "reverse", "skill": "reverse-engineering"},
+    {"priority": 185, "keywords": ["ida", "ida-pro", "hex-rays"], "workflow": "ida", "skill": "ida-reverse"},
+    {"priority": 180, "keywords": ["外挂", "修改器", "trainer", "cheat", "作弊", "反作弊", "esp", "自瞄", "透视", "开挂"], "workflow": "game-security", "skill": "game-cheat"},
+    {"priority": 175, "keywords": ["apk", "android", "smali", "jadx", "frida", "ipa", "移动端安全"], "workflow": "mobile", "skill": "mobile-reverse"},
+    {"priority": 175, "keywords": ["frida", "hook", "动态注入", "内存修改"], "workflow": "frida", "skill": "dynamic-instrumentation"},
+    {"priority": 170, "keywords": ["固件", "firmware", "iot", "binwalk", "路由器", "嵌入式"], "workflow": "firmware", "skill": "reverse-engineering"},
+    {"priority": 170, "keywords": ["协议", "protobuf", "tlv", "抓包", "流量分析"], "workflow": "protocol", "skill": "protocol-reversing"},
+    {"priority": 165, "keywords": ["恶意软件", "malware", "病毒", "yara", "木马", "免杀", "远控", "shellcode", "rat", "勒索"], "workflow": "malware-ir", "skill": "reverse-engineering"},
+    {"priority": 160, "keywords": ["内存取证", "memory forensics", "volatility", "进程转储"], "workflow": "memory", "skill": "dynamic-instrumentation"},
+    {"priority": 155, "keywords": ["渗透", "pentest", "漏洞验证", "攻击面", "红队", "sql注入", "xss", "ssrf", "rce"], "workflow": "pentest", "skill": "pentest-tools"},
+    {"priority": 155, "keywords": ["网络", "端口", "nmap", "扫描"], "workflow": "network", "skill": "network-pentest"},
+    {"priority": 150, "keywords": ["api", "graphql", "rest", "接口安全", "接口测试"], "workflow": "api", "skill": "pentest-tools"},
+    {"priority": 140, "keywords": ["代码审计", "sast", "sca", "依赖漏洞"], "workflow": "code-security", "skill": "pentest-tools"},
+    {"priority": 130, "keywords": ["fuzz", "模糊测试", "afl", "libfuzzer"], "workflow": "fuzzing", "skill": "reverse-engineering"},
+    {"priority": 185, "keywords": ["pe", "elf", "二进制结构", "节表", "导入表"], "workflow": "binary", "skill": "binary-analysis"}
+  ]
+}
