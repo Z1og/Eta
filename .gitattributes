@@ -1,0 +1,13 @@
+# Normalize line endings: generated skill files must be LF to avoid
+# CRLF churn between Windows dev and Linux CI adapter runs
+* text=auto eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.webp binary
+*.gif binary
+*.so binary
+*.jar binary
+*.apk binary
+*.jks binary

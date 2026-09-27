@@ -28,6 +28,18 @@ import subprocess
 import sys
 from pathlib import Path
 
+
+def read_lf(path) -> str:
+    """Read text with normalized LF line endings (Windows CRLF checkout safe)."""
+    return Path(path).read_text(encoding='utf-8').replace('\r\n', '\n').replace('\r', '\n')
+
+
+def write_lf(path, text: str) -> None:
+    """Write text forcing LF endings regardless of platform."""
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
+
+
 # ============================================================
 # 配置
 # ============================================================
@@ -307,7 +319,7 @@ def process_skill(skill_dir: Path, output_dir: Path, dry_run: bool = False) -> d
     if not skill_md.exists():
         return None
 
-    raw = skill_md.read_text(encoding='utf-8')
+    raw = read_lf(skill_md)
 
     # 解析 frontmatter
     fm = {}
@@ -337,7 +349,7 @@ def process_skill(skill_dir: Path, output_dir: Path, dry_run: bool = False) -> d
         if target_dir.exists():
             shutil.rmtree(target_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
-        (target_dir / "SKILL.md").write_text(new_content, encoding='utf-8')
+        write_lf(target_dir / "SKILL.md", new_content)
 
     # 复制 references/
     has_refs = False
@@ -357,8 +369,8 @@ def process_skill(skill_dir: Path, output_dir: Path, dry_run: bool = False) -> d
             target_scripts.mkdir(parents=True, exist_ok=True)
             for sf in scripts_dir.iterdir():
                 if sf.suffix == '.ps1':
-                    sh_content = convert_ps1_to_sh(sf.read_text(encoding='utf-8'))
-                    (target_scripts / (sf.stem + '.sh')).write_text(sh_content, encoding='utf-8')
+                    sh_content = convert_ps1_to_sh(read_lf(sf))
+                    write_lf(target_scripts / (sf.stem + '.sh'), sh_content)
                 elif sf.is_file():
                     shutil.copy2(sf, target_scripts / sf.name)
 
@@ -467,7 +479,7 @@ def main():
         mf = builtin_dir / "manifest.json"
         if mf.exists():
             try:
-                existing = json.loads(mf.read_text(encoding='utf-8'))
+                existing = json.loads(read_lf(mf))
                 for entry in existing.get("skills", []):
                     entry_id = entry.get("id", "")
                     asset_path = entry.get("assetPath", "")
@@ -500,15 +512,15 @@ def main():
                 if mapped:
                     triggers = [t.strip() for t in mapped.split(',') if t.strip()]
                     try:
-                        text = skill_file.read_text(encoding='utf-8')
+                        text = read_lf(skill_file)
                         if "triggers:" not in text and text.startswith('---'):
                             end = text.find('\n---', 3)
                             if end > 0:
                                 fm_text = text[3:end].rstrip()
                                 fm_text += f"\ntriggers: {', '.join(triggers[:15])}"
-                                skill_file.write_text(
+                                write_lf(
+                                    skill_file,
                                     f"---\n{fm_text}\n---{text[end + 4:]}",
-                                    encoding='utf-8',
                                 )
                     except Exception as e:
                         print(f"  [警告] 注入 triggers 失败: {e}")
@@ -544,7 +556,7 @@ def main():
     manifest = {"skills": unique}
 
     if not args.dry_run:
-        (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding='utf-8')
+        write_lf(output_dir / "manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
 
         # 同步孤儿内置 skill 到镜像目录，保证 manifest 与目录一致
         # （补录的上游 skill 只存在于 builtin_dir，镜像分发目录也需要它）
@@ -561,7 +573,7 @@ def main():
                 print(f"  [镜像] 补充孤儿 skill: {src.name}")
 
         if args.builtin and builtin_dir.exists():
-            (builtin_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding='utf-8')
+            write_lf(builtin_dir / "manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
             for sd in output_dir.iterdir():
                 if sd.is_dir() and (sd / "SKILL.md").exists():
                     target = builtin_dir / sd.name
@@ -575,7 +587,7 @@ def main():
     # 也复制安装脚本
     install_sh = output_dir / "install-eta-skills.sh"
     if not install_sh.exists() and not args.dry_run:
-        install_sh.write_text(f"""#!/bin/sh
+        write_lf(install_sh, f"""#!/bin/sh
 # install-eta-skills.sh — 将适配后的寒霜技能包安装到 Eta
 # 用法: sh install-eta-skills.sh [eta-skills-dir]
 set -e
@@ -597,7 +609,7 @@ for d in "$SCRIPT_DIR"/*/; do
     cp -r "$d"* "$target/" && echo "[安装] $name" && INSTALLED=$((INSTALLED+1))
 done
 echo "完成: 安装=$INSTALLED 跳过=$SKIPPED"
-""", encoding='utf-8')
+""")
 
     print(f"\n{'=' * 60}")
     print(f"完成！输出: {output_dir}")
