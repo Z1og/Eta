@@ -203,7 +203,7 @@ jobs:
         if: steps.build_type.outputs.type == 'release' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}-${{ github.event.head_commit.timestamp || 'manual' }}
+          tag_name: v${{ github.run_number }}
           name: "Eta v${{ github.run_number }} - ${{ steps.build_type.outputs.type }}"
           body: |
             Automated build from commit `${{ github.sha }}`
