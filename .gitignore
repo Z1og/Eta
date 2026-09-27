@@ -41,3 +41,6 @@ google-services.json
 # WorkBuddy 本地工作状态
 /.workbuddy/
 /.reasonix/
+
+__pycache__/
+*.pyc
