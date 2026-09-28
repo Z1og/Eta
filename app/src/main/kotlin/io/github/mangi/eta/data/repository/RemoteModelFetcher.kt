@@ -32,10 +32,12 @@ internal object RemoteModelFetcher {
     suspend fun fetch(provider: ProviderSetting): Result<List<Model>> =
         withContext(Dispatchers.IO) {
             runCatching {
-                when (provider) {
+                val fetched = when (provider) {
                     is AnthropicProviderSetting -> fetchAnthropic(provider)
                     else -> fetchOpenAiCompatible(provider)
                 }
+                // 为不返回元数据的端点（中转站等）自动补齐窗口与推理能力；失败静默降级
+                ModelMetadataCatalog.enrich(fetched)
             }
         }
 
