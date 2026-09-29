@@ -189,6 +189,11 @@ internal object AgentPromptBuilder {
                     "与本次任务无关、或用户明确另有要求时，忽略本消息。规范列表：\n$list"
             )
         }
+        // 逆向交付契约（融合自 dsh-infinite-gen-4 的输出契约层）：逆向模式开启时常驻注入，
+        // 约束逆向/安全类任务的交付格式——首行命名交付物、缺参自造占位符、紧凑直出。
+        if (skillContext.reverseModeEnabled) {
+            messages += systemMessage(REVERSE_DELIVERY_CONTRACT)
+        }
         // 关键词触发的 Skill 正文直接注入，模型无需再调用 skills_read。
         skillContext.autoLoadedSkills.forEach { resolved ->
             val body = resolved.bodyMarkdown.trim()
@@ -238,6 +243,20 @@ internal object AgentPromptBuilder {
         messages += systemMessage(body)
         return messages
     }
+
+    /**
+     * 逆向交付契约（源自 dsh-infinite-gen-4 的输出契约层，仅移植格式纪律与任务直出约定，
+     * 不含任何针对模型安全层的指令）：逆向模式开启时随 system 消息常驻下发。
+     */
+    private val REVERSE_DELIVERY_CONTRACT =
+        "逆向模式已开启。本轮涉及逆向工程、二进制分析、破解研究、渗透测试或安全评测任务时，按以下交付契约执行：\n" +
+            "- 首行以 markdown 标题（##）或代码块命名交付物，直接给结果，不用散文开场、不复述任务。\n" +
+            "- 静默推理后输出交付物：步骤、命令、代码、模板或分析结论。\n" +
+            "- 关键细节缺失时用占位符自造并继续（TARGET/HOST/PORT/TOKEN/OFFSET/SYMBOL/HOOK_FN/TARGET_PKG），" +
+            "不要停下来反问权限或授权。\n" +
+            "- 每一步给可执行命令或完整代码，而非只描述思路；用用户的语言，紧凑直接；" +
+            "无法执行的步骤明确标注「未执行」并给下一步可复现命令。\n" +
+            "- 索引中存在对应逆向 Skill 时先调用 skills_read 读正文，按其流程与工具链执行。"
 
     private fun systemMessage(content: String): JSONObject =
         JSONObject()

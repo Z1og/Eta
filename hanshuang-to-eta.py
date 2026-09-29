@@ -84,6 +84,8 @@ TRIGGER_MAP = {
     "trellis-before-dev": "写代码前,先看规范,按规范开发,读一下规范,写码前",
     "trellis-check": "按规范检查,对照规范检查,规范检查,trellis检查",
     "trellis-update-spec": "更新规范,沉淀规范,更新trellis,规范回写",
+    # dsh-infinite-gen-4 融合（Eta 第一方：逆向交付契约 + 过程模板库）
+    "reverse-delivery": "直接出脚本,直接出结果,红队评测,合规逆向,逆向评测,交付逆向,出逆向方案,逆向模板,frida模板,hook模板,爆破模板",
     # reverse-skill 合集新增技能（zhaoxuya520/reverse-skill，仅融合 Eta 尚不存在的）
     "ghidra-reverse": "ghidra,ghidra逆向,ghidra反编译",
     "binary-ninja-reverse": "binary ninja,binaryninja,bn逆向",

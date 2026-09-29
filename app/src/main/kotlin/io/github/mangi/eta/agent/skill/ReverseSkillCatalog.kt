@@ -9,7 +9,8 @@ package io.github.mangi.eta.agent.skill
  */
 object ReverseSkillCatalog {
     val REVERSE_SKILL_IDS: Set<String> = setOf(
-        // 逆向核心
+        // 逆向核心（reverse-delivery 为 dsh-infinite-gen-4 融合的交付契约技能，随主开关统一启停）
+        "reverse-delivery",
         "apk-reverse", "ida-reverse", "radare2", "binary-analysis", "binary-diff",
         "dotnet-reverse", "js-reverse", "mobile-reverse", "dsl-vm-reverse",
         "reverse-engineering", "reverse-engineering-api",

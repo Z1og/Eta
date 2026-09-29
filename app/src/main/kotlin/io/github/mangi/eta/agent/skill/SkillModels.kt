@@ -56,6 +56,8 @@ data class SkillContext(
     val autoLoadedSkills: List<ResolvedSkillContext> = emptyList(),
     /** 方案 A 探测到的 Trellis 项目规范索引——非空时注入系统消息，提醒模型写码前先读规范。 */
     val projectSpecs: ProjectSpecIndex? = null,
+    /** 逆向模式是否开启（融合 dsh-infinite-gen-4 交付契约）——开启时常驻注入逆向交付契约系统消息。 */
+    val reverseModeEnabled: Boolean = false,
 ) {
     companion object {
         val EMPTY = SkillContext()

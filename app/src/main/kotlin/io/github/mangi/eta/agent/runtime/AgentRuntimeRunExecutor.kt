@@ -24,6 +24,7 @@ import io.github.mangi.eta.agent.skill.SkillRuntime
 import io.github.mangi.eta.agent.skill.SkillTriggerMatcher
 import io.github.mangi.eta.agent.skill.PublicGitHubSkillSource
 import io.github.mangi.eta.agent.skill.ProjectSpecDetector
+import io.github.mangi.eta.agent.skill.ReverseSkillCatalog
 import io.github.mangi.eta.agent.tool.AgentLocalTools
 import io.github.mangi.eta.agent.tool.AgentToolRequirements
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
@@ -124,10 +125,28 @@ internal class AgentRuntimeRunExecutor(
                     }
                     .getOrNull()
             }
+            // 逆向模式状态：所有已安装逆向技能均启用即视为开启（与技能页主开关判定一致）。
+            // 失败静默降级为关闭，不影响正常对话。
+            val reverseModeEnabled = if (request.operation == AgentRuntimeWire.OP_REWRITE_REPLY) {
+                false
+            } else {
+                runCatching {
+                    val reverseInstalled = skillIndexService.listSkillsForManagement()
+                        .filter { it.installed && it.id in ReverseSkillCatalog.REVERSE_SKILL_IDS }
+                    reverseInstalled.isNotEmpty() && reverseInstalled.all { it.enabled }
+                }.onFailure { throwable ->
+                    AndroidAgentLogger.warnThrottled("reverse_mode_state_failed") {
+                        "Reverse mode state detection failed: type=${throwable.safeLogType()}"
+                    }
+                }.getOrDefault(false)
+            }
             val skillContext = SkillContext(
                 installedSkills = compatibleSkills,
                 autoLoadedSkills = autoLoadedSkills,
                 projectSpecs = projectSpecs,
+                // 逆向模式状态（融合 dsh-infinite-gen-4）：与技能页主开关同源——
+                // 所有已安装逆向技能均启用即视为开启，开启时常驻注入逆向交付契约。
+                reverseModeEnabled = reverseModeEnabled,
             )
             val memoryEnabled = runBlocking { AgentMemoryRepository.isEnabled() }
             val uiPayload = request.handoff

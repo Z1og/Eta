@@ -144,6 +144,26 @@ class AgentPromptBuilderTest {
     }
 
     @Test
+    fun reverseDeliveryContractIsInjectedOnlyWhenReverseModeEnabled() {
+        fun systemContentsOf(reverseModeEnabled: Boolean): List<String> {
+            val messages = AgentPromptBuilder.buildInitialMessages(
+                config = modelConfig("", terminalTools = false, browserTools = false),
+                prompt = "逆向分析目标应用",
+                images = emptyList(),
+                history = emptyList(),
+                skillContext = SkillContext(reverseModeEnabled = reverseModeEnabled),
+            )
+            return messages.systemContents()
+        }
+
+        val contract = systemContentsOf(reverseModeEnabled = true).single { it.contains("交付契约") }
+        assertTrue(contract.contains("逆向模式已开启"))
+        assertTrue(contract.contains("TARGET/HOST/PORT/TOKEN/OFFSET/SYMBOL/HOOK_FN/TARGET_PKG"))
+        assertTrue(contract.contains("skills_read"))
+        assertFalse(systemContentsOf(reverseModeEnabled = false).any { it.contains("交付契约") })
+    }
+
+    @Test
     fun localImageReferenceCannotLeakIntoProviderRequest() {
         val image = AgentModelClient.ModelImage(
             reference = "content://example.test/image/1",
