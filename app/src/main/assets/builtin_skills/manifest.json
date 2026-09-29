@@ -81,6 +81,246 @@
       "hasEvals": false
     },
     {
+      "id": "binary-ninja-reverse",
+      "name": "binary-ninja-reverse",
+      "description": "Use for authorized binary analysis in Binary Ninja, including HLIL/MLIL/LLIL inspection, strings/imports/exports, cross-references, types, patch review, Python API automation, and optional Binary Ninj",
+      "assetPath": "builtin_skills/binary-ninja-reverse",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "browser-extension-reverse",
+      "name": "browser-extension-reverse",
+      "description": "Use for authorized reverse engineering of browser extensions (Chrome/Firefox) including manifest analysis, background workers, and extension-based credential or traffic logic recovery.",
+      "assetPath": "builtin_skills/browser-extension-reverse",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "cloud-k8s",
+      "name": "cloud-k8s",
+      "description": "Use for authorized cloud, container, and Kubernetes security assessment including metadata SSRF, IAM misconfig, container escape paths, and cluster RBAC review.",
+      "assetPath": "builtin_skills/cloud-k8s",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "code-audit",
+      "name": "code-audit",
+      "description": "Use for authorized source-code security review and SAST workflows including Semgrep, CodeQL patterns, dangerous API hunting, and fix verification.",
+      "assetPath": "builtin_skills/code-audit",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "ctf-sandbox",
+      "name": "ctf-sandbox",
+      "description": "Thin PRIMARY for CTF / AWD / 靶场 multi-type orchestration. Hands off to the sidecar CTF-Sandbox-Orchestrator. Use when the user says CTF, AWD, 靶场, or 比赛题 and no more specific pwn/APK/IDA route already ",
+      "assetPath": "builtin_skills/ctf-sandbox",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "database-security",
+      "name": "database-security",
+      "description": "Use for authorized database security assessment covering PostgreSQL/MySQL/MSSQL/Mongo/Redis exposure, authz, UDF/command paths, and misconfiguration review.",
+      "assetPath": "builtin_skills/database-security",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "digital-forensics",
+      "name": "digital-forensics",
+      "description": "Use for authorized digital forensics including memory dumps, disk timelines, PCAP investigation, artifact triage, and IR evidence preservation.",
+      "assetPath": "builtin_skills/digital-forensics",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "email-security",
+      "name": "email-security",
+      "description": "Use for authorized email security review including phishing analysis, header authentication (SPF/DKIM/DMARC), BEC patterns, and mailbox token abuse research.",
+      "assetPath": "builtin_skills/email-security",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "ghidra-reverse",
+      "name": "ghidra-reverse",
+      "description": "Use for free/open reverse engineering with Ghidra (headless or GUI), including decompile, cross-refs, and optional Ghidra MCP workflows when IDA is unavailable.",
+      "assetPath": "builtin_skills/ghidra-reverse",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "go-rust-reverse",
+      "name": "go-rust-reverse",
+      "description": "Use for reverse engineering stripped Go and Rust binaries including runtime recognition, pclntab/moduel data recovery, panic strings, and idiomatic decompilation recovery.",
+      "assetPath": "builtin_skills/go-rust-reverse",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "hardware-security",
+      "name": "hardware-security",
+      "description": "Use for authorized hardware and embedded interface security research including UART/JTAG discovery, debug pad triage, secure boot overview, and offline firmware extraction support.",
+      "assetPath": "builtin_skills/hardware-security",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "identity-federation",
+      "name": "identity-federation",
+      "description": "Use for authorized assessment of federated identity systems including SAML, OIDC, OAuth2 flows, SSO misconfiguration, and token confusion issues.",
+      "assetPath": "builtin_skills/identity-federation",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "llm-security",
+      "name": "llm-security",
+      "description": "Use for authorized security assessment of LLM applications and AI agents, including prompt injection, tool abuse, RAG exposure, memory poisoning, and model supply-chain risks.",
+      "assetPath": "builtin_skills/llm-security",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "macos-reverse",
+      "name": "macos-reverse",
+      "description": "Use for authorized macOS and Mach-O reverse engineering including codesign, Objective-C/Swift recovery, endpoint security surfaces, and Apple platform malware analysis.",
+      "assetPath": "builtin_skills/macos-reverse",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "malware-analysis",
+      "name": "malware-analysis",
+      "description": "Use when analyzing suspected malware through static, dynamic, and behavioral techniques, including IOC extraction, YARA or Sigma rules, sandboxing, and anti-analysis behavior.",
+      "assetPath": "builtin_skills/malware-analysis",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "ot-ics",
+      "name": "ot-ics",
+      "description": "Use for authorized OT/ICS security assessment covering Purdue model zoning, PLC/SCADA exposure, industrial protocol discovery, and safe passive-first evaluation.",
+      "assetPath": "builtin_skills/ot-ics",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "protocol-reverse",
+      "name": "protocol-reverse",
+      "description": "Use for authorized reverse engineering of custom binary protocols, Protobuf/gRPC, WebSocket frames, and PCAP-driven protocol recovery.",
+      "assetPath": "builtin_skills/protocol-reverse",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "radio-sdr",
+      "name": "radio-sdr",
+      "description": "Use for authorized RF/SDR security research including signal identification, replay feasibility study in shielded labs, and wireless protocol analysis outside classic Wi-Fi.",
+      "assetPath": "builtin_skills/radio-sdr",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "supply-chain-security",
+      "name": "supply-chain-security",
+      "description": "Use for software supply-chain security assessment covering SBOM, SCA, CI/CD pipelines, container images, build integrity, dependency provenance, and vulnerability reachability.",
+      "assetPath": "builtin_skills/supply-chain-security",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "thick-client",
+      "name": "thick-client",
+      "description": "Use for authorized security testing of desktop thick clients including local storage, update channels, IPC, traffic, and client-side trust boundaries.",
+      "assetPath": "builtin_skills/thick-client",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "threat-hunting",
+      "name": "threat-hunting",
+      "description": "Use for blue-team threat hunting, detection engineering with Sigma/YARA, SIEM query design, and incident detection validation.",
+      "assetPath": "builtin_skills/threat-hunting",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "threat-intelligence",
+      "name": "threat-intelligence",
+      "description": "Use for authorized OSINT and cyber threat intelligence that enriches IOCs, campaigns, impersonation, scams, or threat actors from public sources. Includes bounded X/Twitter search through Xquik, sourc",
+      "assetPath": "builtin_skills/threat-intelligence",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "wifi-wireless",
+      "name": "wifi-wireless",
+      "description": "Use for authorized wireless security assessment including Wi-Fi capture, WPA handshake analysis, rogue AP detection research, and lab-only deauth testing.",
+      "assetPath": "builtin_skills/wifi-wireless",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "windows-ad",
+      "name": "windows-ad",
+      "description": "Use for authorized Active Directory and Windows identity attacks including Kerberos, AD CS, BloodHound paths, NTLM relay, and domain privilege escalation research.",
+      "assetPath": "builtin_skills/windows-ad",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
       "id": "anti-cheat-systems",
       "name": "anti-cheat-systems",
       "description": "Guide for modern game anti-cheat architecture, Windows kernel monitoring, and detection tradeoffs. Use this skill when analyzing EAC, BattlEye, Vanguard, FACEIT AC, kernel callbacks, handle protection",
@@ -1597,246 +1837,6 @@
       "assetPath": "builtin_skills/yingan-tuoxiu",
       "hasScripts": false,
       "hasReferences": false,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "binary-ninja-reverse",
-      "name": "binary-ninja-reverse",
-      "description": "Use for authorized binary analysis in Binary Ninja, including HLIL/MLIL/LLIL inspection, strings/imports/exports, cross-references, types, patch review, Python API automation, and optional Binary Ninj",
-      "assetPath": "builtin_skills/binary-ninja-reverse",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "browser-extension-reverse",
-      "name": "browser-extension-reverse",
-      "description": "Use for authorized reverse engineering of browser extensions (Chrome/Firefox) including manifest analysis, background workers, and extension-based credential or traffic logic recovery.",
-      "assetPath": "builtin_skills/browser-extension-reverse",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "cloud-k8s",
-      "name": "cloud-k8s",
-      "description": "Use for authorized cloud, container, and Kubernetes security assessment including metadata SSRF, IAM misconfig, container escape paths, and cluster RBAC review.",
-      "assetPath": "builtin_skills/cloud-k8s",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "code-audit",
-      "name": "code-audit",
-      "description": "Use for authorized source-code security review and SAST workflows including Semgrep, CodeQL patterns, dangerous API hunting, and fix verification.",
-      "assetPath": "builtin_skills/code-audit",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "ctf-sandbox",
-      "name": "ctf-sandbox",
-      "description": "Thin PRIMARY for CTF / AWD / 靶场 multi-type orchestration. Hands off to the sidecar CTF-Sandbox-Orchestrator. Use when the user says CTF, AWD, 靶场, or 比赛题 and no more specific pwn/APK/IDA route already ",
-      "assetPath": "builtin_skills/ctf-sandbox",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "database-security",
-      "name": "database-security",
-      "description": "Use for authorized database security assessment covering PostgreSQL/MySQL/MSSQL/Mongo/Redis exposure, authz, UDF/command paths, and misconfiguration review.",
-      "assetPath": "builtin_skills/database-security",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "digital-forensics",
-      "name": "digital-forensics",
-      "description": "Use for authorized digital forensics including memory dumps, disk timelines, PCAP investigation, artifact triage, and IR evidence preservation.",
-      "assetPath": "builtin_skills/digital-forensics",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "email-security",
-      "name": "email-security",
-      "description": "Use for authorized email security review including phishing analysis, header authentication (SPF/DKIM/DMARC), BEC patterns, and mailbox token abuse research.",
-      "assetPath": "builtin_skills/email-security",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "ghidra-reverse",
-      "name": "ghidra-reverse",
-      "description": "Use for free/open reverse engineering with Ghidra (headless or GUI), including decompile, cross-refs, and optional Ghidra MCP workflows when IDA is unavailable.",
-      "assetPath": "builtin_skills/ghidra-reverse",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "go-rust-reverse",
-      "name": "go-rust-reverse",
-      "description": "Use for reverse engineering stripped Go and Rust binaries including runtime recognition, pclntab/moduel data recovery, panic strings, and idiomatic decompilation recovery.",
-      "assetPath": "builtin_skills/go-rust-reverse",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "hardware-security",
-      "name": "hardware-security",
-      "description": "Use for authorized hardware and embedded interface security research including UART/JTAG discovery, debug pad triage, secure boot overview, and offline firmware extraction support.",
-      "assetPath": "builtin_skills/hardware-security",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "identity-federation",
-      "name": "identity-federation",
-      "description": "Use for authorized assessment of federated identity systems including SAML, OIDC, OAuth2 flows, SSO misconfiguration, and token confusion issues.",
-      "assetPath": "builtin_skills/identity-federation",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "llm-security",
-      "name": "llm-security",
-      "description": "Use for authorized security assessment of LLM applications and AI agents, including prompt injection, tool abuse, RAG exposure, memory poisoning, and model supply-chain risks.",
-      "assetPath": "builtin_skills/llm-security",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "macos-reverse",
-      "name": "macos-reverse",
-      "description": "Use for authorized macOS and Mach-O reverse engineering including codesign, Objective-C/Swift recovery, endpoint security surfaces, and Apple platform malware analysis.",
-      "assetPath": "builtin_skills/macos-reverse",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "malware-analysis",
-      "name": "malware-analysis",
-      "description": "Use when analyzing suspected malware through static, dynamic, and behavioral techniques, including IOC extraction, YARA or Sigma rules, sandboxing, and anti-analysis behavior.",
-      "assetPath": "builtin_skills/malware-analysis",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "ot-ics",
-      "name": "ot-ics",
-      "description": "Use for authorized OT/ICS security assessment covering Purdue model zoning, PLC/SCADA exposure, industrial protocol discovery, and safe passive-first evaluation.",
-      "assetPath": "builtin_skills/ot-ics",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "protocol-reverse",
-      "name": "protocol-reverse",
-      "description": "Use for authorized reverse engineering of custom binary protocols, Protobuf/gRPC, WebSocket frames, and PCAP-driven protocol recovery.",
-      "assetPath": "builtin_skills/protocol-reverse",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "radio-sdr",
-      "name": "radio-sdr",
-      "description": "Use for authorized RF/SDR security research including signal identification, replay feasibility study in shielded labs, and wireless protocol analysis outside classic Wi-Fi.",
-      "assetPath": "builtin_skills/radio-sdr",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "supply-chain-security",
-      "name": "supply-chain-security",
-      "description": "Use for software supply-chain security assessment covering SBOM, SCA, CI/CD pipelines, container images, build integrity, dependency provenance, and vulnerability reachability.",
-      "assetPath": "builtin_skills/supply-chain-security",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "thick-client",
-      "name": "thick-client",
-      "description": "Use for authorized security testing of desktop thick clients including local storage, update channels, IPC, traffic, and client-side trust boundaries.",
-      "assetPath": "builtin_skills/thick-client",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "threat-hunting",
-      "name": "threat-hunting",
-      "description": "Use for blue-team threat hunting, detection engineering with Sigma/YARA, SIEM query design, and incident detection validation.",
-      "assetPath": "builtin_skills/threat-hunting",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "threat-intelligence",
-      "name": "threat-intelligence",
-      "description": "Use for authorized OSINT and cyber threat intelligence that enriches IOCs, campaigns, impersonation, scams, or threat actors from public sources. Includes bounded X/Twitter search through Xquik, sourc",
-      "assetPath": "builtin_skills/threat-intelligence",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "wifi-wireless",
-      "name": "wifi-wireless",
-      "description": "Use for authorized wireless security assessment including Wi-Fi capture, WPA handshake analysis, rogue AP detection research, and lab-only deauth testing.",
-      "assetPath": "builtin_skills/wifi-wireless",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "windows-ad",
-      "name": "windows-ad",
-      "description": "Use for authorized Active Directory and Windows identity attacks including Kerberos, AD CS, BloodHound paths, NTLM relay, and domain privilege escalation research.",
-      "assetPath": "builtin_skills/windows-ad",
-      "hasScripts": false,
-      "hasReferences": true,
       "hasAssets": false,
       "hasEvals": false
     }
