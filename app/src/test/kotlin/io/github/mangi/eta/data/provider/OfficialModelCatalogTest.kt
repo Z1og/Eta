@@ -1,12 +1,28 @@
 package io.github.mangi.eta.data.provider
 
 import io.github.mangi.eta.data.model.ModelSource
+import io.github.mangi.eta.data.model.Model
+import io.github.mangi.eta.data.model.CustomProviderSetting
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class OfficialModelCatalogTest {
+    @Test
+    fun fillsOnlyMissingContextForRecognizedProviderAndExactModelId() {
+        val provider = CustomProviderSetting(id = "custom", name = "自定义官方入口", baseUrl = "https://api.deepseek.com/v1")
+        val model = Model(id = "manual", modelId = " DEEPSEEK-FLASH ", displayName = "我的模型", isEnabled = false,
+            contextWindowOverride = 64_000)
+        val resolved = OfficialModelCatalog.withContextWindow(provider, model)
+        assertEquals(model.copy(contextWindow = 1_048_576), resolved)
+        assertEquals(64_000, resolved.effectiveContextWindow)
+        assertEquals(128_000, OfficialModelCatalog.withContextWindow(provider, model.copy(contextWindow = 128_000)).contextWindow)
+        assertNull(OfficialModelCatalog.withContextWindow(provider, model.copy(modelId = "deepseek-flash-custom")).contextWindow)
+        assertNull(OfficialModelCatalog.withContextWindow(provider.copy(baseUrl = "https://example.invalid"), model).contextWindow)
+    }
+
     @Test
     fun revisionOnlyOffersNewModelsAndEveryModelIdIsUnique() {
         BuiltinProviders.PROVIDERS.forEach { provider ->

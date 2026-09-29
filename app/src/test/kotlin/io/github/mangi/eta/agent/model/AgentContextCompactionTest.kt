@@ -229,7 +229,7 @@ class AgentContextCompactionTest {
 
         val compacted = AgentContextCompactor(config, provider { _, _ ->
             response("此前任务已完成。")
-        }, AgentRunController()).compact(messages, 1, emptySet(), force = true)
+        }, AgentRunController()).compact(messages, 1, emptySet())
 
         assertFalse(compacted.toString().contains("STALE_SIGNATURE"))
         assertTrue(compacted.toString().contains("新的问题"))
@@ -313,7 +313,7 @@ class AgentContextCompactionTest {
             }
             seen += historyText
             response("之前的工作已完成。")
-        }, AgentRunController()).compact(jsonHistory(), 1, emptySet(), force = true)
+        }, AgentRunController()).compact(jsonHistory(), 1, emptySet())
         assertEquals(3, requests)
         for (turn in 1..4) assertTrue(seen.any { it.contains("问题 $turn") })
         assertTrue(result.toString().contains("问题 6"))

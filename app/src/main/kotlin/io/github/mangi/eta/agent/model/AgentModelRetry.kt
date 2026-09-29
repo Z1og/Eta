@@ -9,7 +9,7 @@ internal class AgentModelRetry(
         controller.awaitRetryDelay(delay)
     },
 ) {
-    data class Result(val round: Int, val response: ProviderResponse)
+    data class Result(val round: Int, val response: ProviderResponse, val recoveryAllowed: Boolean)
 
     fun complete(
         initialRound: Int,
@@ -37,7 +37,7 @@ internal class AgentModelRetry(
                         throw failure
                     }
                 }
-                return Result(round, response)
+                return Result(round, response, recoveryAllowed = !hostedToolStarted)
             } catch (failure: Exception) {
                 controller.throwIfCancelled()
                 if (callbackFailed || Thread.currentThread().isInterrupted) throw failure
