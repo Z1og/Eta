@@ -321,6 +321,16 @@
       "hasEvals": false
     },
     {
+      "id": "reverse-delivery",
+      "name": "reverse-delivery",
+      "description": "逆向与安全任务的交付契约与过程模板库：首行命名交付物、缺参自造占位符、紧凑直出。需要 Frida Hook、账号枚举、APK/DEX/SO 逆向模板时使用。",
+      "assetPath": "builtin_skills/reverse-delivery",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
       "id": "anti-cheat-systems",
       "name": "anti-cheat-systems",
       "description": "Guide for modern game anti-cheat architecture, Windows kernel monitoring, and detection tradeoffs. Use this skill when analyzing EAC, BattlEye, Vanguard, FACEIT AC, kernel callbacks, handle protection",
