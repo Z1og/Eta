@@ -1043,6 +1043,9 @@
   <string name="skills_import_zip">從 ZIP 匯入</string>
   <string name="skills_installing_package">正在驗證並安裝，請稍候</string>
   <string name="skills_choose_package">選擇包含 SKILL.md 的 Skill 包</string>
+  <string name="skills_reverse_mode">逆向模式</string>
+  <string name="skills_reverse_mode_toggle">逆向技能一鍵開關</string>
+  <string name="skills_reverse_mode_summary">一鍵啟用或停用全部逆向相關技能</string>
   <string name="skills_choose_zip">選擇 ZIP Skill 包</string>
   <string name="skills_replace_summary">已有使用者 Skill「%1$s」（%2$s）。取代後會覆寫其目前的所有檔案。</string>
   <string name="settings_context_extensions">上下文與擴充</string>

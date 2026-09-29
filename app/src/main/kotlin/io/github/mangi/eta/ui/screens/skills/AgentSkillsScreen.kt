@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FolderZip
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +26,7 @@ import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
 import io.github.mangi.eta.ui.components.EtaPreferenceIcon
+import io.github.mangi.eta.ui.components.EtaSwitch
 import io.github.mangi.eta.ui.components.EtaTextButton
 import io.github.mangi.eta.ui.components.EtaWindowDialog
 import io.github.mangi.eta.ui.components.ListEmptyState
@@ -72,6 +74,39 @@ fun AgentSkillsScreen(
         val builtinInstalled = installed.filter { it.source == "builtin" }
         val userInstalled = installed.filter { it.canDeleteUserSkill }
         val removed = state.skills.filter { !it.installed }
+
+        item(key = "reverse-mode-title") { EtaPreferenceGroupTitle(stringResource(R.string.skills_reverse_mode)) }
+        item(key = "reverse-mode-card") {
+            EtaPreferenceGroup(
+                modifier = Modifier
+                    .padding(horizontal = CardHorizontalPadding)
+                    .padding(bottom = CardBottomPadding),
+            ) {
+                EtaPreference(
+                    title = stringResource(R.string.skills_reverse_mode_toggle),
+                    summary = stringResource(R.string.skills_reverse_mode_summary),
+                    startAction = {
+                        EtaPreferenceIcon(
+                            Icons.Rounded.Security,
+                            enabled = !operationPending,
+                            tint = if (state.reverseModeEnabled) EtaPreferenceColors.Green else EtaPreferenceColors.Orange,
+                        )
+                    },
+                    endActions = {
+                        EtaSwitch(
+                            checked = state.reverseModeEnabled,
+                            onCheckedChange = { enabled ->
+                                onAction(AgentSkillsAction.ToggleReverseMode(enabled))
+                            },
+                            enabled = !operationPending,
+                            modifier = Modifier.align(Alignment.CenterVertically),
+                        )
+                    },
+                    enabled = !operationPending,
+                    onClick = { onAction(AgentSkillsAction.ToggleReverseMode(!state.reverseModeEnabled)) },
+                )
+            }
+        }
 
         item(key = "zip-import-title") { EtaPreferenceGroupTitle(stringResource(R.string.ui_install_087db6)) }
         item(key = "zip-import-card") {

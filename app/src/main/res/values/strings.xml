@@ -1071,6 +1071,9 @@
   <string name="skills_import_zip">Import from ZIP</string>
   <string name="skills_installing_package">Verifying and installing. Please wait</string>
   <string name="skills_choose_package">Choose a skill package containing SKILL.md</string>
+  <string name="skills_reverse_mode">Reverse mode</string>
+  <string name="skills_reverse_mode_toggle">Reverse skills master switch</string>
+  <string name="skills_reverse_mode_summary">Enable or disable all reverse-engineering related skills at once</string>
   <string name="skills_choose_zip">Choose ZIP skill package</string>
   <string name="skills_replace_summary">A user skill named “%1$s” (%2$s) already exists. Replacing it will overwrite all of its current files.</string>
   <string name="settings_context_extensions">Context &amp; extensions</string>

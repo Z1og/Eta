@@ -48,6 +48,12 @@ REPO_URL = "https://github.com/aimeoa/hanshuang-codex.git"
 REPO_BRANCH = "main"
 SKILL_DIRS = ["codex-skills", "codex-skills-v5"]  # 按优先级搜索
 
+# 第二来源：newliver666/apk-reverse 深度版（gate 工作流 + 40+ references + 50+ 脚本），
+# 覆盖 hanshuang 来源的同名 apk-reverse skill
+APK_REVERSE_PRO_URL = "https://github.com/newliver666/apk-reverse.git"
+APK_REVERSE_PRO_DIR = "apk-reverse"
+APK_REVERSE_PRO_CACHE = "apk-reverse-pro"
+
 # 排除的 Skill（不适配）
 EXCLUDED_SKILLS = {
     ".system", "pipeline-renderer", "politics-history",
@@ -404,17 +410,89 @@ def process_skill(skill_dir: Path, output_dir: Path, dry_run: bool = False) -> d
 
 
 # ============================================================
+# 第二来源：apk-reverse 深度版融合
+# ============================================================
+
+ETA_APK_REVERSE_NOTE = """
+## Eta 环境说明
+
+本 Skill 运行在 Eta Agent Runtime 上（Android root shell + Alpine Linux）：
+- 脚本统一用 Linux 工具环境（environment=linux）执行：`python3 scripts/xxx.py`
+- Python 依赖：`apk add python3` + `pip install`；droidasc/ddc 按需 `pip install`
+- baksmali/smali、apksigner、adb 等按需安装；`APKREV_TOOLS` 指向额外工具目录
+- 目标 APK 与产物放在 /workspace 下的共享目录中操作
+"""
+
+
+def promote_apk_reverse_pro(output_dir: Path, pro_cache: Path, dry_run: bool = False) -> bool:
+    """用 newliver666/apk-reverse 深度版覆盖同名 apk-reverse skill。
+
+    深度版本身已是标准 Agent Skills 格式，只需：整目录替换 + 注入触发词 + 追加 Eta 环境说明。
+    源缓存缺失时静默保留 hanshuang 版本，不中断适配流程。
+    """
+    src = pro_cache / "skills" / APK_REVERSE_PRO_DIR
+    if not (src / "SKILL.md").exists():
+        print("  [警告] apk-reverse 深度版源缺失，保留 hanshuang 版本")
+        return False
+    dst = output_dir / APK_REVERSE_PRO_DIR
+    if dry_run:
+        print("  [DRY-RUN] apk-reverse 将被深度版覆盖")
+        return True
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
+
+    skill_file = dst / "SKILL.md"
+    text = read_lf(skill_file)
+    mapped = TRIGGER_MAP.get(APK_REVERSE_PRO_DIR, "")
+    if mapped and "triggers:" not in text and text.startswith('---'):
+        end = text.find('\n---', 3)
+        if end > 0:
+            triggers = ', '.join(t.strip() for t in mapped.split(',') if t.strip())
+            fm_text = text[3:end].rstrip() + f"\ntriggers: {triggers}"
+            text = f"---\n{fm_text}\n---{text[end + 4:]}"
+    if not text.rstrip().endswith(ETA_APK_REVERSE_NOTE.strip()):
+        text = text.rstrip() + '\n' + ETA_APK_REVERSE_NOTE
+    write_lf(skill_file, text)
+
+    # 清理维护工具（不属于 skill 本体）
+    for junk in ("evidence",):
+        junk_dir = dst / junk
+        if junk_dir.exists():
+            shutil.rmtree(junk_dir)
+    print("  [融合] apk-reverse 已升级为深度版（newliver666/apk-reverse）")
+    return True
+
+
+def refresh_manifest_flags(manifest: dict, output_dir: Path) -> None:
+    """融合后按真实目录修正 apk-reverse 的能力标记与描述（以深度版 frontmatter 为准）。"""
+    for entry in manifest.get("skills", []):
+        if entry.get("id") != APK_REVERSE_PRO_DIR:
+            continue
+        d = output_dir / APK_REVERSE_PRO_DIR
+        entry["hasScripts"] = (d / "scripts").is_dir()
+        entry["hasReferences"] = (d / "references").is_dir()
+        entry["hasAssets"] = (d / "assets").is_dir()
+        entry["hasEvals"] = (d / "evals").is_dir()
+        skill_md = d / "SKILL.md"
+        if skill_md.exists():
+            m = re.search(r'^description:\s*(.+)$', read_lf(skill_md)[:2000], re.MULTILINE)
+            if m and m.group(1).strip():
+                entry["description"] = m.group(1).strip().strip('"')[:200]
+
+
+# ============================================================
 # 主流程
 # ============================================================
 
-def fetch_repo(target_path: Path):
+def fetch_repo(target_path: Path, url: str = REPO_URL, branch: str = REPO_BRANCH):
     if (target_path / ".git").exists():
         print(f"[git] 更新已有仓库: {target_path}")
         subprocess.run(["git", "-C", str(target_path), "pull", "--ff-only"], check=True)
     else:
-        print(f"[git] 克隆仓库: {REPO_URL}")
+        print(f"[git] 克隆仓库: {url}")
         subprocess.run(
-            ["git", "clone", "--depth", "1", "--branch", REPO_BRANCH, REPO_URL, str(target_path)],
+            ["git", "clone", "--depth", "1", "--branch", branch, url, str(target_path)],
             check=True
         )
 
@@ -467,6 +545,14 @@ def main():
             sys.exit(1)
     else:
         print(f"\n[1/4] 使用本地: {repo_path}")
+
+    pro_cache = project_root / ".cache" / APK_REVERSE_PRO_CACHE
+    if not args.skip_fetch and not args.source:
+        print(f"\n[1.5/4] 拉取 apk-reverse 深度版...")
+        try:
+            fetch_repo(pro_cache, APK_REVERSE_PRO_URL, branch="main")
+        except subprocess.CalledProcessError as e:
+            print(f"[警告] apk-reverse 深度版拉取失败，将保留 hanshuang 版本: {e}")
 
     # Step 2
     print(f"\n[2/4] 扫描 Skill...")
@@ -549,6 +635,10 @@ def main():
             prefix = "[DRY-RUN] " if args.dry_run else ""
             print(f"  {prefix}[OK] {skill_dir.name}")
 
+    # 第二来源融合：apk-reverse 深度版覆盖同名 skill
+    print(f"\n[3.5/4] 融合 apk-reverse 深度版...")
+    promoted = promote_apk_reverse_pro(output_dir, pro_cache, dry_run=args.dry_run)
+
     # Step 4
     print(f"\n[4/4] 更新 manifest...")
     seen_ids = set()
@@ -559,6 +649,8 @@ def main():
             unique.append(e)
 
     manifest = {"skills": unique}
+    if promoted:
+        refresh_manifest_flags(manifest, output_dir)
 
     if not args.dry_run:
         write_lf(output_dir / "manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")

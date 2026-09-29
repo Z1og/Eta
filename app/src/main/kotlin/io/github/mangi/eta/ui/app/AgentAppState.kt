@@ -43,6 +43,7 @@ import io.github.mangi.eta.agent.runtime.AgentRuntimeClient
 import io.github.mangi.eta.agent.runtime.AgentRuntimeWire
 import io.github.mangi.eta.agent.runtime.AgentTokenUsage
 import io.github.mangi.eta.agent.runtime.AgentUiHandoffPayload
+import io.github.mangi.eta.agent.skill.ReverseSkillCatalog
 import io.github.mangi.eta.agent.skill.SkillRuntime
 import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.core.AndroidAgentLogger
@@ -1639,7 +1640,12 @@ internal class AgentAppState(
                 )
             }
             withContext(Dispatchers.Main) {
-                skillsState = skillsState.copy(skills = items, isLoading = false)
+                val reverseInstalled = items.filter { it.id in ReverseSkillCatalog.REVERSE_SKILL_IDS }
+                skillsState = skillsState.copy(
+                    skills = items,
+                    isLoading = false,
+                    reverseModeEnabled = reverseInstalled.isNotEmpty() && reverseInstalled.all { it.enabled },
+                )
             }
         }
     }
@@ -1655,6 +1661,38 @@ internal class AgentAppState(
                 skillsState = skillsState.copy(
                     busySkillId = null,
                     notice = if (succeeded) {
+                        skillsState.notice
+                    } else {
+                        newSkillNotice(
+                            title = appContext.getString(R.string.state_unable_to_update_skills_04e56c),
+                            message = appContext.getString(R.string.state_the_skill_switch_has_not_changed_please_try_again_la_fa262f),
+                            isError = true,
+                        )
+                    },
+                )
+            }
+            refreshSkills()
+        }
+    }
+
+    /** 逆向模式主开关：批量启停全部逆向类技能（复用逐技能持久化）。 */
+    fun toggleReverseMode(enabled: Boolean) {
+        if (skillsState.isImporting || skillsState.busySkillId != null) return
+        skillsState = skillsState.copy(busySkillId = REVERSE_MODE_BUSY_ID)
+        scope.launch(Dispatchers.IO) {
+            val indexService = SkillRuntime.createIndexService(appContext)
+            val targets = skillsState.skills.filter {
+                it.installed && it.id in ReverseSkillCatalog.REVERSE_SKILL_IDS
+            }
+            var allSucceeded = true
+            for (skill in targets) {
+                val ok = runCatching { indexService.setSkillEnabled(skill.id, enabled) }.isSuccess
+                if (!ok) allSucceeded = false
+            }
+            withContext(Dispatchers.Main) {
+                skillsState = skillsState.copy(
+                    busySkillId = null,
+                    notice = if (allSucceeded) {
                         skillsState.notice
                     } else {
                         newSkillNotice(
@@ -2566,6 +2604,8 @@ internal class AgentAppState(
         const val MAX_PREVIEW_CHARS = 48
         const val LEGACY_STOPPED_ERROR = "已停止"
         const val SYNTHETIC_STATUS_STOPPED = "eta_status:stopped"
+        /** 逆向模式批量开关期间占用 busy 槽位，使技能页整体进入操作中状态。 */
+        const val REVERSE_MODE_BUSY_ID = "__reverse_mode__"
         // 数据状态以较粗粒度发布，文字显现由独立的帧时钟连续推进。
         // 这与 Kimi 将流式数据和视觉动画分层的做法一致。
         const val STREAM_UI_UPDATE_INTERVAL_MS = 80L

@@ -443,6 +443,7 @@ fun AgentAppRoot(
                             AgentSkillsAction.CancelZipReplacement -> agentState.cancelSkillZipReplacement()
                             AgentSkillsAction.DismissNotice -> agentState.dismissSkillNotice()
                             is AgentSkillsAction.ToggleSkill -> agentState.toggleSkill(action.skillId, action.enabled)
+                            is AgentSkillsAction.ToggleReverseMode -> agentState.toggleReverseMode(action.enabled)
                             is AgentSkillsAction.DeleteSkill -> agentState.deleteSkill(action.skillId)
                             is AgentSkillsAction.ReinstallBuiltin -> agentState.reinstallBuiltin(action.skillId)
                         }
