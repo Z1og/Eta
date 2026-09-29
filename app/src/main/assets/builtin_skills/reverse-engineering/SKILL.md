@@ -8,7 +8,7 @@ metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
   user-invocable: "false"
-triggers: 逆向工程, reverse engineering, 静态分析, 逆向入门, reverse engineering, reverse-engineering
+triggers: 逆向工程, reverse engineering, 静态分析, 逆向入门, 逆向, reverse engineering, reverse-engineering
 ---
 
 

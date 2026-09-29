@@ -10,7 +10,7 @@ metadata:
   evidence_summary: skills/apk-reverse/references/evidence-summary.md
   last_reconstruction_pass: "2026-09-22"
   strength_labels: "observed | inferred | unverified"
-triggers: apk逆向, 反编译apk, apk分析, smali, apktool, jadx, 脱壳, 重打包
+triggers: apk逆向, 反编译apk, apk分析, smali, apktool, jadx, 脱壳, 重打包, 去广告, 签名校验, apk破解
 ---
 
 # APK Reverse Engineering & Patching

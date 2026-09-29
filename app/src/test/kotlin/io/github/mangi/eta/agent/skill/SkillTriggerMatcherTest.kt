@@ -38,14 +38,15 @@ class SkillTriggerMatcherTest {
     }
 
     @Test
-    fun `multiple skills match in index order`() {
+    fun `multiple skills match ranked by specificity`() {
         val skills = listOf(
             skill("first", "渗透"),
             skill("second", "渗透测试", "内网"),
             skill("third", "无关键词"),
         )
         val matched = SkillTriggerMatcher.match("做一次内网渗透测试", skills)
-        assertEquals(listOf("first", "second"), matched.map { it.id })
+        // "渗透测试"(4字) 比 "渗透"(2字) 更具体，评分排序后 second 优先
+        assertEquals(listOf("second", "first"), matched.map { it.id })
     }
 
     @Test
@@ -58,7 +59,7 @@ class SkillTriggerMatcherTest {
         )
         val matched = SkillTriggerMatcher.match("关键词", skills)
         assertEquals(SkillTriggerMatcher.MAX_AUTO_LOADED, matched.size)
-        assertEquals(3, matched.size)
+        assertEquals(4, matched.size)
     }
 
     @Test

@@ -5,7 +5,7 @@ compatibility: Requires Eta root shell + Alpine Linux.
 metadata:
   source: hanshuang-codex-adapted
   eta-env: alpine-linux
-triggers: js逆向, JavaScript逆向, 混淆还原, 前端加密, webpack解密, JS解密, js reverse, js-reverse
+triggers: js逆向, JavaScript逆向, 混淆还原, 前端加密, webpack解密, JS解密, 抓包, 接口加密, js reverse, js-reverse
 ---
 
 

@@ -227,8 +227,11 @@ internal object AgentPromptBuilder {
             }
             appendLine()
             append(
-                "只把上面的索引当作目录；需要某个 skill 的具体步骤、脚本或引用时，先调用 skills_read 读取对应 SKILL.md，" +
-                    "正文引用其他文本资源时再调用 skills_read_resource；不要为了读取 Skill 资源而开启终端，也不要凭索引臆测正文细节。" +
+                "接到非闲聊任务时，先按语义（不只按字面关键词）在索引中判断是否存在相关 Skill：" +
+                    "逆向、破解、脱壳、游戏、渗透、抓包、自动化、设备与系统操作类任务几乎总有对应 Skill，" +
+                    "不要凭通用知识直接开干。命中就先调用 skills_read 读取对应 SKILL.md 再执行任务，" +
+                    "单个任务至多读 2-3 个最相关的 Skill；正文引用其他文本资源时再调用 skills_read_resource；" +
+                    "不要为了读取 Skill 资源而开启终端，也不要凭索引臆测正文细节。" +
                     "已在其他 system 消息中给出正文的 Skill 无需重复读取。"
             )
         }

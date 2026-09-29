@@ -54,6 +54,17 @@ APK_REVERSE_PRO_URL = "https://github.com/newliver666/apk-reverse.git"
 APK_REVERSE_PRO_DIR = "apk-reverse"
 APK_REVERSE_PRO_CACHE = "apk-reverse-pro"
 
+# 第三来源：zhaoxuya520/reverse-skill 合集——只融合 Eta 尚不存在的技能（同名保留
+# hanshuang 版），跳过非逆向的生产力工具目录；89 个 CTF competition-* 下游技能
+# 会令索引膨胀，也不融合（保留 ctf-sandbox 入口即可）
+REVERSE_SKILL_COLLECTION_URL = "https://github.com/zhaoxuya520/reverse-skill.git"
+REVERSE_SKILL_COLLECTION_CACHE = "reverse-skill"
+REVERSE_SKILL_COLLECTION_SUBDIR = "skills"
+REVERSE_SKILL_SKIP = {
+    "config", "ops", "docs-generator", "diagram-generator", "case-review",
+    "field-journal", "browser-automation", "tests", "references", "scripts",
+}
+
 # 排除的 Skill（不适配）
 EXCLUDED_SKILLS = {
     ".system", "pipeline-renderer", "politics-history",
@@ -73,17 +84,41 @@ TRIGGER_MAP = {
     "trellis-before-dev": "写代码前,先看规范,按规范开发,读一下规范,写码前",
     "trellis-check": "按规范检查,对照规范检查,规范检查,trellis检查",
     "trellis-update-spec": "更新规范,沉淀规范,更新trellis,规范回写",
+    # reverse-skill 合集新增技能（zhaoxuya520/reverse-skill，仅融合 Eta 尚不存在的）
+    "ghidra-reverse": "ghidra,ghidra逆向,ghidra反编译",
+    "binary-ninja-reverse": "binary ninja,binaryninja,bn逆向",
+    "go-rust-reverse": "go逆向,golang逆向,rust逆向,go反编译,rust符号恢复",
+    "browser-extension-reverse": "浏览器插件逆向,浏览器扩展逆向,crx逆向,chrome扩展逆向",
+    "macos-reverse": "macos逆向,mac逆向,mach-o逆向,ipa静态分析",
+    "digital-forensics": "数字取证,电子取证,取证分析",
+    "hardware-security": "硬件安全,固件提取,总线调试",
+    "code-audit": "代码审计,源码审计,安全审计",
+    "ctf-sandbox": "ctf,awd,靶场,比赛题",
+    "database-security": "数据库安全",
+    "llm-security": "llm安全,提示词注入,prompt注入",
+    "malware-analysis": "恶意样本,病毒分析,样本分析",
+    "protocol-reverse": "私有协议逆向,协议还原",
+    "threat-hunting": "威胁狩猎",
+    "threat-intelligence": "威胁情报",
+    "supply-chain-security": "供应链安全",
+    "wifi-wireless": "wifi安全,无线安全",
+    "ot-ics": "工控安全,ot安全",
+    "windows-ad": "域渗透,active directory,ad域安全",
+    "identity-federation": "身份认证安全,单点登录安全,oauth安全,sso安全",
+    "email-security": "邮件安全,钓鱼邮件",
+    "cloud-k8s": "k8s安全,容器安全,云安全",
+    "thick-client": "客户端渗透,胖客户端分析",
     # 逆向工程
     "ida-reverse": "ida,IDA Pro,反编译,逆向分析,反汇编,ida逆向",
     "radare2": "radare2,r2,rizin,radare",
     "binary-analysis": "二进制分析,binwalk,字符串提取,PE分析,ELF分析,二进制逆向",
     "binary-diff": "bindiff,二进制对比,补丁对比,补丁差分,符号迁移",
     "dotnet-reverse": "dnSpy,.NET逆向,C#反编译,ILSpy,dotnet反编译,IL反编译",
-    "js-reverse": "js逆向,JavaScript逆向,混淆还原,前端加密,webpack解密,JS解密",
-    "apk-reverse": "apk逆向,反编译apk,apk分析,smali,apktool,jadx,脱壳,重打包",
+    "js-reverse": "js逆向,JavaScript逆向,混淆还原,前端加密,webpack解密,JS解密,抓包,接口加密",
+    "apk-reverse": "apk逆向,反编译apk,apk分析,smali,apktool,jadx,脱壳,重打包,去广告,签名校验,apk破解",
     "mobile-reverse": "移动逆向,ios逆向,ipa逆向,frida脚本,hook框架",
     "dsl-vm-reverse": "虚拟机保护,VM保护,vmp,自定义虚拟机,opcode还原",
-    "reverse-engineering": "逆向工程,reverse engineering,静态分析,逆向入门",
+    "reverse-engineering": "逆向工程,reverse engineering,静态分析,逆向入门,逆向",
     "reverse-engineering-api": "api逆向,接口逆向,抓包分析,api模拟,harp分析",
     "protocol-reverse-engineering": "协议逆向,协议分析,私有协议,数据包分析",
     "protocol-reversing": "流量分析,protobuf,tlv解析,网络协议解析",
@@ -464,6 +499,75 @@ def promote_apk_reverse_pro(output_dir: Path, pro_cache: Path, dry_run: bool = F
     return True
 
 
+def promote_reverse_skill_collection(output_dir: Path, cache_root: Path, existing_ids: set, dry_run: bool = False) -> list:
+    """融合 zhaoxuya520/reverse-skill 合集中 Eta 尚不存在的技能。
+
+    策略：同名 id 保留 hanshuang 版（已适配、用户熟悉）；跳过非逆向工具目录与
+    89 个 CTF competition-* 下游技能（索引膨胀）。跨目录引用改写为技能索引
+    引用，共享 field-journal/precedent 与 tool-index 落进各技能的 references/。
+    """
+    src_root = cache_root / REVERSE_SKILL_COLLECTION_SUBDIR
+    if not src_root.is_dir():
+        print("  [警告] reverse-skill 合集源缺失，跳过")
+        return []
+    # 共享资源（供内联拷贝）
+    shared_files = {}
+    fj = src_root / "field-journal"
+    if fj.is_dir():
+        for f in sorted(fj.glob("*.md")):
+            shared_files[f"field-journal/{f.name}"] = read_lf(f)
+    ti = src_root / "tool-index.md"
+    if ti.exists():
+        shared_files["tool-index.md"] = read_lf(ti)
+
+    added = []
+    for child in sorted(src_root.iterdir()):
+        if not child.is_dir() or child.name.startswith('.') or child.name in REVERSE_SKILL_SKIP:
+            continue
+        skill_md = child / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        skill_id = child.name
+        if skill_id in existing_ids or (output_dir / skill_id).exists():
+            continue
+        dst = output_dir / skill_id
+        if not dry_run:
+            shutil.copytree(child, dst)
+            text = read_lf(dst / "SKILL.md")
+            # 跨技能引用 → 索引引用（Eta 技能索引含这些 id，模型可 skills_read）
+            text = re.sub(r'\.\./([a-z0-9-]+)/(?!field-journal)', r'\1 ', text)
+            # 共享文件 → 技能内 references/ 并内联拷贝
+            for key, content in shared_files.items():
+                name = key.split('/')[-1]
+                if key in text or key.split('/')[-1] in text:
+                    (dst / "references").mkdir(parents=True, exist_ok=True)
+                    write_lf(dst / "references" / name, content)
+                    text = text.replace(f"../{key}", f"references/{name}")
+            text = re.sub(r'\.\./([a-zA-Z0-9_.-]+\.md)', r'references/\1', text)
+            mapped = TRIGGER_MAP.get(skill_id, "")
+            if mapped and "triggers:" not in text and text.startswith('---'):
+                end = text.find('\n---', 3)
+                if end > 0:
+                    triggers = ', '.join(t.strip() for t in mapped.split(',') if t.strip())
+                    fm_text = text[3:end].rstrip() + f"\ntriggers: {triggers}"
+                    text = f"---\n{fm_text}\n---{text[end + 4:]}"
+            write_lf(dst / "SKILL.md", text)
+        m = re.search(r'^description:\s*(.+)$', read_lf(skill_md)[:2000], re.MULTILINE)
+        desc = (m.group(1).strip().strip('"') if m else f"reverse-skill collection: {skill_id}")[:200]
+        added.append({
+            "id": skill_id,
+            "name": skill_id,
+            "description": desc,
+            "assetPath": f"builtin_skills/{skill_id}",
+            "hasScripts": (child / "scripts").is_dir(),
+            "hasReferences": (child / "references").is_dir() or bool(shared_files),
+            "hasAssets": (child / "assets").is_dir(),
+            "hasEvals": (child / "evals").is_dir(),
+        })
+        print(f"  [融合] reverse-skill 新增: {skill_id}")
+    return added
+
+
 def refresh_manifest_flags(manifest: dict, output_dir: Path) -> None:
     """融合后按真实目录修正 apk-reverse 的能力标记与描述（以深度版 frontmatter 为准）。"""
     for entry in manifest.get("skills", []):
@@ -553,6 +657,11 @@ def main():
             fetch_repo(pro_cache, APK_REVERSE_PRO_URL, branch="main")
         except subprocess.CalledProcessError as e:
             print(f"[警告] apk-reverse 深度版拉取失败，将保留 hanshuang 版本: {e}")
+        print(f"\n[1.6/4] 拉取 reverse-skill 合集...")
+        try:
+            fetch_repo(project_root / ".cache" / REVERSE_SKILL_COLLECTION_CACHE, REVERSE_SKILL_COLLECTION_URL, branch="main")
+        except subprocess.CalledProcessError as e:
+            print(f"[警告] reverse-skill 合集拉取失败，将跳过: {e}")
 
     # Step 2
     print(f"\n[2/4] 扫描 Skill...")
@@ -638,6 +747,16 @@ def main():
     # 第二来源融合：apk-reverse 深度版覆盖同名 skill
     print(f"\n[3.5/4] 融合 apk-reverse 深度版...")
     promoted = promote_apk_reverse_pro(output_dir, pro_cache, dry_run=args.dry_run)
+
+    # 第三来源融合：reverse-skill 合集（仅新增 id）
+    print(f"\n[3.7/4] 融合 reverse-skill 合集...")
+    collection_added = promote_reverse_skill_collection(
+        output_dir,
+        project_root / ".cache" / REVERSE_SKILL_COLLECTION_CACHE,
+        {e["id"] for e in manifest_entries},
+        dry_run=args.dry_run,
+    )
+    manifest_entries.extend(collection_added)
 
     # Step 4
     print(f"\n[4/4] 更新 manifest...")

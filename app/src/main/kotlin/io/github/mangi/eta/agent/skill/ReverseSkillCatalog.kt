@@ -13,10 +13,13 @@ object ReverseSkillCatalog {
         "apk-reverse", "ida-reverse", "radare2", "binary-analysis", "binary-diff",
         "dotnet-reverse", "js-reverse", "mobile-reverse", "dsl-vm-reverse",
         "reverse-engineering", "reverse-engineering-api",
-        "protocol-reverse-engineering", "protocol-reversing",
+        "protocol-reverse-engineering", "protocol-reversing", "protocol-reverse",
         "unpack-reverse", "dynamic-instrumentation", "patch-diff-exploit",
         "crack-keygen", "edr-bypass-re", "firmware-pentest", "full-crack",
         "pwn-chain", "asm-analysis", "linker-fake-load-unwrapper", "elf-local-auth-patcher",
+        "ghidra-reverse", "binary-ninja-reverse", "go-rust-reverse",
+        "browser-extension-reverse", "macos-reverse", "malware-analysis",
+        "digital-forensics", "hardware-security",
         // coldbrew 逆向族
         "coldbrew-api-reverse", "coldbrew-native-reverse", "coldbrew-protocol-reverse",
         // eni 逆向族
