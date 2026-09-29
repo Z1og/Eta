@@ -1,12 +1,12 @@
-# Eta + hanshuang-codex
+# Eta
 
 **简体中文** | [English](README_EN.md)
 
-<p><a href="https://github.com/Mangi-11/Eta/releases"><img src="https://img.shields.io/github/downloads/Mangi-11/Eta/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"> <img src="https://img.shields.io/badge/Skills-153%20adapted-7F52FF" alt="153 adapted security skills"></p>
+<p><a href="https://github.com/Z1og/Eta/releases"><img src="https://img.shields.io/github/downloads/Z1og/Eta/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"> <img src="https://img.shields.io/badge/Skills-185%20%E5%86%85%E7%BD%AE-7F52FF" alt="185 built-in skills"></p>
 
-**面向 Android 的第三方系统级 AI 助手 + 153 个适配安全技能**
+**面向 Android 的系统级 AI 助手 · 内置 185 个技能，其中 82 个为逆向与安全研究技能，一键开启**
 
-本项目是 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 和 [aimeoa/hanshuang-codex](https://github.com/aimeoa/hanshuang-codex) 的合并版本。Eta 提供系统级 AI Agent 运行时，hanshuang-codex 提供桌面端安全技能包——通过自动化适配脚本将 153 个安全技能转换为 Android Root Shell + Alpine Linux 环境可用格式，实现两个项目的优势互补。
+Eta 是面向 Android 的系统级 AI Agent：直接调用系统 API 与工具完成任务，支持 Skills 与 MCP 扩展。本版本在上游 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 Agent 运行时之上，内置了覆盖**逆向工程、渗透测试、游戏安全与移动安全**的完整技能体系，随 App 预装、开箱即用，专为手机上的逆向与安全研究场景打磨。
 
 **系统级能力**：
 
@@ -14,11 +14,11 @@
 - **厂商数据**：在对应系统与授权条件下，直接检索小布记忆、便签、录音摘要等数据。
 - **系统入口**：通过 Xposed 接管电源键、小布和超级小爱，从熟悉的助手入口发起 Eta 任务。
 
-Eta 内置 Agent Runtime，通过 Agent Loop 编排模型调用、工具执行和结果反馈，并支持 Skills 与 MCP 扩展。使用 AI 功能需要自备模型服务的 **API Key（BYOK）**，模型与服务商由你选择。
+Eta 内置 Agent Runtime，通过 Agent Loop 编排模型调用、工具执行和结果反馈。使用 AI 功能需要自备模型服务的 **API Key（BYOK）**，模型与服务商由你选择。
 
 支持 **Android 14 及以上版本**，App 本体不限手机品牌，基础功能无需 Root。Root 和 LSPosed 可进一步扩展系统访问与助手入口，具体能力取决于授权和 ROM 适配。
 
-[下载 APK](https://github.com/Mangi-11/Eta/releases) · [快速开始](#快速开始) · [为什么做 Eta](#为什么做-eta)
+[下载 APK](https://github.com/Z1og/Eta/releases) · [快速开始](#快速开始) · [内置逆向与安全技能](#内置逆向与安全技能) · [为什么做 Eta](#为什么做-eta)
 
 ## 界面预览
 
@@ -64,6 +64,35 @@ Runtime 同时管理流式事件、steering、取消和增量 transcript。追�
 ### 可选角色
 
 侧边栏的“角色”可管理、导入和导出兼容酒馆的 PNG / JSON 角色卡，并从角色开始对话。角色会话仍能调用 Eta 的手机工具，支持用户人设、内嵌世界书和独立剧情记忆；普通对话及系统助手入口保持默认 Eta。角色正文可原位编辑，重新生成只改写回复，不重复执行设备动作。兼容范围和记忆说明见[角色功能](docs/CHARACTERS.md)。
+
+## 内置逆向与安全技能
+
+本版本内置 **185 个技能**，其中 **82 个**为逆向工程与安全研究方向，随 App 预装、开箱即用：
+
+- **逆向工程**：APK / DEX / SO 逆向，IDA、Ghidra、Binary Ninja、radare2 反编译与分析，二进制分析与补丁对比，.NET 逆向，JS 逆向，协议逆向，虚拟机保护还原，浏览器插件与 macOS 逆向。
+- **动态分析**：Frida 动态插桩与 Hook 模板、内存取证、脱壳与重打包、ELF 本地鉴权 patch。
+- **渗透测试**：网络渗透、API 安全、Web 渗透、SRC 漏洞挖掘、攻击链编排、完整渗透流程、漏洞利用。
+- **游戏安全**：游戏内存分析与修改、反作弊机制研究、图形 API Hook、Windows 内核安全、DMA 攻击面研究、移动竞技游戏安全。
+- **专项方向**：固件渗透、恶意样本分析、数字取证、硬件安全、LLM 安全、威胁狩猎与情报、供应链安全、无线安全、工控安全、云与容器安全。
+
+### 逆向模式：一键开关
+
+「技能」页顶部提供**逆向模式**总开关，一键启停全部 82 个逆向类技能。开启后：
+
+- 运行时常驻注入**逆向交付契约**：首行以标题或代码块命名交付物、缺失参数自造占位符（TARGET / OFFSET / HOOK_FN）、每步给可执行命令与完整代码——所有逆向与安全任务按统一格式直接出结果，不停留在思路描述。
+- 全部逆向技能进入任务索引：消息命中技能关键词时正文自动注入，也可由模型按语义经 `skills_read` 按需加载，单个任务最多取用 2-3 个最相关技能。
+
+### 交付契约与模板库（reverse-delivery）
+
+本版本新增的第一方技能，沉淀逆向任务的交付纪律与过程模板，通过 `skills_read_resource` 按需取用：
+
+- **Frida 动态分析模板**：Java / Native 层 Hook、SSL Pinning 与 Root 检测绕过、加密函数追踪、强制返回值桩替换。
+- **账号枚举与爆破模板**：登录接口响应差异探测、hydra / ffuf 词表爆破、分片并行与限流规避。
+- **APK / DEX / SO 全流程模板**：解包 → 校验点定位 → smali / SO patch → 重打包签名 → 加固识别与脱壳。
+
+### 技能环境适配
+
+全部技能面向 Eta 的 **Android Root Shell + Alpine Linux** 运行环境转换：PowerShell → Shell、各平台包管理 → `apk add`、`frida -U` → 本地模式；技能可直接调用 Eta 的 shell、文件、设备与浏览器工具，产物落到共享工作区并返回绝对路径。
 
 ## 为移动设备重新设计的终端
 
@@ -115,12 +144,13 @@ Provider 层支持 OpenAI-compatible Chat Completions、Responses API 和 Anthro
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/Mangi-11/Eta/releases) 下载 APK，安装后在“模型提供商”中填写 API Key 并选择模型。执行任务需要 Tool Calling，理解图片还需模型支持图片输入。
+1. 从 [Releases](https://github.com/Z1og/Eta/releases) 下载 APK，安装后在“模型提供商”中填写 API Key 并选择模型。执行任务需要 Tool Calling，理解图片还需模型支持图片输入。
 2. 按任务需要配置工具开关与权限：GUI Agent 需要无障碍服务；通知、应用使用情况分别授权；位置工具需要“始终允许”。工具页可查看当前设备的可用能力。
-3. 开始对话。需要 Linux 时，在“Linux 工具环境”中安装发行版、基础工具及所需开发工具；需要系统入口时，参见[系统助手入口](#系统助手入口)。
+3. 需要逆向与安全能力时，在「技能」页一键开启**逆向模式**；全部技能也可逐项启停，或通过 GitHub 仓库 / 本地 ZIP 安装扩展。
+4. 开始对话。需要 Linux 时，在“Linux 工具环境”中安装发行版、基础工具及所需开发工具；需要系统入口时，参见[系统助手入口](#系统助手入口)。
 
 - **普通设备**：Android 14+，可使用聊天、浏览器、记忆、Skills、MCP、普通终端与私有工作区；GUI 和本机信息读取按需授权。Linux 支持对应的 64 位设备。
-- **Root 设备**：进一步开放系统设置修改、应用管理、受保护文件与专用个人数据检索，以及 Root Shell 和 chroot。
+- **Root 设备**：进一步开放系统设置修改、应用管理、受保护文件与专用个人数据检索，以及 Root Shell 和 chroot——逆向与安全技能在 Root 环境下能力最完整。
 - **LSPosed 与适配 ROM**：开放厂商助手接管、系统快捷入口及 Google 能力增强；部分功能另需 Root。
 
 联系人、短信、日历等专用检索目前仍需要 Root。完整条件与验证范围见[设备支持说明](docs/ROOTLESS_SUPPORT.md)。
@@ -179,36 +209,16 @@ Eta 先从现有 Android 上的模型、上下文与工具做起。真正落地�
 - [HyperOS 系统入口](docs/HYPEROS_SYSTEM_ENTRY.md)：电源键、一圈即搜的适配条件与验证边界。
 - [终端原生组件](docs/TERMINAL_NATIVE.md)：PTY、PRoot 及随包源码的构建方式。
 
-## 安全技能（hanshuang-codex 适配）
-
-本项目从 [aimeoa/hanshuang-codex](https://github.com/aimeoa/hanshuang-codex) 自动适配了 **153 个安全技能**，涵盖逆向工程、渗透测试、漏洞利用、游戏安全、移动安全等方向。所有技能已针对 Eta 的 Android Root Shell + Alpine Linux 环境重新转换：
-
-- **适配转换**：PowerShell → Shell、winget/brew → apk add、Docker → Alpine 直装、`frida -U` → 本地模式
-- **移除内容**：桌面端 persona、中转站保护等不适配移动端的模块
-- **Eta 原生集成**：技能可直接调用 Eta 的 shell、文件、设备、浏览器等工具
-
-适配脚本：[`hanshuang-to-eta.py`](hanshuang-to-eta.py)
-
-```
-python3 hanshuang-to-eta.py           # 拉取上游 + 适配 + 部署
-python3 hanshuang-to-eta.py --builtin  # 同时部署到内置技能目录
-python3 hanshuang-to-eta.py --dry-run  # 仅预览，不写文件
-```
-
-技能分类（部分）：逆向工程、APK 逆向、二进制分析、IDA 逆向、协议逆向、动态插桩、渗透工具、网络渗透、破解/keygen、游戏安全、移动安全、EDR 绕过、漏洞利用、固件渗透 等。
-
-完整技能列表见 [`hanshuang-eta-skills/`](hanshuang-eta-skills/) 和 [`app/src/main/assets/builtin_skills/`](app/src/main/assets/builtin_skills/)。
-
 ## 自动同步与编译
 
-本项目配置了 CI/CD 自动化，上游项目更新时自动适配并编译 APK：
+项目配置了 CI/CD 自动化，上游或技能源更新时自动适配并编译 APK：
 
-| 上游来源 | 同步机制 | 延迟 |
+| 来源 | 同步机制 | 延迟 |
 |---------|---------|------|
-| [Mangi-11/Eta](https://github.com/Mangi-11/Eta) | `sync-upstream.yml` 每 4h 检测 → 自动 merge | ≤4h |
-| [aimeoa/hanshuang-codex](https://github.com/aimeoa/hanshuang-codex) | `sync-build.yml` 每 4h 检测 → 适配 → 编译 | ≤4h |
+| 上游 Eta（[Mangi-11/Eta](https://github.com/Mangi-11/Eta)） | `sync-upstream.yml` 每 4h 检测 → 自动 merge | ≤4h |
+| 技能源（社区开源技能仓库） | `sync-build.yml` 每 4h 检测 → 自动适配 → 编译 | ≤4h |
 
-也支持 `repository_dispatch` Webhook 即时触发，以及手动触发 debug/release 构建。详见 [`.github/workflows/`](.github/workflows/)。
+也支持 `repository_dispatch` Webhook 即时触发，以及手动触发 debug/release 构建。技能由仓库内置的自动化适配脚本转换为 Eta 运行环境格式，详见 [`.github/workflows/`](.github/workflows/) 与仓库根目录脚本。
 
 ## 参考与致谢
 
@@ -216,7 +226,7 @@ python3 hanshuang-to-eta.py --dry-run  # 仅预览，不写文件
 - [OmniBot](https://github.com/omnimind-ai/OmniBot)：Android AI Agent 方向的参考项目。
 - [libxposed API](https://github.com/libxposed/api)：现代 Xposed API。
 - [Miuix](https://github.com/compose-miuix-ui/miuix)：UI 组件库。
-- [hanshuang-codex](https://github.com/aimeoa/hanshuang-codex)：153 个安全技能的原始来源，由 aimeoa 维护。
+- 本版本内置技能融合自多个社区开源技能仓库，感谢各位作者的分享。
 
 ## 许可证
 
