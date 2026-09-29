@@ -23,6 +23,7 @@ import io.github.mangi.eta.agent.skill.SkillContext
 import io.github.mangi.eta.agent.skill.SkillRuntime
 import io.github.mangi.eta.agent.skill.SkillTriggerMatcher
 import io.github.mangi.eta.agent.skill.PublicGitHubSkillSource
+import io.github.mangi.eta.agent.skill.ProjectSpecDetector
 import io.github.mangi.eta.agent.tool.AgentLocalTools
 import io.github.mangi.eta.agent.tool.AgentToolRequirements
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
@@ -110,9 +111,23 @@ internal class AgentRuntimeRunExecutor(
                             .getOrNull()
                     }
             }
+            // Trellis 项目规范探测（方案 A）：从用户消息中的路径向上找 .trellis/spec/，
+            // 命中则注入规范索引；失败静默降级，不影响正常对话。
+            val projectSpecs = if (request.operation == AgentRuntimeWire.OP_REWRITE_REPLY) {
+                null
+            } else {
+                runCatching { ProjectSpecDetector.detect(request.prompt) }
+                    .onFailure { throwable ->
+                        AndroidAgentLogger.warnThrottled("trellis_spec_detect_failed") {
+                            "Trellis spec detection failed: type=${throwable.safeLogType()}"
+                        }
+                    }
+                    .getOrNull()
+            }
             val skillContext = SkillContext(
                 installedSkills = compatibleSkills,
                 autoLoadedSkills = autoLoadedSkills,
+                projectSpecs = projectSpecs,
             )
             val memoryEnabled = runBlocking { AgentMemoryRepository.isEnabled() }
             val uiPayload = request.handoff

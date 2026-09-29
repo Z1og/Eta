@@ -41,6 +41,46 @@
       "hasEvals": false
     },
     {
+      "id": "trellis-before-dev",
+      "name": "trellis-before-dev",
+      "description": "Eta upstream builtin skill: trellis-before-dev",
+      "assetPath": "builtin_skills/trellis-before-dev",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "trellis-check",
+      "name": "trellis-check",
+      "description": "Eta upstream builtin skill: trellis-check",
+      "assetPath": "builtin_skills/trellis-check",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "trellis-init",
+      "name": "trellis-init",
+      "description": "Eta upstream builtin skill: trellis-init",
+      "assetPath": "builtin_skills/trellis-init",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "trellis-update-spec",
+      "name": "trellis-update-spec",
+      "description": "Eta upstream builtin skill: trellis-update-spec",
+      "assetPath": "builtin_skills/trellis-update-spec",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
       "id": "anti-cheat-systems",
       "name": "anti-cheat-systems",
       "description": "Guide for modern game anti-cheat architecture, Windows kernel monitoring, and detection tradeoffs. Use this skill when analyzing EAC, BattlEye, Vanguard, FACEIT AC, kernel callbacks, handle protection",

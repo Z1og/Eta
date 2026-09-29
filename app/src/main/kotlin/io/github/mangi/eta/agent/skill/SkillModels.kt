@@ -54,6 +54,8 @@ data class SkillContext(
     val installedSkills: List<SkillIndexEntry> = emptyList(),
     /** 关键词触发后已自动加载正文的 Skill——正文将直接注入 system prompt。 */
     val autoLoadedSkills: List<ResolvedSkillContext> = emptyList(),
+    /** 方案 A 探测到的 Trellis 项目规范索引——非空时注入系统消息，提醒模型写码前先读规范。 */
+    val projectSpecs: ProjectSpecIndex? = null,
 ) {
     companion object {
         val EMPTY = SkillContext()

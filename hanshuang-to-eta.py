@@ -62,6 +62,11 @@ EXCLUDED_SKILLS = {
 # ============================================================
 
 TRIGGER_MAP = {
+    # Trellis 项目规范工作流（Eta 第一方，方案 A 自动探测 + 关键词触发）
+    "trellis-init": "初始化trellis,初始化 trellis,trellis初始化,建立项目规范,项目规范初始化",
+    "trellis-before-dev": "写代码前,先看规范,按规范开发,读一下规范,写码前",
+    "trellis-check": "按规范检查,对照规范检查,规范检查,trellis检查",
+    "trellis-update-spec": "更新规范,沉淀规范,更新trellis,规范回写",
     # 逆向工程
     "ida-reverse": "ida,IDA Pro,反编译,逆向分析,反汇编,ida逆向",
     "radare2": "radare2,r2,rizin,radare",

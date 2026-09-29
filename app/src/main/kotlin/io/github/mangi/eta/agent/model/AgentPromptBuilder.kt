@@ -179,6 +179,16 @@ internal object AgentPromptBuilder {
 
     private fun buildSkillSystemMessage(skillContext: SkillContext): List<JSONObject> {
         val messages = mutableListOf<JSONObject>()
+        // Trellis 项目规范索引（方案 A：从用户消息路径自动探测），提醒模型写码前读规范全文。
+        skillContext.projectSpecs?.let { specs ->
+            val list = specs.entries.joinToString("\n") { "- ${it.fileName}：${it.title}" }
+            messages += systemMessage(
+                "检测到本轮对话涉及项目 ${specs.projectRoot}，该项目维护有 Trellis 编码规范（${specs.specDirPath}/）。\n" +
+                    "本轮需要读写该项目文件时：动手前先用文件工具读取与任务相关的规范全文并遵循；" +
+                    "过程中发现新的通用约定时，提示用户可以说「更新规范」沉淀。\n" +
+                    "与本次任务无关、或用户明确另有要求时，忽略本消息。规范列表：\n$list"
+            )
+        }
         // 关键词触发的 Skill 正文直接注入，模型无需再调用 skills_read。
         skillContext.autoLoadedSkills.forEach { resolved ->
             val body = resolved.bodyMarkdown.trim()
