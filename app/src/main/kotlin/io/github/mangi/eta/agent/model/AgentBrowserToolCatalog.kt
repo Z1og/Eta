@@ -8,7 +8,7 @@ internal object AgentBrowserToolCatalog {
         tools.put(
             AgentToolSchema.function(
                 name = "browser_use",
-                description = "操作 Eta 共享的离屏 Agent 浏览器，不会切换到外部浏览器。一次调用只执行一个 action；网页浏览通常先 navigate，再用 get_readable 提取正文，或用 find_elements 查找可交互元素。支持 run_js 在当前页面执行任意 JavaScript，以及油猴（用户脚本）管理：add_script 安装（source 内联或 url 下载 .user.js）、list_scripts 列出、toggle_script 启停、remove_script 删除；安装过的脚本按 @match/@include 在页面加载时自动注入并提供 GM_* API。需要把 URI 显式交给外部应用时使用 open_uri。",
+                description = "操作 Eta 共享的离屏 Agent 浏览器，不会切换到外部浏览器。一次调用只执行一个 action；网页浏览通常先 navigate，再用 get_readable 提取正文，或用 find_elements 查找可交互元素。支持 run_js 在当前页面执行任意 JavaScript，以及油猴（用户脚本）管理：add_script 安装（source 内联或 url 下载 .user.js）、list_scripts 列出、toggle_script 启停、remove_script 删除、debug_scripts 诊断注入链路；安装过的脚本按 @match/@include 在页面加载时自动注入并提供 GM_* API，注入结果可用 get_page_info 的 userscripts 字段核对。需要把 URI 显式交给外部应用时使用 open_uri。",
                 parameters = JSONObject()
                     .put("type", "object")
                     .put(
@@ -40,6 +40,7 @@ internal object AgentBrowserToolCatalog {
                                             .put("add_script")
                                             .put("toggle_script")
                                             .put("remove_script")
+                                            .put("debug_scripts")
                                     )
                             )
                             .put(

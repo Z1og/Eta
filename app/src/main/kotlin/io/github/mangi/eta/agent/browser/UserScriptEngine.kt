@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import io.github.mangi.eta.agent.model.AgentHttpClient
@@ -125,19 +126,18 @@ internal object UserScriptRules {
         val urlPath = parts.groupValues[3].ifBlank { "/" }
 
         val schemeOk = when (scheme) {
-            "*" -> urlScheme == "http" || urlScheme == "https"
+            "*", "http*" -> urlScheme == "http" || urlScheme == "https"
             else -> urlScheme == scheme
         }
         if (!schemeOk) return false
 
         val host = authority.substringBefore(':')
+        // host 匹配：含 * 按 glob（对齐 TM 宽松语义，如 *.haijiao*）；
+        // 另补 *.example.org 的 apex 候选（glob ".*\.example\.org" 不含 apex，需单独匹配 example.org）。
         val hostOk = when {
-            hostPattern == "*" -> true
-            hostPattern.startsWith("*.") -> {
-                val suffix = hostPattern.substring(1) // ".example.com"
-                host == suffix.removePrefix(".") || host.endsWith(suffix)
-            }
-            else -> host == hostPattern
+            !hostPattern.contains('*') -> host == hostPattern
+            else -> globToRegex(hostPattern).matches(host) ||
+                (hostPattern.startsWith("*.") && globToRegex(hostPattern.substring(2)).matches(host))
         }
         if (!hostOk) return false
         return globToRegex(pathPattern).matches(urlPath)
@@ -281,8 +281,10 @@ internal class UserScriptStore(context: Context) {
  * `unsafeWindow` 即 `window`；@match/@include 未命中的脚本不会注入。
  */
 internal object UserScriptEngine {
+    private const val TAG = "EtaUserScript"
     private const val MAX_SCRIPT_BYTES = 2_000_000
     private const val HTTP_RESPONSE_CAP = 1_000_000
+    private const val MAX_RECORDS = 24
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val lock = Any()
@@ -522,14 +524,22 @@ internal object UserScriptEngine {
         val pending = synchronized(lock) {
             loaded().filter { it.enabled && it.runAt == phase && UserScriptRules.matchScript(it.matches, it.includes, url) }
         }
+        Log.i(TAG, "inject phase=$phase url=${url.take(120)} matched=${pending.size}/${enabledCount()}")
         if (pending.isEmpty()) return
         val token = pageToken
         if (token.isBlank()) return
         runCatching {
-            view.evaluateJavascript(runtimeJs(), null)
+            view.evaluateJavascript(runtimeJs()) { }
             pending.forEach { script ->
-                view.evaluateJavascript(scriptJs(script, token), null)
+                view.evaluateJavascript(scriptJs(script, token)) { result ->
+                    // 回调返回即执行完成；脚本内部异常由 eval 的 try/catch 记录到 window.__etaScriptError。
+                    Log.i(TAG, "injected id=${script.id} phase=$phase url=${url.take(80)}")
+                    record(script, phase, url, ok = true, error = null)
+                }
             }
+        }.onFailure { e ->
+            Log.w(TAG, "inject evaluate failed phase=$phase: ${e.javaClass.simpleName}: ${e.message}")
+            pending.forEach { record(it, phase, url, ok = false, error = e.message) }
         }
     }
 
@@ -600,11 +610,79 @@ internal object UserScriptEngine {
             "GM_xmlhttpRequest = GM.xmlHttpRequest, GM_notification = GM.notification," +
             "GM_registerMenuCommand = GM.registerMenuCommand;" +
             "var unsafeWindow = window;" +
-            "eval(${JSONObject.quote(script.source)});" +
+            "try { eval(${JSONObject.quote(script.source)}); }" +
+            "catch (__etaErr) { console.error('[EtaUserScript]', SID, __etaErr); window.__etaScriptError = String(__etaErr && __etaErr.message || __etaErr); }" +
             "})();"
     }
 
     // ---------- 内部 ----------
+
+    private val injectionRecords = mutableListOf<JSONObject>()
+
+    private fun enabledCount(): Int = synchronized(lock) { loaded().count { it.enabled } }
+
+    private fun record(script: UserScript, phase: String, url: String, ok: Boolean, error: String?) {
+        synchronized(lock) {
+            injectionRecords.add(
+                JSONObject()
+                    .put("id", script.id)
+                    .put("name", script.name)
+                    .put("phase", phase)
+                    .put("url", url.take(200))
+                    .put("ok", ok)
+                    .put("error", error ?: JSONObject.NULL)
+                    .put("at", System.currentTimeMillis())
+            )
+            while (injectionRecords.size > MAX_RECORDS) injectionRecords.removeAt(0)
+        }
+    }
+
+    /** get_page_info 附带的注入状态摘要。 */
+    fun pageStatus(url: String): JSONObject = synchronized(lock) {
+        val installed = loaded()
+        JSONObject()
+            .put("installed", installed.size)
+            .put("enabled", installed.count { it.enabled })
+            .put(
+                "matched_for_url",
+                JSONArray().apply {
+                    installed.filter { it.enabled && UserScriptRules.matchScript(it.matches, it.includes, url) }
+                        .forEach { put(it.id) }
+                },
+            )
+            .put(
+                "injections",
+                JSONArray().apply {
+                    injectionRecords.filter { it.optString("url") == url.take(200) }.forEach { put(it) }
+                },
+            )
+    }
+
+    /** debug_scripts 的完整诊断状态。 */
+    fun debugState(): JSONObject = synchronized(lock) {
+        JSONObject()
+            .put(
+                "scripts",
+                JSONArray().apply {
+                    loaded().forEach { s ->
+                        put(
+                            JSONObject()
+                                .put("id", s.id)
+                                .put("name", s.name)
+                                .put("enabled", s.enabled)
+                                .put("run_at", s.runAt)
+                                .put("matches", JSONArray(s.matches))
+                                .put("includes", JSONArray(s.includes))
+                                .put("source_chars", s.source.length)
+                        )
+                    }
+                },
+            )
+            .put("host_attached", hostView != null)
+            .put("page_token_set", pageToken.isNotBlank())
+            .put("token_page", tokenPageKey.take(200))
+            .put("records", JSONArray(injectionRecords))
+    }
 
     private fun loaded(): MutableList<UserScript> {
         scripts?.let { return it }

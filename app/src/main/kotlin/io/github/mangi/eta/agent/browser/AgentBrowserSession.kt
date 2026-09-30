@@ -372,6 +372,7 @@ internal object AgentBrowserSession {
                         "add_script" -> addScript(args)
                         "toggle_script" -> toggleScript(args)
                         "remove_script" -> removeScript(args)
+                        "debug_scripts" -> debugScripts()
                         else -> throw BrowserFailure("INVALID_ACTION", "浏览器 action 无效")
                     }
                 }.getOrElse { throwable -> failureResult(action, throwable) }
@@ -529,7 +530,10 @@ internal object AgentBrowserSession {
     private fun pageInfo(): BrowserToolResult {
         val view = requirePage()
         val value = evaluateObject(view, BrowserDomScripts.pageInfo())
-        return toolResult(mergeValue(baseEnvelope("get_page_info", true, "ok"), value))
+        return toolResult(
+            mergeValue(baseEnvelope("get_page_info", true, "ok"), value)
+                .put("userscripts", UserScriptEngine.pageStatus(currentUrl))
+        )
     }
 
     private fun historyNavigation(action: String, backwards: Boolean): BrowserToolResult {
@@ -684,6 +688,10 @@ internal object AgentBrowserSession {
             baseEnvelope("remove_script", true, "ok").put("script_id", scriptId)
         )
     }
+
+    /** debug_scripts：用户脚本链路诊断——登记、令牌、注入记录全量可见。 */
+    private fun debugScripts(): BrowserToolResult =
+        toolResult(baseEnvelope("debug_scripts", true, "ok").put("debug", UserScriptEngine.debugState()))
 
     private fun targetFrom(args: JSONObject): BrowserTarget {
         val selector = validatedSelector(args, required = false)
@@ -1126,6 +1134,10 @@ internal object AgentBrowserSession {
             committedMainFrameUrl = url.orEmpty()
             currentPageVisible = true
             publishSnapshotOnMain()
+            // provisional 阶段 onPageStarted 的 document-start 注入可能被 Chromium 丢弃，这里幂等补一次。
+            if (!url.isNullOrBlank()) {
+                runCatching { UserScriptEngine.injectOnMain(view, url, UserScriptRules.RUN_AT_START) }
+            }
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
@@ -1239,6 +1251,7 @@ internal object AgentBrowserSession {
         "add_script",
         "toggle_script",
         "remove_script",
+        "debug_scripts",
     )
 
 }
