@@ -24,6 +24,8 @@ internal class AgentLoop(
     private val traceFormatter: AgentTraceFormatter,
     private val onEvent: (AgentEvent) -> Unit,
     private val toolsForRound: (() -> JSONArray)? = null,
+    /** 每轮工具结果回传后的重触发钩子：返回非空提示文本时，作为「技能提示」追加到下一轮上下文。 */
+    private val onToolResultsHint: ((String) -> String?)? = null,
     private val modelRetry: AgentModelRetry = AgentModelRetry(),
     private val sessionId: String = java.util.UUID.randomUUID().toString(),
     private val transcript: JSONArray = JSONArray(),
@@ -63,6 +65,8 @@ internal class AgentLoop(
         messages.put(message)
         transcript.put(message)
     }
+
+    private var skillHintIndex = 0
 
     private var publishedTranscriptSize = 0
 
@@ -219,6 +223,18 @@ internal class AgentLoop(
                 }
                 appendToolImages(round, outcomes)
                 publishTranscript()
+                // 运行中自动重触发：工具结果里出现新信号时，追加一条技能提示供下一轮参考。
+                if (onToolResultsHint != null) {
+                    val hint = onToolResultsHint.invoke(outcomes.joinToString("\n") { it.result.content })
+                    if (!hint.isNullOrBlank()) {
+                        appendMessage(
+                            AgentConversationCodec.userTextMessage("[Eta 技能提示] $hint")
+                                .put("_eta_message_id", "user-$operationId-skillhint-${++skillHintIndex}"),
+                        )
+                        context.userAppended()
+                        publishTranscript()
+                    }
+                }
                 round += 1
                 continue
             }

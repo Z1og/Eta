@@ -207,6 +207,23 @@ internal object AgentPromptBuilder {
             }
             messages += systemMessage(text)
         }
+        // 低置信命中：不下发正文，只给按相关度排序的候选短名单，避免注入错技能正文，
+        // 由模型按语义用 skills_read 精准挑 1-2 个。
+        val candidates = skillContext.rankedCandidates
+        if (candidates.isNotEmpty()) {
+            val text = buildString {
+                appendLine("以下 Skills 与当前任务相关度较高，正文未自动加载；需要时用 skills_read 精准读取其中最相关的 1-2 个：")
+                candidates.forEach { skill ->
+                    val description = skill.description
+                        .replace(Regex("\\s+"), " ")
+                        .trim()
+                        .let { if (it.length <= 120) it else it.take(120) + "..." }
+                        .ifBlank { "无描述" }
+                    appendLine("- id=${skill.id} | name=${skill.name} | $description")
+                }
+            }
+            messages += systemMessage(text)
+        }
         val installed = skillContext.installedSkills
         if (installed.isEmpty()) return messages
         val autoLoadedIds = skillContext.autoLoadedSkills.mapTo(mutableSetOf()) { it.skillId }

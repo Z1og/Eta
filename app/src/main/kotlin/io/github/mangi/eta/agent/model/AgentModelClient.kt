@@ -3,7 +3,9 @@ package io.github.mangi.eta.agent.model
 import io.github.mangi.eta.agent.runtime.AgentEvent
 import io.github.mangi.eta.agent.runtime.AgentRunController
 import io.github.mangi.eta.agent.memory.AgentMemoryContext
+import io.github.mangi.eta.agent.skill.ReverseSkillCatalog
 import io.github.mangi.eta.agent.skill.SkillContext
+import io.github.mangi.eta.agent.skill.SkillTriggerMatcher
 import io.github.mangi.eta.agent.roleplay.RoleplayRunContext
 import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
@@ -161,6 +163,33 @@ internal object AgentModelClient {
                 terminalTools = config.terminalTools
             )
         )
+        // 运行中自动重触发：工具结果回传后，若出现新的强信号且对应技能尚未加载/提示过，
+        // 追加一条轻量技能提示（user 角色，与 steering 同形态，provider 安全）。
+        val midRunHintedSkills = HashSet<String>()
+        val midRunInjectedSkills = skillContext.autoLoadedSkills.mapTo(HashSet()) { it.skillId }
+        fun midRunSkillHint(toolText: String): String? {
+            if (toolText.isBlank() || skillContext.installedSkills.isEmpty()) return null
+            val input = SkillTriggerMatcher.Input(
+                text = toolText,
+                extensions = SkillTriggerMatcher.detectExtensions(toolText),
+            )
+            val fresh = SkillTriggerMatcher.rankScored(
+                input = input,
+                skills = skillContext.installedSkills,
+                maxResults = SkillTriggerMatcher.MAX_CANDIDATES,
+                reverseSkillIds = ReverseSkillCatalog.REVERSE_SKILL_IDS,
+                reverseBias = skillContext.reverseModeEnabled,
+            ).filter {
+                it.specificity >= 4.0 &&
+                    it.skill.id !in midRunInjectedSkills &&
+                    midRunHintedSkills.add(it.skill.id)
+            }
+            if (fresh.isEmpty()) return null
+            return buildString {
+                appendLine("当前工具输出出现了新的任务信号，以下技能可能相关（正文未自动加载，需要就 skills_read）：")
+                fresh.take(3).forEach { appendLine("- id=${it.skill.id} | name=${it.skill.name}") }
+            }
+        }
         var promptRootAvailable = initialCapabilities.rootAvailable
         val loop = AgentLoop(
             transcript = transcript,
@@ -193,6 +222,7 @@ internal object AgentModelClient {
                 }
                 toolsFor(capabilities)
             },
+            onToolResultsHint = if (rewriteReply) null else ::midRunSkillHint,
         )
         val result = try {
             if (compactOnly) loop.compactOnly() else loop.run()

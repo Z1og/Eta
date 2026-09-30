@@ -166,6 +166,31 @@ class SkillTriggerMatcherTest {
     }
 
     @Test
+    fun `idf downweights trigger shared by many skills`() {
+        val generics = (1..20).map { skill("generic-$it", "逆向") }
+        val specific = skill("unpack-reverse", "脱壳逆向")
+        val ranked = SkillTriggerMatcher.rankScored(
+            input = SkillTriggerMatcher.Input("脱壳逆向"),
+            skills = generics + specific,
+            maxResults = 5,
+        )
+        assertEquals("unpack-reverse", ranked.first().skill.id)
+        // 泛词（被 21 个技能共享）特异度显著低于专词
+        assertTrue(ranked.first().specificity > ranked.last().specificity)
+    }
+
+    @Test
+    fun `rankScored returns scored hits with descending specificity`() {
+        val skills = listOf(
+            skill("a", "渗透"),
+            skill("b", "渗透测试"),
+        )
+        val ranked = SkillTriggerMatcher.rankScored(SkillTriggerMatcher.Input("渗透测试"), skills)
+        assertEquals(listOf("b", "a"), ranked.map { it.skill.id })
+        assertTrue(ranked[0].specificity >= ranked[1].specificity)
+    }
+
+    @Test
     fun `heavy family is deduplicated to one slot`() {
         val skills = listOf(
             skill("eni-apk-reverse", "逆向"),

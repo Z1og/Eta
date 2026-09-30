@@ -22,6 +22,8 @@ import io.github.mangi.eta.agent.skill.SkillIndexService
 import io.github.mangi.eta.agent.skill.SkillInstallErrorCode
 import io.github.mangi.eta.agent.skill.SkillInstallResult
 import io.github.mangi.eta.agent.skill.SkillLoader
+import io.github.mangi.eta.agent.skill.SkillTriggerMatcher
+import io.github.mangi.eta.agent.skill.SkillUsageStats
 import io.github.mangi.eta.agent.skill.SkillPackageInstaller
 import io.github.mangi.eta.agent.skill.SkillParser
 import io.github.mangi.eta.agent.skill.SkillResourceReader
@@ -209,6 +211,7 @@ internal class AgentLocalTools(
                 "skills_list" -> textResult(skillsList(args))
                 "skills_read" -> textResult(skillsRead(args))
                 "skills_read_resource" -> textResult(skillsReadResource(args))
+                "skills_suggest" -> textResult(skillsSuggest(args))
                 "skills_list_curated" -> textResult(skillsListCurated())
                 "skills_inspect_github" -> textResult(skillsInspectGitHub(args))
                 "skills_install_from_github" -> textResult(skillsInstallFromGitHub(args))
@@ -900,6 +903,8 @@ internal class AgentLocalTools(
         if (!compat.available) return errorResult("INCOMPATIBLE", compat.reason ?: "当前环境不可用")
         val resolved = loader.load(entry, "agent 主动读取 skill")
             ?: return errorResult("READ_FAILED", "读取 SKILL.md 失败：${entry.skillFilePath}")
+        // 使用反馈：记录被实际读取的技能，供后续触发打分温和加权（本地统计）。
+        SkillUsageStats.recordRead(context.filesDir, entry.id)
         val body = if (resolved.bodyMarkdown.length <= maxChars) {
             resolved.bodyMarkdown
         } else {
@@ -921,6 +926,51 @@ internal class AgentLocalTools(
             .put("references", references)
             .put("frontmatter", frontmatter)
             .put("bodyMarkdown", body)
+            .toString()
+    }
+
+    /**
+     * skills_suggest：把自由文本（当前子任务/新出现的信号）与已启用技能做打分匹配，
+     * 返回最相关的技能 id + 描述，供模型在长回答中途主动、反复地精准选取技能。
+     */
+    private fun skillsSuggest(args: JSONObject): String {
+        if (skillTreeMutationUncertain.get()) return nextTurnRequired("Skill 树")
+        val indexService = skillIndexService
+            ?: return errorResult("SKILLS_UNAVAILABLE", "技能服务未初始化")
+        val query = args.optString("query").trim()
+        if (query.isBlank()) return errorResult("MISSING_PARAM", "缺少 query")
+        val limit = args.optInt("limit", SkillTriggerMatcher.MAX_CANDIDATES).coerceIn(1, 20)
+        val skills = indexService.listInstalledSkills()
+            .filter { isVisibleInCurrentRun(it.id) && SkillCompatibilityChecker.evaluate(it).available }
+        if (skills.isEmpty()) return errorResult("SKILLS_UNAVAILABLE", "当前没有可用技能")
+        val input = SkillTriggerMatcher.Input(
+            text = query,
+            extensions = SkillTriggerMatcher.detectExtensions(query),
+        )
+        val matches = JSONArray()
+        SkillTriggerMatcher.rankScored(input, skills, maxResults = limit).forEach { scored ->
+            matches.put(
+                JSONObject()
+                    .put("id", scored.skill.id)
+                    .put("name", scored.skill.name)
+                    .put("description", scored.skill.description.take(200))
+                    .put("skillFilePath", scored.skill.skillFilePath)
+                    .put("score", scored.score),
+            )
+        }
+        return JSONObject()
+            .put("ok", true)
+            .put("query", query)
+            .put("count", matches.length())
+            .put("matches", matches)
+            .put(
+                "hint",
+                if (matches.length() == 0) {
+                    "没有明显相关的技能；可直接用通用能力继续。"
+                } else {
+                    "挑最相关的 1-2 个用 skills_read 读取正文后再执行。"
+                },
+            )
             .toString()
     }
 

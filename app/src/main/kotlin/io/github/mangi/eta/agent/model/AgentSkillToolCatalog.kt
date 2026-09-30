@@ -97,6 +97,31 @@ internal object AgentSkillToolCatalog {
                         ),
                 ),
             )
+            .put(
+                AgentToolSchema.function(
+                    name = "skills_suggest",
+                    description = "Rank installed skills against a free-text description of the current sub-task or context, returning the most relevant skill ids with descriptions. Use mid-task whenever new signals appear (a file type, a tool name, a protocol, a feature) to find out which skill applies before calling skills_read.",
+                    parameters = JSONObject()
+                        .put("type", "object")
+                        .put(
+                            "properties",
+                            JSONObject()
+                                .put(
+                                    "query",
+                                    JSONObject()
+                                        .put("type", "string")
+                                        .put("description", "What you are about to do, e.g. 'unpack an apk and hook native'. Keywords/terms are enough.")
+                                )
+                                .put(
+                                    "limit",
+                                    JSONObject()
+                                        .put("type", "integer")
+                                        .put("description", "Max results, 1-20, default 6.")
+                                )
+                        )
+                        .put("required", JSONArray().put("query"))
+                )
+            )
         if (githubDiscovery) appendGitHubDiscoveryTools(tools)
         if (githubInstall) appendGitHubInstallTool(tools)
     }

@@ -24,9 +24,12 @@ import io.github.mangi.eta.agent.skill.SkillRuntime
 import io.github.mangi.eta.agent.skill.SkillTriggerMatcher
 import io.github.mangi.eta.agent.skill.PublicGitHubSkillSource
 import io.github.mangi.eta.agent.skill.ProjectSpecDetector
+import io.github.mangi.eta.agent.skill.ResolvedSkillContext
 import io.github.mangi.eta.agent.skill.ReverseSignalRouter
 import io.github.mangi.eta.agent.skill.ReverseSkillCatalog
+import io.github.mangi.eta.agent.skill.SkillIndexEntry
 import io.github.mangi.eta.agent.skill.SkillTriggerSignals
+import io.github.mangi.eta.agent.skill.SkillUsageStats
 import io.github.mangi.eta.agent.tool.AgentLocalTools
 import io.github.mangi.eta.agent.tool.AgentToolRequirements
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
@@ -115,40 +118,75 @@ internal class AgentRuntimeRunExecutor(
                 }.getOrDefault(false)
             }
             // 关键词触发：用户消息命中 SKILL.md triggers 时自动加载正文（改写回复等非任务操作不触发）。
-            // 增强：匹配信号从「单条消息」扩为「本轮消息 + 最近若干轮对话尾」；一并启用
-            // 扩展名强命中（frontmatter `ext`）、逆向模式偏置与同族去冗余；零关键词命中时
-            // 再按文件扩展名/工具名走结构化兜底路由（ReverseSignalRouter）。
-            val autoLoadedSkills = if (request.operation == AgentRuntimeWire.OP_REWRITE_REPLY) {
-                emptyList()
+            // 增强：信号从「单条消息」扩为「本轮消息 + 最近若干轮对话尾」；一并启用扩展名强命中
+            // （frontmatter `ext`）、IDF 泛词降权、逆向模式偏置、同族去冗余与本地使用反馈加权；
+            // 低置信命中不下发正文、改给候选短名单；零关键词命中时按扩展名/工具名走兜底路由。
+            val triggerText = if (request.operation == AgentRuntimeWire.OP_REWRITE_REPLY) {
+                ""
             } else {
-                val triggerText = SkillTriggerSignals.buildText(request.prompt, request.history)
+                SkillTriggerSignals.buildText(request.prompt, request.history)
+            }
+            // 使用反馈：给本地统计里确实被 skills_read 读过的技能温和加权（失败静默）。
+            val usageStats = runCatching { SkillUsageStats.load(appContext.filesDir) }
+                .getOrDefault(emptyMap())
+            val rankedSkills = if (usageStats.isEmpty()) {
+                compatibleSkills
+            } else {
+                compatibleSkills.map { entry ->
+                    val count = usageStats[entry.id]
+                    if (count == null) entry
+                    else entry.copy(triggerWeight = entry.triggerWeight * SkillUsageStats.boost(count))
+                }
+            }
+            val autoLoadedSkills: List<ResolvedSkillContext>
+            val rankedCandidates: List<SkillIndexEntry>
+            if (triggerText.isBlank()) {
+                autoLoadedSkills = emptyList()
+                rankedCandidates = emptyList()
+            } else {
                 val triggerInput = SkillTriggerMatcher.Input(
                     text = triggerText,
                     extensions = SkillTriggerMatcher.detectExtensions(triggerText),
                 )
-                val byKeyword = SkillTriggerMatcher.match(
+                val ranked = SkillTriggerMatcher.rankScored(
                     input = triggerInput,
-                    skills = compatibleSkills,
+                    skills = rankedSkills,
+                    maxResults = SkillTriggerMatcher.MAX_CANDIDATES + SkillTriggerMatcher.MAX_AUTO_LOADED,
                     reverseSkillIds = ReverseSkillCatalog.REVERSE_SKILL_IDS,
                     reverseBias = reverseModeEnabled,
                 )
+                // 阈值：只对足够特异的命中自动下发正文（<2.0 视为低置信），避免注入错技能。
+                val strongBodies = SkillTriggerMatcher.selectBodies(
+                    ranked.filter { it.specificity >= 2.0 },
+                    SkillTriggerMatcher.MAX_AUTO_LOADED,
+                )
+                // 结构化兜底路由（扩展名/工具名）——补足关键词命中不到的口。
                 val bySignal = ReverseSignalRouter.route(
                     text = triggerText,
                     skills = compatibleSkills,
                     maxMatches = SkillTriggerMatcher.MAX_AUTO_LOADED,
                 )
-                (byKeyword + bySignal)
+                val selected = (strongBodies + bySignal)
                     .distinctBy { it.id }
                     .take(SkillTriggerMatcher.MAX_AUTO_LOADED)
-                    .mapNotNull { entry ->
-                        runCatching { skillLoader.load(entry, "trigger-keyword") }
-                            .onFailure { throwable ->
-                                AndroidAgentLogger.warnThrottled("skill_trigger_load_failed") {
-                                    "Auto-load failed for skill ${entry.id}: type=${throwable.safeLogType()}"
-                                }
+                autoLoadedSkills = selected.mapNotNull { entry ->
+                    runCatching { skillLoader.load(entry, "trigger-keyword") }
+                        .onFailure { throwable ->
+                            AndroidAgentLogger.warnThrottled("skill_trigger_load_failed") {
+                                "Auto-load failed for skill ${entry.id}: type=${throwable.safeLogType()}"
                             }
-                            .getOrNull()
-                    }
+                        }
+                        .getOrNull()
+                }
+                val loadedIds = selected.mapTo(mutableSetOf()) { it.id }
+                rankedCandidates = if (loadedIds.size >= SkillTriggerMatcher.MAX_AUTO_LOADED) {
+                    emptyList()
+                } else {
+                    ranked.map { it.skill }
+                        .filter { it.id !in loadedIds }
+                        .distinctBy { it.id }
+                        .take(SkillTriggerMatcher.MAX_CANDIDATES)
+                }
             }
             // Trellis 项目规范探测（方案 A）：从用户消息中的路径向上找 .trellis/spec/，
             // 命中则注入规范索引；失败静默降级，不影响正常对话。
@@ -166,6 +204,7 @@ internal class AgentRuntimeRunExecutor(
             val skillContext = SkillContext(
                 installedSkills = compatibleSkills,
                 autoLoadedSkills = autoLoadedSkills,
+                rankedCandidates = rankedCandidates,
                 projectSpecs = projectSpecs,
                 // 逆向模式状态（融合 dsh-infinite-gen-4）：与技能页主开关同源——
                 // 所有已安装逆向技能均启用即视为开启，开启时常驻注入逆向交付契约。
