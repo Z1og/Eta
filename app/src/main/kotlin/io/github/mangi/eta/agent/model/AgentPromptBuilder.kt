@@ -227,9 +227,19 @@ internal object AgentPromptBuilder {
         val installed = skillContext.installedSkills
         if (installed.isEmpty()) return messages
         val autoLoadedIds = skillContext.autoLoadedSkills.mapTo(mutableSetOf()) { it.skillId }
+        // 逆向模式开启时索引只列逆向技能，折叠其余，减少上下文占用（仍可 skills_list 全量查询）。
+        val indexed = if (skillContext.reverseModeEnabled) {
+            installed.filter { it.id in io.github.mangi.eta.agent.skill.ReverseSkillCatalog.REVERSE_SKILL_IDS }
+        } else {
+            installed
+        }
+        val folded = installed.size - indexed.size
         val body = buildString {
             appendLine("已启用 Skills 索引（仅元信息，正文按需加载）：")
-            installed.forEach { skill ->
+            if (folded > 0) {
+                appendLine("（逆向模式开启：已折叠 $folded 个非逆向技能；需要时用 skills_list 全量查询。）")
+            }
+            indexed.forEach { skill ->
                 if (skill.id in autoLoadedIds) return@forEach
                 val capabilities = buildList {
                     if (skill.hasScripts) add("scripts")

@@ -47,5 +47,7 @@ object ReverseSkillCatalog {
         "src-hunt",
         // 硬件追踪与硬件断点（CoreSight ETE/TRBE/SPE/BRBE，社区建议落地）
         "hw-trace",
+        // 反 Frida 对抗 / 抓包链路 / IL2CPP-UE dump（全景补强项）
+        "anti-frida-bypass", "capture-mitm", "il2cpp-dump",
     )
 }

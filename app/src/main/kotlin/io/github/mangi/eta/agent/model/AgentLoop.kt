@@ -224,15 +224,15 @@ internal class AgentLoop(
                 appendToolImages(round, outcomes)
                 publishTranscript()
                 // 运行中自动重触发：工具结果里出现新信号时，追加一条技能提示供下一轮参考。
+                // 提示只进 messages（供 provider），不进 transcript（不在会话 UI 显示）。
                 if (onToolResultsHint != null) {
                     val hint = onToolResultsHint.invoke(outcomes.joinToString("\n") { it.result.content })
                     if (!hint.isNullOrBlank()) {
-                        appendMessage(
+                        messages.put(
                             AgentConversationCodec.userTextMessage("[Eta 技能提示] $hint")
                                 .put("_eta_message_id", "user-$operationId-skillhint-${++skillHintIndex}"),
                         )
                         context.userAppended()
-                        publishTranscript()
                     }
                 }
                 round += 1

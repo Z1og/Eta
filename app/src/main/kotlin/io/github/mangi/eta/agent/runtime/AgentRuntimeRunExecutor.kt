@@ -129,13 +129,18 @@ internal class AgentRuntimeRunExecutor(
             // 使用反馈：给本地统计里确实被 skills_read 读过的技能温和加权（失败静默）。
             val usageStats = runCatching { SkillUsageStats.load(appContext.filesDir) }
                 .getOrDefault(emptyMap())
-            val rankedSkills = if (usageStats.isEmpty()) {
+            // 负样本：自动注入多次但从未被实际读取的技能温和降权（触发可能不准）。
+            val autoLoads = runCatching { SkillUsageStats.loadAutoLoads(appContext.filesDir) }
+                .getOrDefault(emptyMap())
+            val rankedSkills = if (usageStats.isEmpty() && autoLoads.isEmpty()) {
                 compatibleSkills
             } else {
                 compatibleSkills.map { entry ->
-                    val count = usageStats[entry.id]
-                    if (count == null) entry
-                    else entry.copy(triggerWeight = entry.triggerWeight * SkillUsageStats.boost(count))
+                    val reads = usageStats[entry.id] ?: 0
+                    val boost = SkillUsageStats.boost(reads) *
+                        SkillUsageStats.dampen(autoLoads[entry.id] ?: 0, reads)
+                    if (boost == 1.0) entry
+                    else entry.copy(triggerWeight = entry.triggerWeight * boost)
                 }
             }
             val autoLoadedSkills: List<ResolvedSkillContext>
@@ -169,6 +174,8 @@ internal class AgentRuntimeRunExecutor(
                 val selected = (strongBodies + bySignal)
                     .distinctBy { it.id }
                     .take(SkillTriggerMatcher.MAX_AUTO_LOADED)
+                // 记录自动注入，作为负样本素材（自动注入但未被读取的技能将被温和降权）。
+                runCatching { selected.forEach { SkillUsageStats.recordAutoLoad(appContext.filesDir, it.id) } }
                 autoLoadedSkills = selected.mapNotNull { entry ->
                     runCatching { skillLoader.load(entry, "trigger-keyword") }
                         .onFailure { throwable ->

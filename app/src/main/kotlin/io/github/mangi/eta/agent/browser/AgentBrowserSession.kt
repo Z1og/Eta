@@ -24,6 +24,7 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.core.graphics.createBitmap
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.Locale
 import java.util.concurrent.CompletableFuture
@@ -373,6 +374,11 @@ internal object AgentBrowserSession {
                         "toggle_script" -> toggleScript(args)
                         "remove_script" -> removeScript(args)
                         "debug_scripts" -> debugScripts()
+                        "set_intercept" -> setIntercept(args)
+                        "add_intercept_replace" -> addInterceptReplace(args)
+                        "clear_intercept_replace" -> clearInterceptReplace(args)
+                        "list_requests" -> listInterceptRequests(args)
+                        "clear_requests" -> clearInterceptRecords()
                         else -> throw BrowserFailure("INVALID_ACTION", "浏览器 action 无效")
                     }
                 }.getOrElse { throwable -> failureResult(action, throwable) }
@@ -1091,6 +1097,20 @@ internal object AgentBrowserSession {
     }
 
     private class BrowserClient : WebViewClient() {
+        override fun shouldInterceptRequest(
+            view: WebView,
+            request: WebResourceRequest,
+        ): WebResourceResponse? {
+            val url = request.url?.toString()
+            if (url != null && interceptEnabled) {
+                runCatching {
+                    recordIntercept(url, request.method, request.isForMainFrame)
+                    matchInterceptReplace(url)?.let { return it.toResponse() }
+                }
+            }
+            return super.shouldInterceptRequest(view, request)
+        }
+
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             currentUrl = url.orEmpty()
             currentHost = hostOf(currentUrl)
@@ -1232,6 +1252,114 @@ internal object AgentBrowserSession {
         val status: String = "error",
     ) : RuntimeException(message)
 
+    // ── 请求拦截与改包（Web 渗透基座：观察请求 + 响应替换）──────────────────
+    private const val MAX_INTERCEPT_RECORDS = 100
+
+    private val interceptLock = Any()
+
+    @Volatile
+    private var interceptEnabled = false
+    private val interceptRecords = ArrayDeque<JSONObject>()
+    private val interceptReplaceRules = mutableListOf<InterceptReplaceRule>()
+
+    private data class InterceptReplaceRule(
+        val match: String,
+        val mimeType: String,
+        val body: ByteArray,
+        val encoding: String,
+        val statusCode: Int,
+    ) {
+        fun toResponse(): WebResourceResponse {
+            val response = WebResourceResponse(mimeType, encoding, ByteArrayInputStream(body))
+            if (statusCode != 200) response.setStatusCodeAndReasonPhrase(statusCode, "Eta")
+            return response
+        }
+    }
+
+    private fun recordIntercept(url: String, method: String?, mainFrame: Boolean) {
+        val record = JSONObject()
+            .put("url", url)
+            .put("method", method ?: "GET")
+            .put("main_frame", mainFrame)
+            .put("ts", System.currentTimeMillis())
+        synchronized(interceptLock) {
+            interceptRecords.addLast(record)
+            while (interceptRecords.size > MAX_INTERCEPT_RECORDS) interceptRecords.removeFirst()
+        }
+    }
+
+    private fun matchInterceptReplace(url: String): InterceptReplaceRule? =
+        synchronized(interceptLock) {
+            interceptReplaceRules.firstOrNull { it.match.isNotEmpty() && url.contains(it.match) }
+        }
+
+    private fun setIntercept(args: JSONObject): BrowserToolResult {
+        interceptEnabled = args.optBoolean("enabled", true)
+        return toolResult(
+            baseEnvelope("set_intercept", true, "ok")
+                .put("intercept_enabled", interceptEnabled)
+        )
+    }
+
+    private fun addInterceptReplace(args: JSONObject): BrowserToolResult {
+        val match = args.optString("match").trim()
+        val body = args.optString("body")
+        if (match.isEmpty() || body.isEmpty()) {
+            throw BrowserFailure("INVALID_ARGUMENT", "add_intercept_replace 需要 match 与 body")
+        }
+        val mime = args.optString("mime_type").ifBlank { "text/html" }
+        val encoding = args.optString("encoding").ifBlank { "utf-8" }
+        val status = args.optInt("status", 200).coerceIn(100, 599)
+        synchronized(interceptLock) {
+            interceptReplaceRules.removeAll { it.match == match }
+            interceptReplaceRules.add(
+                InterceptReplaceRule(match, mime, body.toByteArray(Charsets.UTF_8), encoding, status)
+            )
+        }
+        return toolResult(
+            baseEnvelope("add_intercept_replace", true, "ok")
+                .put("match", match)
+                .put("rules", synchronized(interceptLock) { interceptReplaceRules.size })
+        )
+    }
+
+    private fun clearInterceptReplace(args: JSONObject): BrowserToolResult {
+        val match = args.optString("match").trim()
+        val removed = synchronized(interceptLock) {
+            if (match.isEmpty()) {
+                val n = interceptReplaceRules.size
+                interceptReplaceRules.clear()
+                n
+            } else {
+                val before = interceptReplaceRules.size
+                interceptReplaceRules.removeAll { it.match == match }
+                before - interceptReplaceRules.size
+            }
+        }
+        return toolResult(
+            baseEnvelope("clear_intercept_replace", true, "ok").put("removed", removed)
+        )
+    }
+
+    private fun listInterceptRequests(args: JSONObject): BrowserToolResult {
+        val limit = args.optInt("limit", 50).coerceIn(1, MAX_INTERCEPT_RECORDS)
+        val items = JSONArray()
+        synchronized(interceptLock) {
+            interceptRecords.toList().asReversed().take(limit).forEach { items.put(it) }
+        }
+        return toolResult(
+            baseEnvelope("list_requests", true, "ok")
+                .put("intercept_enabled", interceptEnabled)
+                .put("count", items.length())
+                .put("requests", items)
+        )
+    }
+
+    private fun clearInterceptRecords(): BrowserToolResult {
+        synchronized(interceptLock) { interceptRecords.clear() }
+        return toolResult(baseEnvelope("clear_requests", true, "ok"))
+    }
+
     private val SUPPORTED_ACTIONS = setOf(
         "navigate",
         "get_readable",
@@ -1252,6 +1380,11 @@ internal object AgentBrowserSession {
         "toggle_script",
         "remove_script",
         "debug_scripts",
+        "set_intercept",
+        "add_intercept_replace",
+        "clear_intercept_replace",
+        "list_requests",
+        "clear_requests",
     )
 
 }

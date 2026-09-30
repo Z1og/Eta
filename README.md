@@ -2,9 +2,9 @@
 
 **简体中文** | [English](README_EN.md)
 
-<p><a href="https://github.com/Z1og/Eta/releases"><img src="https://img.shields.io/github/downloads/Z1og/Eta/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"> <img src="https://img.shields.io/badge/Skills-187%20%E5%86%85%E7%BD%AE-7F52FF" alt="187 built-in skills"></p>
+<p><a href="https://github.com/Z1og/Eta/releases"><img src="https://img.shields.io/github/downloads/Z1og/Eta/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"> <img src="https://img.shields.io/badge/Skills-190%20%E5%86%85%E7%BD%AE-7F52FF" alt="190 built-in skills"></p>
 
-**面向 Android 的系统级 AI 助手 · 内置 187 个技能，其中 84 个为逆向与安全研究技能，一键开启**
+**面向 Android 的系统级 AI 助手 · 内置 190 个技能，其中 87 个为逆向与安全研究技能，一键开启**
 
 Eta 是面向 Android 的系统级 AI Agent：直接调用系统 API 与工具完成任务，支持 Skills 与 MCP 扩展。本版本在上游 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 Agent 运行时之上，内置了覆盖**逆向工程、渗透测试、游戏安全与移动安全**的完整技能体系，随 App 预装、开箱即用，专为手机上的逆向与安全研究场景打磨。
 
@@ -67,10 +67,11 @@ Runtime 同时管理流式事件、steering、取消和增量 transcript。追�
 
 ## 内置逆向与安全技能
 
-本版本内置 **187 个技能**，其中 **84 个**为逆向工程与安全研究方向，随 App 预装、开箱即用：
+本版本内置 **190 个技能**，其中 **87 个**为逆向工程与安全研究方向，随 App 预装、开箱即用：
 
 - **逆向工程**：APK / DEX / SO 逆向，IDA、Ghidra、Binary Ninja、radare2 反编译与分析，二进制分析与补丁对比，.NET 逆向，JS 逆向，协议逆向，虚拟机保护还原，浏览器插件与 macOS 逆向。
-- **动态分析**：Frida 动态插桩与 Hook 模板、内存取证、脱壳与重打包、ELF 本地鉴权 patch。
+- **动态分析**：Frida 动态插桩与 Hook 模板、内存取证、脱壳与重打包、ELF 本地鉴权 patch、**进程/内存一等工具**（`process_list`/`mem_read`/`mem_search`/`mem_write`/`frida_ps`/`frida_script`）与**最小 MCP client**（`mcp_call`）。
+- **对抗与抓包**：反 Frida/反调试检测面绕过（anti-frida-bypass）、抓包与中间人链路（capture-mitm，tcpdump/mitmproxy/SSL unpinning）、IL2CPP 与 UE 游戏 dump（il2cpp-dump）。
 - **硬件层观测**：Arm CoreSight 硬件追踪（ETE/TRBE 指令追踪、SPE 延迟剖析、BRBE 分支记录）与硬件断点/观察点——不注入、不改指令地拿执行流，用于 VMP 壳还原、OLLVM 平坦化恢复与反调试绕过。
 - **渗透测试**：网络渗透、API 安全、Web 渗透、SRC 漏洞挖掘、攻击链编排、完整渗透流程、漏洞利用。
 - **游戏安全**：游戏内存分析与修改、反作弊机制研究、图形 API Hook、Windows 内核安全、DMA 攻击面研究、移动竞技游戏安全。
@@ -78,7 +79,7 @@ Runtime 同时管理流式事件、steering、取消和增量 transcript。追�
 
 ### 逆向模式：一键开关
 
-「技能」页顶部提供**逆向模式**总开关，一键启停全部 84 个逆向类技能。开启后：
+「技能」页顶部提供**逆向模式**总开关，一键启停全部 87 个逆向类技能。开启后：
 
 - 运行时常驻注入**逆向交付契约**：首行以标题或代码块命名交付物、缺失参数自造占位符（TARGET / OFFSET / HOOK_FN）、每步给可执行命令与完整代码——所有逆向与安全任务按统一格式直接出结果，不停留在思路描述。
 - 全部逆向技能进入任务索引：消息命中技能关键词时正文自动注入，也可由模型按语义经 `skills_read` 按需加载，单个任务最多取用 2-3 个最相关技能。

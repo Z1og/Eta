@@ -28,6 +28,7 @@ internal object AgentToolCatalog {
                 sensitiveActionTools = deviceSensitiveActionTools,
             )
             if (browserTools) AgentBrowserToolCatalog.appendTo(tools)
+            AgentReverseToolCatalog.appendTo(tools)
             AgentSkillToolCatalog.appendTo(
                 tools,
                 githubDiscovery = skillGitHubDiscovery,

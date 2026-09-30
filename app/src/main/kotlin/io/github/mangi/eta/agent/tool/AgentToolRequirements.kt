@@ -54,6 +54,8 @@ internal object AgentToolRequirements {
             "search_downloads", "search_coloros_notes", "search_coloros_recordings",
             "search_recording_summaries", "search_coloros_memories", "search_saved_places",
             "search_qq_chat_images", "search_wechat_chat_images",
+            "process_list", "mem_read", "mem_search", "mem_write", "frida_ps", "frida_script",
+            "mcp_call",
         )
         listOf(
             "observe_screen", "tap", "tap_area", "tap_element", "long_press",

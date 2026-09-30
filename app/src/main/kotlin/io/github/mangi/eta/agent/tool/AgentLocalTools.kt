@@ -130,6 +130,7 @@ internal class AgentLocalTools(
             LinuxEnvironmentSettingsRepository.current(context).terminalEnvironment
         },
     )
+    private val reverseTools = AgentReverseTools(rootCommandExecutor, terminalController)
     private val publishedObservation = AtomicReference(PublishedObservation())
     private val runAvailableSkillIds = runAvailableSkillIds
         .mapTo(mutableSetOf(), SkillParser::normalizeSkillLookup)
@@ -206,6 +207,13 @@ internal class AgentLocalTools(
                 "read_file" -> textResult(terminalTool { readFile(args) })
                 "write_file" -> textResult(terminalTool { writeFile(args) })
                 "list_directory" -> textResult(terminalTool { listDirectory(args) })
+                "process_list" -> textResult(terminalTool { reverseTools.processList(args) })
+                "mem_read" -> textResult(terminalTool { reverseTools.memRead(args) })
+                "mem_search" -> textResult(terminalTool { reverseTools.memSearch(args) })
+                "mem_write" -> textResult(terminalTool { reverseTools.memWrite(args) })
+                "frida_ps" -> textResult(terminalTool { reverseTools.fridaPs(args) })
+                "frida_script" -> textResult(terminalTool { reverseTools.fridaScript(args) })
+                "mcp_call" -> textResult(terminalTool { reverseTools.mcpCall(args) })
                 "memory_get" -> textResult(memoryGet(args))
                 "memory_write" -> textResult(memoryWrite(args))
                 "skills_list" -> textResult(skillsList(args))

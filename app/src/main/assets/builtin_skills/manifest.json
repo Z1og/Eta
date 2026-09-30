@@ -341,16 +341,6 @@
       "hasEvals": false
     },
     {
-      "id": "hw-trace",
-      "name": "hw-trace",
-      "description": "Arm CoreSight hardware tracing and hardware breakpoints: ETE/TRBE instruction trace, SPE statistical profiling, BRBE branch records, and DBGBCR/DBGWCR breakpoints for anti-debug bypass. Covers VMP devirtualization, OLLVM deflattening, PIE/SO dynamic analysis, crash triage, and game performance hotspots.",
-      "assetPath": "builtin_skills/hw-trace",
-      "hasScripts": false,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
       "id": "anti-cheat-systems",
       "name": "anti-cheat-systems",
       "description": "Guide for modern game anti-cheat architecture, Windows kernel monitoring, and detection tradeoffs. Use this skill when analyzing EAC, BattlEye, Vanguard, FACEIT AC, kernel callbacks, handle protection",
@@ -1865,6 +1855,46 @@
       "name": "yingan-tuoxiu",
       "description": "Owner-authorized YingAn/YingPo Android APK shell rehydration and stable rebuild workflow. Use for APKs with tiny or abnormal root DEX files, v.m.p or abcd655xx shell callbacks, libabcd/lib*shellservic",
       "assetPath": "builtin_skills/yingan-tuoxiu",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "hw-trace",
+      "name": "hw-trace",
+      "description": "Arm CoreSight hardware tracing and hardware breakpoints: ETE/TRBE instruction trace, SPE statistical profiling, BRBE branch records, and DBGBCR/DBGWCR breakpoints for anti-debug bypass. Covers VMP devirtualization, OLLVM deflattening, PIE/SO dynamic analysis, crash triage, and game performance hotspots.",
+      "assetPath": "builtin_skills/hw-trace",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "anti-frida-bypass",
+      "name": "anti-frida-bypass",
+      "description": "反 Frida/反调试检测面汇总与绕过：maps/端口/线程名/TracerPid/签名校验定位与规避，配合硬件断点（hw-trace）兜底。",
+      "assetPath": "builtin_skills/anti-frida-bypass",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "capture-mitm",
+      "name": "capture-mitm",
+      "description": "移动端抓包与中间人链路：tcpdump 采集、mitmproxy 改包、系统证书、SSL Pinning 绕过、双向认证与会话重组。",
+      "assetPath": "builtin_skills/capture-mitm",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "il2cpp-dump",
+      "name": "il2cpp-dump",
+      "description": "Unity IL2CPP 与 UE 游戏 dump：Il2CppDumper/Zygisk 提取类结构、libil2cpp 符号恢复、GObjects/GNames 定位与偏移分析。",
+      "assetPath": "builtin_skills/il2cpp-dump",
       "hasScripts": false,
       "hasReferences": false,
       "hasAssets": false,

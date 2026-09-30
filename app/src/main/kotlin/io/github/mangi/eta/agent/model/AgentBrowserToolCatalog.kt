@@ -8,7 +8,7 @@ internal object AgentBrowserToolCatalog {
         tools.put(
             AgentToolSchema.function(
                 name = "browser_use",
-                description = "操作 Eta 共享的离屏 Agent 浏览器，不会切换到外部浏览器。一次调用只执行一个 action；网页浏览通常先 navigate，再用 get_readable 提取正文，或用 find_elements 查找可交互元素。支持 run_js 在当前页面执行任意 JavaScript，以及油猴（用户脚本）管理：add_script 安装（source 内联或 url 下载 .user.js）、list_scripts 列出、toggle_script 启停、remove_script 删除、debug_scripts 诊断注入链路；安装过的脚本按 @match/@include 在页面加载时自动注入并提供 GM_* API，注入结果可用 get_page_info 的 userscripts 字段核对。需要把 URI 显式交给外部应用时使用 open_uri。",
+                description = "操作 Eta 共享的离屏 Agent 浏览器，不会切换到外部浏览器。一次调用只执行一个 action；网页浏览通常先 navigate，再用 get_readable 提取正文，或用 find_elements 查找可交互元素。支持 run_js 在当前页面执行任意 JavaScript，以及油猴（用户脚本）管理：add_script 安装（source 内联或 url 下载 .user.js）、list_scripts 列出、toggle_script 启停、remove_script 删除、debug_scripts 诊断注入链路；安装过的脚本按 @match/@include 在页面加载时自动注入并提供 GM_* API，注入结果可用 get_page_info 的 userscripts 字段核对。支持请求拦截与改包：set_intercept 开启记录，list_requests/clear_requests 查看与清空，add_intercept_replace 按 URL 子串替换响应（body/mime_type/status），clear_intercept_replace 删除规则。需要把 URI 显式交给外部应用时使用 open_uri。",
                 parameters = JSONObject()
                     .put("type", "object")
                     .put(
@@ -41,6 +41,11 @@ internal object AgentBrowserToolCatalog {
                                             .put("toggle_script")
                                             .put("remove_script")
                                             .put("debug_scripts")
+                                            .put("set_intercept")
+                                            .put("add_intercept_replace")
+                                            .put("clear_intercept_replace")
+                                            .put("list_requests")
+                                            .put("clear_requests")
                                     )
                             )
                             .put(
@@ -138,7 +143,37 @@ internal object AgentBrowserToolCatalog {
                                 "enabled",
                                 JSONObject()
                                     .put("type", "boolean")
-                                    .put("description", "toggle_script 的目标状态；缺省时在启用与停用之间切换。")
+                                    .put("description", "toggle_script 的目标状态（缺省切换）；set_intercept 的拦截开关。")
+                            )
+                            .put(
+                                "match",
+                                JSONObject()
+                                    .put("type", "string")
+                                    .put("description", "add_intercept_replace / clear_intercept_replace 的 URL 匹配子串。")
+                            )
+                            .put(
+                                "body",
+                                JSONObject()
+                                    .put("type", "string")
+                                    .put("description", "add_intercept_replace 的替换响应正文。")
+                            )
+                            .put(
+                                "mime_type",
+                                JSONObject()
+                                    .put("type", "string")
+                                    .put("description", "add_intercept_replace 的响应 MIME，缺省 text/html。")
+                            )
+                            .put(
+                                "encoding",
+                                JSONObject()
+                                    .put("type", "string")
+                                    .put("description", "add_intercept_replace 的响应编码，缺省 utf-8。")
+                            )
+                            .put(
+                                "status",
+                                JSONObject()
+                                    .put("type", "integer")
+                                    .put("description", "add_intercept_replace 的响应状态码，缺省 200。")
                             )
                     )
                     .put("required", JSONArray().put("action"))

@@ -264,20 +264,42 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.build_type.outputs.type == 'release' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ github.run_number }}
-          name: "Eta v${{ github.run_number }} - ${{ steps.build_type.outputs.type }}"
-          body: |
-            Automated build from commit `${{ github.sha }}`
-
-            **Skills**: ${{ needs.sync-skills.outputs.skill_count || 'N/A' }} adapted from hanshuang-codex
-            **Build type**: ${{ steps.build_type.outputs.type }}
-            **Date**: ${{ github.event.head_commit.timestamp || 'manual trigger' }}
-          files: ${{ env.APK_PATH }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ github.run_number }}
+          SKILL_COUNT: ${{ needs.sync-skills.outputs.skill_count || 'N/A' }}
+          BUILD_TYPE: ${{ steps.build_type.outputs.type }}
+          COMMIT_TS: ${{ github.event.head_commit.timestamp || 'manual trigger' }}
+        run: |
+          set -e
+          APK="${APK_PATH:-app/build/outputs/apk/release/app-release.apk}"
+          [ -f "$APK" ] || { echo "::error::APK not found: $APK"; exit 1; }
+
+          # 清理上次失败留下的无资产草稿（v58 事故的复现防护）
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            ASSETS=$(gh release view "$TAG" --json assets --jq 'length(.assets)')
+            IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft')
+            if [ "$ASSETS" -eq 0 ] && [ "$IS_DRAFT" = "true" ]; then
+              echo "Removing stale empty draft $TAG"
+              gh release delete "$TAG" --yes || true
+            fi
+          fi
+
+          # 创建（含重试 3 次；瞬时 API 错误如 "other side closed" 常见于此步骤）
+          ok=""
+          for i in 1 2 3; do
+            if gh release create "$TAG" "$APK" \
+                --title "Eta $TAG - release" \
+                --notes "Automated build from commit ${GITHUB_SHA}. Skills: ${SKILL_COUNT} adapted. Build type: ${BUILD_TYPE}. Date: ${COMMIT_TS}." \
+                --latest; then
+              ok=1; break
+            fi
+            # 已存在（并发/重跑）→ 上传覆盖并发布
+            if gh release upload "$TAG" "$APK" --clobber 2>/dev/null; then
+              gh release edit "$TAG" --draft=false --latest && { ok=1; break; }
+            fi
+            echo "attempt $i failed; retrying in 10s"
+            sleep 10
+          done
+          [ -n "$ok" ] || { echo "::error::release create failed after 3 attempts"; exit 1; }
+          gh release view "$TAG" --json tagName,isDraft,assets --jq '{tag:.tagName,draft:.isDraft,assets:[.assets[].name]}'
