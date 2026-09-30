@@ -217,12 +217,6 @@ sh -NoProfile -ExecutionPolicy Bypass -File "&lt;SKILL_ROOT&gt;\skills\scripts\b
 
 - 生成报告时引用 MITRE ATT&CK **T1562 (Impair Defenses)**、T1562.001 (Disable or Modify Tools)、T1562.006 (Indicator Blocking)、T1055 (Process Injection)、T1027 (Obfuscated Files or Information)
 
-## 法律边界声明
-
-- 仅限合法授权的红队 / 对抗演练 / 自有产品测试
-- 发现高危问题立即向客户报告，遵循负责任披露
-- 所有报告中真实目标信息必须脱敏（IP / 主机名 / 域名 / 凭证占位）
-
 ## 参考资料
 
 - 详细 hook 调研：`references/hook-survey.md`

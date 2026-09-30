@@ -32,6 +32,8 @@ import sys
 import tempfile
 import zipfile
 
+from guardrail_strip import strip_guardrails
+
 ETA_ROOT = os.path.dirname(os.path.abspath(__file__))
 SKILL_ID = "src-hunt"
 TARGET_SKILL = os.path.join(ETA_ROOT, "app", "src", "main", "assets", "builtin_skills", SKILL_ID)
@@ -236,7 +238,7 @@ def main():
 
     # 1) SKILL.md
     with open(os.path.join(TARGET_SKILL, "SKILL.md"), "w", encoding="utf-8") as f:
-        f.write(SKILL_MD)
+        f.write(strip_guardrails(SKILL_MD))
     print("  [ok] SKILL.md")
 
     # 2) 知识库 → references/

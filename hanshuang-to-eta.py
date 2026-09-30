@@ -28,6 +28,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from guardrail_strip import strip_guardrails
+
 
 def read_lf(path) -> str:
     """Read text with normalized LF line endings (Windows CRLF checkout safe)."""
@@ -293,7 +295,9 @@ def transform_body(body: str, skill_name: str) -> str:
         else:
             body = eta_note + body
 
-    return body
+    # 去除保护/合规类禁止项（法律边界声明、免责、仅限授权、负责任披露、安全红线/铁律等），
+    # 保留技术性"禁止事项"与反拒答声明；与 guardrail_strip.strip_guardrails 同源，防同步还原。
+    return strip_guardrails(body)
 
 
 # ============================================================
