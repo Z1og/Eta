@@ -45,5 +45,7 @@ object ReverseSkillCatalog {
         "xigong-funk-hikari", "yingan-tuoxiu",
         // SRC 漏洞挖掘 / 白盒审计（clown-src 工作流适配）
         "src-hunt",
+        // 硬件追踪与硬件断点（CoreSight ETE/TRBE/SPE/BRBE，社区建议落地）
+        "hw-trace",
     )
 }

@@ -74,6 +74,9 @@ internal object ReverseSignalRouter {
         "burpsuite" to listOf("api-security"),
         "ffuf" to listOf("network-pentest"),
         "hydra" to listOf("network-pentest"),
+        "coresight" to listOf("hw-trace"),
+        "cs_etm" to listOf("hw-trace"),
+        "trbe" to listOf("hw-trace"),
     )
 
     fun route(
