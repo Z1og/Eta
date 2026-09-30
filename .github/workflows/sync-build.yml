@@ -1,9 +1,9 @@
 name: Sync Skills & Build APK
 
 on:
-  # 每 4 小时自动同步（UTC 0/4/8/12/16/20 = 北京 8/12/16/20/0/4 点）
+  # 每日一次统一管线（UTC 2:00 = 北京 10:00）：上游 merge → 技能适配 → 编译发布
   schedule:
-    - cron: '0 0,4,8,12,16,20 * * *'
+    - cron: '0 2 * * *'
   # 接收外部 webhook 触发（上游更新时可用 curl 触发）
   repository_dispatch:
     types: [hanshuang-codex-updated]
@@ -40,9 +40,72 @@ concurrency:
 
 jobs:
   # ──────────────────────────────────────────────
-  # Job 1: 同步 + 适配 hanshuang-codex Skills
+  # Job 0: 同步上游 Eta 代码（定时/手动/webhook 时运行；push 事件主分支已是最新，跳过）
+  # ──────────────────────────────────────────────
+  sync-upstream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name != 'push'
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Merge upstream changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git remote add upstream https://github.com/Mangi-11/Eta.git 2>/dev/null || true
+          git fetch upstream main
+          git config user.name "Z1og"
+          git config user.email "59019705+Z1og@users.noreply.github.com"
+
+          BEHIND=$(git rev-list --count HEAD..upstream/main)
+          echo "behind=$BEHIND"
+          if [[ "$BEHIND" -eq 0 ]]; then
+            echo "Upstream already merged"
+            exit 0
+          fi
+
+          if git merge upstream/main --no-edit; then
+            git push origin main
+            exit 0
+          fi
+
+          # 冲突：生成产物路径自动取 fork 版（由适配器重建，不丢上游功能）
+          RESOLVABLE=true
+          for f in $(git diff --name-only --diff-filter=U); do
+            case "$f" in
+              hanshuang-eta-skills/*|app/src/main/assets/builtin_skills/*)
+                git checkout --ours "$f" && git add "$f"
+                echo "auto-resolved (ours): $f"
+                ;;
+              *)
+                RESOLVABLE=false
+                ;;
+            esac
+          done
+
+          if [[ "$RESOLVABLE" == "true" ]]; then
+            GIT_EDITOR=true git merge --continue
+            git push origin main
+          else
+            git merge --abort
+            gh issue create -R Z1og/Eta \
+              --title "上游合并冲突：需要手动解决" \
+              --body "上游 Mangi-11/Eta 更新与 fork 代码冲突，本次跳过上游合并；技能适配与构建照常进行。冲突文件见 workflow 日志。" \
+              || echo "::warning::issue create failed"
+            echo "::error::代码冲突，已跳过上游合并（技能适配与构建照常）"
+          fi
+
+  # ──────────────────────────────────────────────
+  # Job 1: 同步 + 适配技能源（上游 merge 完成后再跑，保证基于最新 main）
   # ──────────────────────────────────────────────
   sync-skills:
+    needs: [sync-upstream]
+    if: always()
     runs-on: ubuntu-latest
     outputs:
       has_changes: ${{ steps.check_changes.outputs.has_changes }}
@@ -127,7 +190,7 @@ jobs:
   # Job 2: 编译 APK（照搬上游已验证配置）
   # ──────────────────────────────────────────────
   build-apk:
-    needs: sync-skills
+    needs: [sync-upstream, sync-skills]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -218,23 +281,3 @@ jobs:
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ──────────────────────────────────────────────
-  # Job 3: 检查上游更新（仅通知，不阻塞）
-  # ──────────────────────────────────────────────
-  check-upstream:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule'
-    steps:
-      - name: Check for upstream changes
-        run: |
-          UPSTREAM_SHA=$(curl -s "https://api.github.com/repos/aimeoa/hanshuang-codex/commits/main" | jq -r '.sha')
-          echo "Upstream latest: $UPSTREAM_SHA"
-          if [[ -n "$UPSTREAM_SHA" && "$UPSTREAM_SHA" != "null" ]]; then
-            echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_ENV"
-          fi
-
-      - name: Notify if update available
-        if: env.upstream_sha != ''
-        run: |
-          echo "::notice::hanshuang-codex upstream has new commits ($upstream_sha). Skills will be synced in the next build."

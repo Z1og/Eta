@@ -1,11 +1,8 @@
 name: Sync Upstream Eta
 
 on:
-  # 每 4 小时检查 Eta 上游更新（UTC 1/5/9/13/17/21 = 北京 9/13/17/21/1/5 点）
-  # 错开 sync-build.yml 的时间避免同时跑
-  schedule:
-    - cron: '0 1,5,9,13,17,21 * * *'
-  # 手动触发
+  # 每日统一同步已由 sync-build.yml 内置（UTC 2:00）。
+  # 本 workflow 仅保留手动触发与外部 webhook（eta-upstream-updated），用于即时同步上游。
   workflow_dispatch:
   # 接收外部 webhook
   repository_dispatch:

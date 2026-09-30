@@ -211,14 +211,15 @@ Eta 先从现有 Android 上的模型、上下文与工具做起。真正落地�
 
 ## 自动同步与编译
 
-项目配置了 CI/CD 自动化，上游或技能源更新时自动适配并编译 APK：
+项目配置了 CI/CD 自动化，**每日一次统一管线**（北京时间上午 10 点）串行执行：合并上游 Eta → 适配技能源 → 编译并发布 Release：
 
-| 来源 | 同步机制 | 延迟 |
+| 来源 | 同步机制 | 频率 |
 |---------|---------|------|
-| 上游 Eta（[Mangi-11/Eta](https://github.com/Mangi-11/Eta)） | `sync-upstream.yml` 每 4h 检测 → 自动 merge | ≤4h |
-| 技能源（社区开源技能仓库） | `sync-build.yml` 每 4h 检测 → 自动适配 → 编译 | ≤4h |
+| 上游 Eta（[Mangi-11/Eta](https://github.com/Mangi-11/Eta)） | `sync-build.yml` Job 0：自动 merge（生成产物路径冲突自动取 fork 版，代码冲突自动建 issue 留痕） | 每 24h |
+| 技能源（社区开源技能仓库） | `sync-build.yml` Job 1：三源合流适配，存量技能动态保留 | 每 24h |
+| 编译发布 | `sync-build.yml` Job 2：签名 release APK → GitHub Release | 随每轮管线 |
 
-也支持 `repository_dispatch` Webhook 即时触发，以及手动触发 debug/release 构建。技能由仓库内置的自动化适配脚本转换为 Eta 运行环境格式，详见 [`.github/workflows/`](.github/workflows/) 与仓库根目录脚本。
+也支持 `repository_dispatch` Webhook 即时触发（`eta-upstream-updated` / `hanshuang-codex-updated`）、手动触发完整管线或仅构建（`build-only.yml`）；推送实质变更到 main 同样会触发构建。详见 [`.github/workflows/`](.github/workflows/) 与仓库根目录适配脚本。
 
 ## 参考与致谢
 
