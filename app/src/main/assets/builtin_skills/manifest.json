@@ -331,6 +331,16 @@
       "hasEvals": false
     },
     {
+      "id": "src-hunt",
+      "name": "src-hunt",
+      "description": "SRC 漏洞挖掘 + 白盒 0day 审计全流程技能（黑盒渗透 + 白盒源码审计 + 中文报告，含 49 篇知识库与 12 条行为规则）。",
+      "assetPath": "builtin_skills/src-hunt",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
       "id": "anti-cheat-systems",
       "name": "anti-cheat-systems",
       "description": "Guide for modern game anti-cheat architecture, Windows kernel monitoring, and detection tradeoffs. Use this skill when analyzing EAC, BattlEye, Vanguard, FACEIT AC, kernel callbacks, handle protection",
@@ -1847,16 +1857,6 @@
       "assetPath": "builtin_skills/yingan-tuoxiu",
       "hasScripts": false,
       "hasReferences": false,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "src-hunt",
-      "name": "src-hunt",
-      "description": "SRC 漏洞挖掘 + 白盒 0day 审计全流程技能（黑盒渗透 + 白盒源码审计 + 中文报告，含 49 篇知识库与 12 条行为规则）。",
-      "assetPath": "builtin_skills/src-hunt",
-      "hasScripts": false,
-      "hasReferences": true,
       "hasAssets": false,
       "hasEvals": false
     }
