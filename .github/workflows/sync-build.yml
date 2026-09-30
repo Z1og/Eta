@@ -74,16 +74,30 @@ jobs:
             exit 0
           fi
 
-          # 冲突：生成产物路径自动取 fork 版（由适配器重建，不丢上游功能）
+          # 冲突处理：
+          # - manifest.json → 并集合并（不丢上游新技能，也不丢 fork 技能）
+          # - 技能生成物 / fork 自维护 CI → 取 fork 版（ours，由适配器/本仓库重建）
+          # - 其余代码文件冲突 → 中止合并并开 issue（列明冲突文件，等手动处理）
           RESOLVABLE=true
+          CONFLICT_LIST=""
           for f in $(git diff --name-only --diff-filter=U); do
             case "$f" in
-              hanshuang-eta-skills/*|app/src/main/assets/builtin_skills/*)
+              app/src/main/assets/builtin_skills/manifest.json)
+                if python3 merge-manifest.py "$f"; then
+                  git add "$f"
+                  echo "auto-resolved (union): $f"
+                else
+                  RESOLVABLE=false
+                  CONFLICT_LIST="${CONFLICT_LIST}- $f（并集合并失败）"$'\n'
+                fi
+                ;;
+              hanshuang-eta-skills/*|app/src/main/assets/builtin_skills/*|.github/workflows/*)
                 git checkout --ours "$f" && git add "$f"
                 echo "auto-resolved (ours): $f"
                 ;;
               *)
                 RESOLVABLE=false
+                CONFLICT_LIST="${CONFLICT_LIST}- $f"$'\n'
                 ;;
             esac
           done
@@ -95,7 +109,10 @@ jobs:
             git merge --abort
             gh issue create -R Z1og/Eta \
               --title "上游合并冲突：需要手动解决" \
-              --body "上游 Mangi-11/Eta 更新与 fork 代码冲突，本次跳过上游合并；技能适配与构建照常进行。冲突文件见 workflow 日志。" \
+              --body "上游 Mangi-11/Eta 更新与 fork 代码冲突，本次跳过上游合并；技能适配与构建照常进行。
+
+          冲突文件（手动解决后可用 workflow_dispatch 重跑本管线）：
+          ${CONFLICT_LIST:-（详见 workflow 日志）}" \
               || echo "::warning::issue create failed"
             echo "::error::代码冲突，已跳过上游合并（技能适配与构建照常）"
           fi
