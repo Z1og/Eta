@@ -24,7 +24,9 @@ import io.github.mangi.eta.agent.skill.SkillRuntime
 import io.github.mangi.eta.agent.skill.SkillTriggerMatcher
 import io.github.mangi.eta.agent.skill.PublicGitHubSkillSource
 import io.github.mangi.eta.agent.skill.ProjectSpecDetector
+import io.github.mangi.eta.agent.skill.ReverseSignalRouter
 import io.github.mangi.eta.agent.skill.ReverseSkillCatalog
+import io.github.mangi.eta.agent.skill.SkillTriggerSignals
 import io.github.mangi.eta.agent.tool.AgentLocalTools
 import io.github.mangi.eta.agent.tool.AgentToolRequirements
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
@@ -97,11 +99,47 @@ internal class AgentRuntimeRunExecutor(
             )
             val compatibleSkills = skillIndexService.listInstalledSkills()
                 .filter { SkillCompatibilityChecker.evaluate(it).available }
+            // 逆向模式状态：所有已安装逆向技能均启用即视为开启（与技能页主开关判定一致）。
+            // 失败静默降级为关闭，不影响正常对话。
+            val reverseModeEnabled = if (request.operation == AgentRuntimeWire.OP_REWRITE_REPLY) {
+                false
+            } else {
+                runCatching {
+                    val reverseInstalled = skillIndexService.listSkillsForManagement()
+                        .filter { it.installed && it.id in ReverseSkillCatalog.REVERSE_SKILL_IDS }
+                    reverseInstalled.isNotEmpty() && reverseInstalled.all { it.enabled }
+                }.onFailure { throwable ->
+                    AndroidAgentLogger.warnThrottled("reverse_mode_state_failed") {
+                        "Reverse mode state detection failed: type=${throwable.safeLogType()}"
+                    }
+                }.getOrDefault(false)
+            }
             // 关键词触发：用户消息命中 SKILL.md triggers 时自动加载正文（改写回复等非任务操作不触发）。
+            // 增强：匹配信号从「单条消息」扩为「本轮消息 + 最近若干轮对话尾」；一并启用
+            // 扩展名强命中（frontmatter `ext`）、逆向模式偏置与同族去冗余；零关键词命中时
+            // 再按文件扩展名/工具名走结构化兜底路由（ReverseSignalRouter）。
             val autoLoadedSkills = if (request.operation == AgentRuntimeWire.OP_REWRITE_REPLY) {
                 emptyList()
             } else {
-                SkillTriggerMatcher.match(prompt = request.prompt, skills = compatibleSkills)
+                val triggerText = SkillTriggerSignals.buildText(request.prompt, request.history)
+                val triggerInput = SkillTriggerMatcher.Input(
+                    text = triggerText,
+                    extensions = SkillTriggerMatcher.detectExtensions(triggerText),
+                )
+                val byKeyword = SkillTriggerMatcher.match(
+                    input = triggerInput,
+                    skills = compatibleSkills,
+                    reverseSkillIds = ReverseSkillCatalog.REVERSE_SKILL_IDS,
+                    reverseBias = reverseModeEnabled,
+                )
+                val bySignal = ReverseSignalRouter.route(
+                    text = triggerText,
+                    skills = compatibleSkills,
+                    maxMatches = SkillTriggerMatcher.MAX_AUTO_LOADED,
+                )
+                (byKeyword + bySignal)
+                    .distinctBy { it.id }
+                    .take(SkillTriggerMatcher.MAX_AUTO_LOADED)
                     .mapNotNull { entry ->
                         runCatching { skillLoader.load(entry, "trigger-keyword") }
                             .onFailure { throwable ->
@@ -124,21 +162,6 @@ internal class AgentRuntimeRunExecutor(
                         }
                     }
                     .getOrNull()
-            }
-            // 逆向模式状态：所有已安装逆向技能均启用即视为开启（与技能页主开关判定一致）。
-            // 失败静默降级为关闭，不影响正常对话。
-            val reverseModeEnabled = if (request.operation == AgentRuntimeWire.OP_REWRITE_REPLY) {
-                false
-            } else {
-                runCatching {
-                    val reverseInstalled = skillIndexService.listSkillsForManagement()
-                        .filter { it.installed && it.id in ReverseSkillCatalog.REVERSE_SKILL_IDS }
-                    reverseInstalled.isNotEmpty() && reverseInstalled.all { it.enabled }
-                }.onFailure { throwable ->
-                    AndroidAgentLogger.warnThrottled("reverse_mode_state_failed") {
-                        "Reverse mode state detection failed: type=${throwable.safeLogType()}"
-                    }
-                }.getOrDefault(false)
             }
             val skillContext = SkillContext(
                 installedSkills = compatibleSkills,

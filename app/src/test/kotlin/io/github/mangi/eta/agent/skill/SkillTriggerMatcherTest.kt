@@ -84,4 +84,98 @@ class SkillTriggerMatcherTest {
         val matched = SkillTriggerMatcher.match("关键词", skills)
         assertEquals(1, matched.size)
     }
+
+    private fun skillExt(id: String, extensions: List<String>, vararg triggers: String) = SkillIndexEntry(
+        id = id,
+        name = id,
+        description = "desc $id",
+        rootPath = "/tmp/skills/$id",
+        skillFilePath = "/tmp/skills/$id/SKILL.md",
+        hasScripts = false,
+        hasReferences = false,
+        hasAssets = false,
+        hasEvals = false,
+        triggers = triggers.toList(),
+        extensions = extensions,
+    )
+
+    private fun skillWeighted(id: String, weight: Double, vararg triggers: String) = SkillIndexEntry(
+        id = id,
+        name = id,
+        description = "desc $id",
+        rootPath = "/tmp/skills/$id",
+        skillFilePath = "/tmp/skills/$id/SKILL.md",
+        hasScripts = false,
+        hasReferences = false,
+        hasAssets = false,
+        hasEvals = false,
+        triggers = triggers.toList(),
+        triggerWeight = weight,
+    )
+
+    @Test
+    fun `extension signal strongly matches skill without keyword`() {
+        val skills = listOf(
+            skillExt("apk-reverse", listOf("apk")),
+            skill("unrelated", "完全无关的词"),
+        )
+        val text = "帮我看看这个 demo.apk 怎么回事"
+        val input = SkillTriggerMatcher.Input(text, SkillTriggerMatcher.detectExtensions(text))
+        assertEquals(
+            listOf("apk-reverse"),
+            SkillTriggerMatcher.match(input, skills).map { it.id },
+        )
+    }
+
+    @Test
+    fun `detectExtensions finds lowercase extensions`() {
+        assertEquals(
+            setOf("apk", "so"),
+            SkillTriggerMatcher.detectExtensions("dump 出 libx.SO 与 a.apk"),
+        )
+    }
+
+    @Test
+    fun `reverse bias reorders tied non-reverse vs reverse skill`() {
+        val skills = listOf(
+            skill("plain", "逆向"),
+            skill("apk-reverse", "逆向"),
+        )
+        val unbiased = SkillTriggerMatcher.match("逆向", skills)
+        assertEquals(listOf("plain", "apk-reverse"), unbiased.map { it.id })
+
+        val biased = SkillTriggerMatcher.match(
+            input = SkillTriggerMatcher.Input("逆向"),
+            skills = skills,
+            reverseSkillIds = setOf("apk-reverse"),
+            reverseBias = true,
+        )
+        assertEquals(listOf("apk-reverse", "plain"), biased.map { it.id })
+    }
+
+    @Test
+    fun `higher trigger weight wins on equal hit length`() {
+        val skills = listOf(
+            skillWeighted("low", 1.0, "关键词"),
+            skillWeighted("high", 2.0, "关键词"),
+        )
+        assertEquals(
+            listOf("high", "low"),
+            SkillTriggerMatcher.match("关键词", skills).map { it.id },
+        )
+    }
+
+    @Test
+    fun `heavy family is deduplicated to one slot`() {
+        val skills = listOf(
+            skill("eni-apk-reverse", "逆向"),
+            skill("eni-binary-diff", "逆向"),
+            skill("eni-js-reverse", "逆向"),
+            skill("eni-reverse-deep", "逆向"),
+            skill("apk-reverse", "逆向"),
+        )
+        val matched = SkillTriggerMatcher.match("逆向", skills).map { it.id }
+        assertEquals(1, matched.count { it.startsWith("eni-") })
+        assertTrue("apk-reverse" in matched)
+    }
 }

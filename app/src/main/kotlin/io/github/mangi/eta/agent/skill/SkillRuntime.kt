@@ -530,7 +530,12 @@ class SkillIndexService(
             source = registryState?.source?.ifBlank { null }
                 ?: if (builtinAsset != null) BUILTIN_SOURCE else USER_SOURCE,
             installed = true,
-            triggers = parseTriggers(frontmatter["triggers"]),
+            // 触发词 = `triggers` + `aliases`（同义/英文/别名），合并去重；
+            // 扩展名与权重为可选增强字段，缺省不影响既有技能。
+            triggers = (parseTriggers(frontmatter["triggers"]) + parseTriggers(frontmatter["aliases"]))
+                .distinct(),
+            extensions = parseExtensions(frontmatter["ext"]),
+            triggerWeight = parseTriggerWeight(frontmatter["trigger_weight"]),
         )
     }
 
@@ -544,8 +549,25 @@ class SkillIndexService(
             .map { it.trim().trim('-').trim() }
             .filter { it.isNotBlank() && it.lowercase() != "null" }
             .distinct()
-            .take(20)
+            .take(40)
     }
+
+    /**
+     * 解析 frontmatter `ext` 字段——扩展名触发信号（逗号/换行分隔）。
+     * 允许写成 `.apk` / `apk` / `*.apk`，统一归一化为小写、不含点与通配符。
+     */
+    private fun parseExtensions(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.split('\n', ',')
+            .map { it.trim().trim('-').trim().removePrefix("*").removePrefix(".").lowercase() }
+            .filter { it.isNotBlank() && it.all { c -> c.isLetterOrDigit() } }
+            .distinct()
+            .take(30)
+    }
+
+    /** 解析 frontmatter `trigger_weight`——命中得分乘数，限定 [0.1, 10.0]，缺省 1.0。 */
+    private fun parseTriggerWeight(raw: String?): Double =
+        raw?.trim()?.toDoubleOrNull()?.coerceIn(0.1, 10.0) ?: 1.0
 
     private fun buildBuiltinPlaceholder(
         builtin: BuiltinSkillAsset,

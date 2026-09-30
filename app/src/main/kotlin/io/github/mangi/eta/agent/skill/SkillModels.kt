@@ -23,6 +23,16 @@ data class SkillIndexEntry(
     val installed: Boolean = true,
     /** 关键词触发列表——用户消息包含任一关键词时自动加载该 Skill 正文。 */
     val triggers: List<String> = emptyList(),
+    /**
+     * 扩展名触发信号——消息/附件里出现这些扩展名时强命中该技能（不含点、小写，
+     * 对应 frontmatter `ext`）。用于 `.apk`/`.so` 这类无关键词但意图明确的逆向场景。
+     */
+    val extensions: List<String> = emptyList(),
+    /**
+     * 触发权重——命中得分乘数（对应 frontmatter `trigger_weight`，默认 1.0）。
+     * 用于在同类技能中抬高更精准技能、压低泛词技能。
+     */
+    val triggerWeight: Double = 1.0,
 )
 
 /**
