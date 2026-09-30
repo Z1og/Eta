@@ -2,9 +2,9 @@
 
 **简体中文** | [English](README_EN.md)
 
-<p><a href="https://github.com/Z1og/Eta/releases"><img src="https://img.shields.io/github/downloads/Z1og/Eta/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"> <img src="https://img.shields.io/badge/Skills-185%20%E5%86%85%E7%BD%AE-7F52FF" alt="185 built-in skills"></p>
+<p><a href="https://github.com/Z1og/Eta/releases"><img src="https://img.shields.io/github/downloads/Z1og/Eta/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"> <img src="https://img.shields.io/badge/Skills-186%20%E5%86%85%E7%BD%AE-7F52FF" alt="186 built-in skills"></p>
 
-**面向 Android 的系统级 AI 助手 · 内置 185 个技能，其中 82 个为逆向与安全研究技能，一键开启**
+**面向 Android 的系统级 AI 助手 · 内置 186 个技能，其中 83 个为逆向与安全研究技能，一键开启**
 
 Eta 是面向 Android 的系统级 AI Agent：直接调用系统 API 与工具完成任务，支持 Skills 与 MCP 扩展。本版本在上游 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 Agent 运行时之上，内置了覆盖**逆向工程、渗透测试、游戏安全与移动安全**的完整技能体系，随 App 预装、开箱即用，专为手机上的逆向与安全研究场景打磨。
 
@@ -67,7 +67,7 @@ Runtime 同时管理流式事件、steering、取消和增量 transcript。追�
 
 ## 内置逆向与安全技能
 
-本版本内置 **185 个技能**，其中 **82 个**为逆向工程与安全研究方向，随 App 预装、开箱即用：
+本版本内置 **186 个技能**，其中 **83 个**为逆向工程与安全研究方向，随 App 预装、开箱即用：
 
 - **逆向工程**：APK / DEX / SO 逆向，IDA、Ghidra、Binary Ninja、radare2 反编译与分析，二进制分析与补丁对比，.NET 逆向，JS 逆向，协议逆向，虚拟机保护还原，浏览器插件与 macOS 逆向。
 - **动态分析**：Frida 动态插桩与 Hook 模板、内存取证、脱壳与重打包、ELF 本地鉴权 patch。
@@ -77,7 +77,7 @@ Runtime 同时管理流式事件、steering、取消和增量 transcript。追�
 
 ### 逆向模式：一键开关
 
-「技能」页顶部提供**逆向模式**总开关，一键启停全部 82 个逆向类技能。开启后：
+「技能」页顶部提供**逆向模式**总开关，一键启停全部 83 个逆向类技能。开启后：
 
 - 运行时常驻注入**逆向交付契约**：首行以标题或代码块命名交付物、缺失参数自造占位符（TARGET / OFFSET / HOOK_FN）、每步给可执行命令与完整代码——所有逆向与安全任务按统一格式直接出结果，不停留在思路描述。
 - 全部逆向技能进入任务索引：消息命中技能关键词时正文自动注入，也可由模型按语义经 `skills_read` 按需加载，单个任务最多取用 2-3 个最相关技能。
@@ -89,6 +89,17 @@ Runtime 同时管理流式事件、steering、取消和增量 transcript。追�
 - **Frida 动态分析模板**：Java / Native 层 Hook、SSL Pinning 与 Root 检测绕过、加密函数追踪、强制返回值桩替换。
 - **账号枚举与爆破模板**：登录接口响应差异探测、hydra / ffuf 词表爆破、分片并行与限流规避。
 - **APK / DEX / SO 全流程模板**：解包 → 校验点定位 → smali / SO patch → 重打包签名 → 加固识别与脱壳。
+
+### SRC 漏洞挖掘工作流（src-hunt）
+
+由 clown-src SRC 工作流适配进 Eta 的第一方安全研究技能，沉淀「授权 SRC 挖洞 + 白盒 0day 审计」的完整方法论，通过 `skills_read_resource` 按需取用：
+
+- **黑盒 SRC 挖洞**：锁面 / 自由跳范围模式、一种子闭环节奏、价值导向挖什么（越权/注入/SSRF/XSS/RCE/逻辑/认证接管）、进站打法路由表，直接对准有差分面打，不空扫、不误报、不堆低危。
+- **白盒 0day 审计**：Phase 0～6 源码审计流程（Linux Kernel / Chromium / Laravel / Spring / Django 等）。
+- **知识库 49 篇**：idor / injection / ssrf / xss / file-upload / logic / graphql / oauth-jwt / race-condition / http-smuggling / cache-poisoning / deserialization / xxe / prototype-pollution / waf-bypass / cloud-ide-codex-rce-chain / agent-tool-exec 等测试模板，进站先开 `打穿短表.md` 当开场几枪。
+- **行为规则 12 条**：dig-scope-workflow（范围/节奏）、src-value-hunting（挖什么）、vuln-report-format（报告唯一格式）、anti-over-moralization（反误拒反说教）、hunt-iter（能力迭代）等。
+- **资产测绘**：FOFA MCP 源码与 Alpine 下用法（`references/fofa-mcp/` + `references/fofa-recon.md`），或直连 FOFA REST API；多账号限流闸认 dig-scope §2.1.4。
+- **安全红线**：越权最小伤害、禁止登出用户会话、CORS 永久不挖、禁止真资损与破坏性利用。
 
 ### 技能环境适配
 

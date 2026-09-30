@@ -43,5 +43,7 @@ object ReverseSkillCatalog {
         "eni-game-cheat-lab-workflow", "eni-game-hacking", "eni-game-security",
         // 专项
         "xigong-funk-hikari", "yingan-tuoxiu",
+        // SRC 漏洞挖掘 / 白盒审计（clown-src 工作流适配）
+        "src-hunt",
     )
 }
