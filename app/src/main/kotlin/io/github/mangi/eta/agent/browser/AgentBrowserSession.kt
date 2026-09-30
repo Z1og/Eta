@@ -93,6 +93,8 @@ internal object AgentBrowserSession {
     private const val PREVIEW_MAX_WIDTH = 480
     private const val PREVIEW_MAX_HEIGHT = 900
     private const val PREVIEW_QUALITY = 60
+    private const val MAX_RUN_JS_CHARS = 200_000
+    private const val USERSCRIPT_IDLE_DELAY_MS = 150L
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val operationLock = ReentrantLock()
@@ -164,6 +166,7 @@ internal object AgentBrowserSession {
     private var activeAgentRunId: String? = null
 
     fun initialize(context: Context) {
+        UserScriptEngine.initialize(context)
         if (appContext == null) {
             synchronized(this) {
                 if (appContext == null) appContext = context.applicationContext
@@ -364,6 +367,11 @@ internal object AgentBrowserSession {
                         "go_forward" -> historyNavigation(action, backwards = false)
                         "reload" -> reload()
                         "wait_for_selector" -> waitForSelector(args)
+                        "run_js" -> runJs(args)
+                        "list_scripts" -> listScripts()
+                        "add_script" -> addScript(args)
+                        "toggle_script" -> toggleScript(args)
+                        "remove_script" -> removeScript(args)
                         else -> throw BrowserFailure("INVALID_ACTION", "浏览器 action 无效")
                     }
                 }.getOrElse { throwable -> failureResult(action, throwable) }
@@ -588,6 +596,95 @@ internal object AgentBrowserSession {
         )
     }
 
+    /** run_js：在当前页面上下文执行任意 JS，返回 JSON 安全化的结果或 JS 错误信息。 */
+    private fun runJs(args: JSONObject): BrowserToolResult {
+        val code = args.optString("code").trim()
+        if (code.isBlank()) throw BrowserFailure("INVALID_ARGUMENT", "run_js 缺少 code")
+        require(code.length <= MAX_RUN_JS_CHARS) { "code 超过 ${MAX_RUN_JS_CHARS / 1000}k 字符上限" }
+        val view = requirePage()
+        val value = evaluateObject(view, BrowserDomScripts.runJs(code))
+        val envelope = baseEnvelope("run_js", true, "ok")
+        value.optString("js_error").takeIf(String::isNotBlank)?.let { envelope.put("js_error", it) }
+        val result = value.opt("value")
+        if (result != null && result !== JSONObject.NULL) envelope.put("result", result)
+        return toolResult(envelope)
+    }
+
+    private fun listScripts(): BrowserToolResult {
+        val items = JSONArray()
+        UserScriptEngine.listScripts().forEach { script ->
+            items.put(
+                JSONObject()
+                    .put("id", script.id)
+                    .put("name", script.name)
+                    .put("version", script.version)
+                    .put("description", script.description)
+                    .put("matches", JSONArray(script.matches))
+                    .put("includes", JSONArray(script.includes))
+                    .put("run_at", script.runAt)
+                    .put("enabled", script.enabled)
+                    .put("source_chars", script.source.length)
+            )
+        }
+        return toolResult(
+            baseEnvelope("list_scripts", true, "ok")
+                .put("scripts", items)
+                .put("count", items.length())
+        )
+    }
+
+    private fun addScript(args: JSONObject): BrowserToolResult {
+        val url = args.optString("url").trim()
+        val inline = args.optString("source")
+        val (script, warnings) = when {
+            inline.isNotBlank() -> UserScriptEngine.addScript(inline)
+            url.isNotBlank() -> UserScriptEngine.addScriptFromUrl(url)
+            else -> throw BrowserFailure("INVALID_ARGUMENT", "add_script 需要 source 或 url")
+        }
+        return toolResult(
+            baseEnvelope("add_script", true, "ok")
+                .put(
+                    "script",
+                    JSONObject()
+                        .put("id", script.id)
+                        .put("name", script.name)
+                        .put("version", script.version)
+                        .put("run_at", script.runAt)
+                        .put("matches", JSONArray(script.matches))
+                        .put("includes", JSONArray(script.includes))
+                        .put("enabled", script.enabled)
+                )
+                .put("warnings", JSONArray(warnings))
+        )
+    }
+
+    private fun toggleScript(args: JSONObject): BrowserToolResult {
+        val scriptId = args.optString("script_id").trim()
+        if (scriptId.isBlank()) throw BrowserFailure("INVALID_ARGUMENT", "toggle_script 缺少 script_id")
+        val updated = if (args.has("enabled") && !args.isNull("enabled")) {
+            UserScriptEngine.setEnabled(scriptId, args.optBoolean("enabled"))
+        } else {
+            UserScriptEngine.toggleEnabled(scriptId)
+        } ?: throw BrowserFailure("SCRIPT_NOT_FOUND", "未找到脚本 $scriptId")
+        return toolResult(
+            baseEnvelope("toggle_script", true, "ok")
+                .put("script_id", updated.id)
+                .put("name", updated.name)
+                .put("enabled", updated.enabled)
+        )
+    }
+
+    private fun removeScript(args: JSONObject): BrowserToolResult {
+        val scriptId = args.optString("script_id").trim()
+        if (scriptId.isBlank()) throw BrowserFailure("INVALID_ARGUMENT", "remove_script 缺少 script_id")
+        if (!UserScriptEngine.removeScript(scriptId)) {
+            throw BrowserFailure("SCRIPT_NOT_FOUND", "未找到脚本 $scriptId")
+        }
+        return toolResult(
+            baseEnvelope("remove_script", true, "ok").put("script_id", scriptId)
+        )
+    }
+
     private fun targetFrom(args: JSONObject): BrowserTarget {
         val selector = validatedSelector(args, required = false)
         val hasX = args.has("coordinate_x") && !args.isNull("coordinate_x")
@@ -673,7 +770,10 @@ internal object AgentBrowserSession {
                     settings.displayZoomControls = false
                     webViewClient = BrowserClient()
                     webChromeClient = BrowserChrome()
+                    // 用户脚本（油猴）GM_* API 桥；方法级令牌校验见 EtaScriptBridge。
+                    addJavascriptInterface(EtaScriptBridge(), "EtaGM")
                 }
+                UserScriptEngine.attachHost(view)
                 CookieManager.getInstance().setAcceptCookie(true)
                 CookieManager.getInstance().setAcceptThirdPartyCookies(view, true)
                 contextWrapper = wrapper
@@ -722,6 +822,7 @@ internal object AgentBrowserSession {
         runCatching { view.destroy() }
         webView = null
         contextWrapper = null
+        UserScriptEngine.attachHost(null)
     }
 
     private fun clearSessionStateOnMain() {
@@ -992,6 +1093,10 @@ internal object AgentBrowserSession {
             currentPageVisible = false
             currentProgress = 0
             publishSnapshotOnMain()
+            // document-start 用户脚本：WebView 只能在 onPageStarted 尽早注入，尽力而为。
+            if (!url.isNullOrBlank()) {
+                runCatching { UserScriptEngine.injectOnMain(view, url, UserScriptRules.RUN_AT_START) }
+            }
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
@@ -1004,6 +1109,17 @@ internal object AgentBrowserSession {
             currentProgress = 100
             publishSnapshotOnMain()
             currentLoadWaiter?.complete(LoadOutcome(true, "OK", ""))
+            // document-end 与 document-idle 用户脚本。
+            if (!url.isNullOrBlank()) {
+                runCatching { UserScriptEngine.injectOnMain(view, url, UserScriptRules.RUN_AT_END) }
+                mainHandler.postDelayed({
+                    runCatching {
+                        if (webView === view && currentUrl == url) {
+                            UserScriptEngine.injectOnMain(view, url, UserScriptRules.RUN_AT_IDLE)
+                        }
+                    }
+                }, USERSCRIPT_IDLE_DELAY_MS)
+            }
         }
 
         override fun onPageCommitVisible(view: WebView, url: String?) {
@@ -1118,6 +1234,11 @@ internal object AgentBrowserSession {
         "go_forward",
         "reload",
         "wait_for_selector",
+        "run_js",
+        "list_scripts",
+        "add_script",
+        "toggle_script",
+        "remove_script",
     )
 
 }

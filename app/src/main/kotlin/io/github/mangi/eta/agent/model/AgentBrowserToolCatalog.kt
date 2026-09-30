@@ -8,7 +8,7 @@ internal object AgentBrowserToolCatalog {
         tools.put(
             AgentToolSchema.function(
                 name = "browser_use",
-                description = "操作 Eta 共享的离屏 Agent 浏览器，不会切换到外部浏览器。一次调用只执行一个 action；网页浏览通常先 navigate，再用 get_readable 提取正文，或用 find_elements 查找可交互元素。需要把 URI 显式交给外部应用时使用 open_uri。",
+                description = "操作 Eta 共享的离屏 Agent 浏览器，不会切换到外部浏览器。一次调用只执行一个 action；网页浏览通常先 navigate，再用 get_readable 提取正文，或用 find_elements 查找可交互元素。支持 run_js 在当前页面执行任意 JavaScript，以及油猴（用户脚本）管理：add_script 安装（source 内联或 url 下载 .user.js）、list_scripts 列出、toggle_script 启停、remove_script 删除；安装过的脚本按 @match/@include 在页面加载时自动注入并提供 GM_* API。需要把 URI 显式交给外部应用时使用 open_uri。",
                 parameters = JSONObject()
                     .put("type", "object")
                     .put(
@@ -35,6 +35,11 @@ internal object AgentBrowserToolCatalog {
                                             .put("go_forward")
                                             .put("reload")
                                             .put("wait_for_selector")
+                                            .put("run_js")
+                                            .put("list_scripts")
+                                            .put("add_script")
+                                            .put("toggle_script")
+                                            .put("remove_script")
                                     )
                             )
                             .put(
@@ -109,6 +114,30 @@ internal object AgentBrowserToolCatalog {
                                 JSONObject()
                                     .put("type", "integer")
                                     .put("description", "navigate 或 wait_for_selector 的超时毫秒数。")
+                            )
+                            .put(
+                                "code",
+                                JSONObject()
+                                    .put("type", "string")
+                                    .put("description", "run_js 要在当前页面执行的 JavaScript 源码，最后一条表达式的值作为结果返回。")
+                            )
+                            .put(
+                                "source",
+                                JSONObject()
+                                    .put("type", "string")
+                                    .put("description", "add_script 内联提供的完整用户脚本源码（含 ==UserScript== 元数据块）。")
+                            )
+                            .put(
+                                "script_id",
+                                JSONObject()
+                                    .put("type", "string")
+                                    .put("description", "toggle_script 或 remove_script 的目标脚本 id，来自 list_scripts。")
+                            )
+                            .put(
+                                "enabled",
+                                JSONObject()
+                                    .put("type", "boolean")
+                                    .put("description", "toggle_script 的目标状态；缺省时在启用与停用之间切换。")
                             )
                     )
                     .put("required", JSONArray().put("action"))

@@ -365,6 +365,35 @@ internal object BrowserDomScripts {
         })();
         """.trimIndent()
 
+    /** run_js：把模型提供的任意 JS 以 eval 方式放进页面上下文，结果做 JSON 安全化。 */
+    fun runJs(code: String): String = wrap(
+        """
+        var __etaSanitize = function(value, depth) {
+          if (value === null || value === undefined) return null;
+          var type = typeof value;
+          if (type === 'string' || type === 'boolean') return value;
+          if (type === 'number') return isFinite(value) ? value : String(value);
+          if (type === 'function') return '[Function' + (value.name ? ' ' + value.name : '') + ']';
+          if (value instanceof Error) return '[Error] ' + String(value.message || value);
+          if (depth >= 4) return '[MaxDepth]';
+          if (Array.isArray(value)) return value.slice(0, 200).map(function(item) { return __etaSanitize(item, depth + 1); });
+          if (type === 'object') {
+            var out = {};
+            Object.keys(value).slice(0, 200).forEach(function(key) {
+              try { out[key] = __etaSanitize(value[key], depth + 1); } catch (_) { out[key] = '[Unreadable]'; }
+            });
+            return out;
+          }
+          return String(value);
+        };
+        try {
+          return { value: __etaSanitize(eval(${JSONObject.quote(code)}), 0) };
+        } catch (error) {
+          return { js_error: String(error && error.message ? error.message : error) };
+        }
+        """.trimIndent()
+    )
+
     fun readable(offset: Int, maxChars: Int): String =
         """
         var target = readableTarget();
