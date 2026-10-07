@@ -79,7 +79,8 @@ internal fun AgentOverlayStatus.localizedText(): String = when (this) {
 
 @Composable
 internal fun toolDisplayName(name: String): String {
-    val resource = toolDisplayNameResource(name) ?: return name
+    val resource = toolDisplayNameResource(name) ?: return io.github.mangi.eta.agent.model.AgentPhoneToolCatalog.entries.firstOrNull { it.name == name }?.title
+        ?: io.github.mangi.eta.agent.context.PersonalSearchTools.searches.firstOrNull { it.name == name }?.title ?: name
     return stringResource(resource)
 }
 
@@ -110,8 +111,15 @@ internal fun toolDisplayNameResource(name: String): Int? = when (name) {
     "launch_app" -> R.string.tool_launch_app
     "open_uri" -> R.string.tool_open_uri
     "browser_use" -> R.string.tool_browser_use
+    "web_search" -> R.string.tool_web_search
+    "fetch_url" -> R.string.tool_fetch_url
     "terminal" -> R.string.tool_terminal
     "run_command" -> R.string.tool_run_command
+    "inspect_app" -> R.string.tool_inspect_app
+    "edit_file" -> R.string.tool_edit_file
+    "stat_file" -> R.string.tool_stat_file
+    "glob_files" -> R.string.tool_glob_files
+    "grep_files" -> R.string.tool_grep_files
     "read_file" -> R.string.tool_read_file
     "write_file" -> R.string.tool_write_file
     "list_directory" -> R.string.tool_list_directory

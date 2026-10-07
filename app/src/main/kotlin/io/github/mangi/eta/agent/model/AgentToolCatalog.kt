@@ -16,6 +16,7 @@ internal object AgentToolCatalog {
         memoryTools: Boolean = false,
         memoryWritable: Boolean = true,
         capabilities: AgentToolCapabilities = AgentToolCapabilities(rootAvailable = true),
+        localWebSearch: Boolean = true,
     ): JSONArray =
         capabilities.project(JSONArray().also { tools ->
             AgentContextAppToolCatalog.appendTo(tools)
@@ -27,7 +28,10 @@ internal object AgentToolCatalog {
                 sensitiveReadTools = deviceSensitiveReadTools,
                 sensitiveActionTools = deviceSensitiveActionTools,
             )
-            if (browserTools) AgentBrowserToolCatalog.appendTo(tools)
+            if (browserTools) {
+                AgentWebToolCatalog.appendTo(tools, includeSearch = localWebSearch)
+                AgentBrowserToolCatalog.appendTo(tools)
+            }
             AgentReverseToolCatalog.appendTo(tools)
             AgentSkillToolCatalog.appendTo(
                 tools,
@@ -38,6 +42,7 @@ internal object AgentToolCatalog {
             if (terminalTools) {
                 AgentFileVisionToolCatalog.appendTo(tools)
                 AgentTerminalToolCatalog.appendTo(tools)
+                AgentFileToolCatalog.appendTo(tools)
             }
         })
 }

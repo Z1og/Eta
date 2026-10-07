@@ -78,6 +78,9 @@ class RootlessDeviceToolsTest {
             )
             val result = JSONObject(tools.execute("search_personal_orders", JSONObject())!!.content)
             assertEquals("DEVICE_UNSUPPORTED", result.getJSONObject("system_memory").getString("code"))
+            val personalContext = tools.execute("create_note", JSONObject().put("content", "测试"))!!
+            assertEquals("DEVICE_UNSUPPORTED", JSONObject(personalContext.content).getString("code"))
+            assertTrue(personalContext.sensitive)
         }
     }
 

@@ -31,6 +31,7 @@ import io.github.mangi.eta.ui.components.MiuixScaffoldPage
 import io.github.mangi.eta.ui.components.color
 import io.github.mangi.eta.ui.components.label
 import io.github.mangi.eta.ui.model.PermissionHealthAction
+import io.github.mangi.eta.ui.model.LOCAL_NETWORK_PERMISSION_ITEM_ID
 import io.github.mangi.eta.ui.model.PermissionHealthItemUi
 import io.github.mangi.eta.ui.model.PermissionHealthUiState
 import top.yukonga.miuix.kmp.basic.Text
@@ -80,6 +81,7 @@ private fun PermissionItemRow(
         "xposed" -> Icons.Rounded.AccountTree
         "background" -> Icons.Rounded.History
         "app_list" -> Icons.Rounded.Dashboard
+        LOCAL_NETWORK_PERMISSION_ITEM_ID -> Icons.Rounded.AccountTree
         "location" -> Icons.Rounded.LocationOn
         "notification_history" -> Icons.Rounded.NotificationsActive
         "usage_access" -> Icons.Rounded.QueryStats

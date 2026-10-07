@@ -7,6 +7,7 @@ import android.speech.RecognitionSupport
 import android.speech.SpeechRecognizer
 import io.github.mangi.eta.R
 import java.time.Duration
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -18,17 +19,20 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSpeechRecognizer
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], application = Application::class)
+@Config(sdk = [33, 34], application = Application::class)
 class EtaSpeechInputTest {
     private val results = mutableListOf<String>()
     private val errors = mutableListOf<EtaSpeechIssue>()
     private val partials = mutableListOf<String>()
+    private val downloads = mutableListOf<EtaSpeechDownloadStatus>()
     private lateinit var input: EtaSpeechInput
 
     @Before fun setup() {
         ShadowSpeechRecognizer.setIsOnDeviceRecognitionAvailable(true)
-        input = EtaSpeechInput(RuntimeEnvironment.getApplication(), {}, {}, {}, partials::add, results::add, errors::add, {})
+        input = EtaSpeechInput(RuntimeEnvironment.getApplication(), {}, {}, {}, partials::add, results::add, errors::add, downloads::add)
     }
+
+    @After fun close() { input.cancel() }
 
     private fun start(): ShadowSpeechRecognizer {
         input.start()
@@ -116,6 +120,29 @@ class EtaSpeechInputTest {
         assertEquals(EtaSpeechIssueKind.DOWNLOAD_AVAILABLE, errors.single().kind)
         assertTrue(recognizer.isDestroyed)
         assertNull(recognizer.lastRecognizerIntent)
+    }
+
+    @Test
+    @Config(sdk = [33])
+    fun android13SchedulesModelDownloadAndKeepsRecognizerUntilOwnerCancels() {
+        input.start()
+        shadowOf(ShadowSpeechRecognizer.getLatestSpeechRecognizer()).triggerSupportResult(
+            RecognitionSupport.Builder()
+                .setSupportedOnDeviceLanguages(listOf(java.util.Locale.getDefault().toLanguageTag()))
+                .build(),
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+        input.downloadModel()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val download = shadowOf(ShadowSpeechRecognizer.getLatestSpeechRecognizer())
+        assertNotNull(download.latestModelDownloadIntent)
+        assertEquals(listOf(EtaSpeechDownloadStatus.DOWNLOADING, EtaSpeechDownloadStatus.SCHEDULED), downloads)
+        assertFalse(download.isDestroyed)
+
+        input.cancel()
+        assertTrue(download.isDestroyed)
+        assertTrue(results.isEmpty())
     }
 
     @Test fun downloadableLanguageIsOfferedOnlyWhenNoInstalledOrOnlineSupport() {

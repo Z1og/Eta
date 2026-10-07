@@ -7,7 +7,6 @@ import io.github.mangi.eta.agent.roleplay.RoleplayBinding
 import io.github.mangi.eta.agent.roleplay.RoleplayMessageState
 import io.github.mangi.eta.data.db.CharacterEntity
 import io.github.mangi.eta.data.db.ConversationEntity
-import io.github.mangi.eta.data.db.ConversationMessageEntity
 import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.data.db.UserPersonaEntity
 import kotlinx.serialization.Serializable
@@ -35,18 +34,17 @@ internal data class CharacterBackupAsset(
 internal object CharacterBackupTransfer {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    suspend fun snapshot(context: Context, conversations: List<ConversationEntity>): CharacterBackupData {
+    suspend fun snapshot(context: Context, boundAvatars: Map<String, String?>): CharacterBackupData {
         CharacterRepository.initialize(context)
         val dao = EtaDatabase.get(context).characterDao()
         val characters = dao.characters()
-        val bindings = conversations.mapNotNull { binding(it) }
-        val ids = characters.map { it.id }.toSet() + bindings.map { it.characterId }
+        val ids = characters.map { it.id }.toSet() + boundAvatars.keys
         return CharacterBackupData(
             characters = characters,
             persona = dao.persona(),
             assets = ids.map { id ->
                 val avatar = characters.firstOrNull { it.id == id }?.avatarPath
-                    ?: bindings.firstOrNull { it.characterId == id }?.avatarPath
+                    ?: boundAvatars[id]
                 CharacterBackupAsset(
                     characterId = id,
                     avatarBase64 = CharacterRepository.avatarBytes(avatar)?.let { Base64.getEncoder().encodeToString(it) },
@@ -56,14 +54,16 @@ internal object CharacterBackupTransfer {
         )
     }
 
-    fun validate(data: CharacterBackupData, conversations: List<ConversationEntity>) {
+    fun avatarReference(row: ConversationEntity): Pair<String, String?>? =
+        binding(row)?.let { it.characterId to it.avatarPath }
+
+    fun validate(data: CharacterBackupData, bindingIds: Set<String>) {
         val ids = data.characters.map { it.id }
         require(ids.size == ids.toSet().size && ids.all(::validId)) { "备份中的角色 ID 重复或无效" }
         data.characters.forEach { character ->
             val card = CharacterCardCodec.decodeJson(character.cardJson)
             require(card.name.length <= 512) { "备份中的角色名称过长" }
         }
-        val bindingIds = validateBindings(conversations).map { it.characterId }
         val assets = data.assets.map { it.characterId }
         require(assets.size == assets.toSet().size && assets.all { it in ids || it in bindingIds }) { "备份中的角色资源无效" }
         data.assets.forEach { asset ->
@@ -89,26 +89,22 @@ internal object CharacterBackupTransfer {
             }
         }
 
-    fun validateRevisions(conversations: List<ConversationEntity>, messages: List<ConversationMessageEntity>) {
-        val byConversation = messages.groupBy { it.conversationId }
-        conversations.forEach { row ->
-            if (row.revisionsJson.isBlank()) return@forEach
-            val state = json.decodeFromString<RoleplayMessageState>(row.revisionsJson)
-            val localMessages = byConversation[row.id].orEmpty().associateBy { it.id }
-            state.links.forEach { (id, link) ->
-                require(localMessages[id]?.type in setOf("user", "assistant") && link.transcriptMessageId.isNotBlank() && link.blockOrder >= 0) {
-                    "备份中的正文关联缺少有效消息"
-                }
+    fun validateRevisions(row: ConversationEntity, messageTypes: Map<String, String>) {
+        if (row.revisionsJson.isBlank()) return
+        val state = json.decodeFromString<RoleplayMessageState>(row.revisionsJson)
+        state.links.forEach { (id, link) ->
+            require(messageTypes[id] in setOf("user", "assistant") && link.transcriptMessageId.isNotBlank() && link.blockOrder >= 0) {
+                "备份中的正文关联缺少有效消息"
             }
-            state.revisions.forEach { (id, revision) ->
-                require(id in state.links && revision.candidates.isNotEmpty() && revision.selected in revision.candidates.indices) {
-                    "备份中的正文候选或选中版本无效"
-                }
+        }
+        state.revisions.forEach { (id, revision) ->
+            require(id in state.links && revision.candidates.isNotEmpty() && revision.selected in revision.candidates.indices) {
+                "备份中的正文候选或选中版本无效"
             }
-            state.pendingRewrites.forEach { (runId, target) ->
-                require(runId.isNotBlank() && target in state.links && localMessages[target]?.type == "assistant") {
-                    "备份中的重新生成目标无效"
-                }
+        }
+        state.pendingRewrites.forEach { (runId, target) ->
+            require(runId.isNotBlank() && target in state.links && messageTypes[target] == "assistant") {
+                "备份中的重新生成目标无效"
             }
         }
     }

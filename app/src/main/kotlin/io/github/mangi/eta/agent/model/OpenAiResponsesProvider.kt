@@ -50,7 +50,7 @@ internal object OpenAiResponsesProvider : AgentProviderClient {
             .headers(headers)
             .post(body)
             .build()
-        val call = AgentHttpClient.modelClient.newCall(httpRequest)
+        val call = AgentHttpClient.modelClient(request.purpose).newCall(httpRequest)
         val binding = runController.register(call::cancel)
 
         try {

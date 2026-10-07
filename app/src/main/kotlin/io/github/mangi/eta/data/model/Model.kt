@@ -29,7 +29,7 @@ data class Model(
     val createdAt: Long = System.currentTimeMillis()
 ) {
     val effectiveContextWindow: Int?
-        get() = contextWindowOverride ?: contextWindow
+        get() = contextWindowOverride
 
     val effectiveReasoning: Boolean?
         get() = reasoningOverride ?: reasoning

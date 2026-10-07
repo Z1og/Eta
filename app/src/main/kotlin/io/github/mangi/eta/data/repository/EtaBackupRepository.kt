@@ -11,11 +11,18 @@ import io.github.mangi.eta.data.db.ProviderEntity
 import io.github.mangi.eta.data.db.ProviderModelEntity
 import io.github.mangi.eta.data.db.ProviderWithModelsSeed
 import io.github.mangi.eta.data.datastore.SettingsDataStore
+import io.github.mangi.eta.core.AndroidAgentLogger
+import io.github.mangi.eta.core.safeLogType
+import io.github.mangi.eta.core.safeStackTrace
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.nullable
+import kotlinx.serialization.builtins.serializer
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -38,7 +45,8 @@ internal data class EtaBackupDocument(
 ) {
     companion object {
         const val FORMAT = "eta-backup"
-        const val SCHEMA_VERSION = 2
+        // 3：会话记录携带最近使用的模型；旧版本备份缺省该字段，导入后跟随默认模型。
+        const val SCHEMA_VERSION = 3
     }
 }
 
@@ -61,238 +69,167 @@ internal class EtaBackupException(message: String, cause: Throwable? = null) :
     IllegalArgumentException(message, cause)
 
 internal object EtaBackupRepository {
-    private const val MAX_BACKUP_BYTES = 64L * 1024L * 1024L
+    private const val EXPORT_PAGE_SIZE = 64
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-        explicitNulls = true
-        prettyPrint = true
+    suspend fun export(context: Context, output: OutputStream): EtaBackupSummary = withContext(Dispatchers.IO) {
+        var phase = "prepare_export"
+        try {
+            val appContext = context.applicationContext
+            CharacterRepository.initialize(appContext)
+            val database = EtaDatabase.get(appContext)
+            val settings = SettingsDataStore.settings()
+            val catalogRevision = SettingsDataStore.officialModelCatalogRevision()
+            EtaBackupJsonStreams.export(appContext, output, onPhase = { phase = it }) { writer ->
+                database.withTransaction {
+                    val dao = database.conversationDao()
+                    val providers = database.providerDao().providers().map { EtaBackupProvider(it.provider, it.models) }
+                    val memory = AgentMemoryRepository.snapshot().content
+                    writer.value("format", String.serializer(), EtaBackupDocument.FORMAT)
+                    writer.value("schemaVersion", Int.serializer(), EtaBackupDocument.SCHEMA_VERSION)
+                    writer.value("exportedAt", Long.serializer(), System.currentTimeMillis())
+                    writer.value("providers", ListSerializer(EtaBackupProvider.serializer()), providers)
+                    writer.value("catalogRevision", Int.serializer(), catalogRevision)
+                    writer.value("selectedProviderId", String.serializer().nullable, settings.selectedProviderId)
+                    writer.value("selectedModelId", String.serializer().nullable, settings.selectedModelId)
+                    writer.value("conversationState", ConversationStateEntity.serializer().nullable, dao.state())
+                    writer.value("memoryMd", String.serializer(), memory)
+                    val boundAvatars = linkedMapOf<String, String?>()
+                    var conversationCount = 0
+                    var messageCount = 0
+                    phase = "export_conversations"
+                    writer.beginArray(EtaBackupJsonStreams.CONVERSATIONS)
+                    exportRows({ dao.conversationEntityRowsPage(EXPORT_PAGE_SIZE, it) }) { raw ->
+                        val row = dao.restoreConversation(raw)
+                        writer.record(ConversationEntity.serializer(), row)
+                        CharacterBackupTransfer.avatarReference(row)?.let { (id, avatar) ->
+                            if (id !in boundAvatars) boundAvatars[id] = avatar
+                        }
+                        conversationCount++
+                    }
+                    writer.endArray()
+                    phase = "export_messages"
+                    writer.beginArray(EtaBackupJsonStreams.MESSAGES)
+                    exportRows({ dao.allMessageRowsPage(EXPORT_PAGE_SIZE, it) }) { raw ->
+                        writer.record(ConversationMessageEntity.serializer(), dao.restoreMessage(raw))
+                        messageCount++
+                    }
+                    writer.endArray()
+                    phase = "export_checkpoints"
+                    writer.beginArray(EtaBackupJsonStreams.CHECKPOINTS)
+                    exportRows({ dao.contextCheckpointRowsPage(EXPORT_PAGE_SIZE, it) }) { raw ->
+                        writer.record(ConversationContextCheckpointEntity.serializer(), dao.restoreCheckpoint(raw))
+                    }
+                    writer.endArray()
+                    phase = "export_roleplay"
+                    val roleplay = CharacterBackupTransfer.snapshot(appContext, boundAvatars)
+                    writer.value("roleplay", CharacterBackupData.serializer().nullable, roleplay)
+                    EtaBackupSummary(providers.size, providers.sumOf { it.models.size }, conversationCount,
+                        messageCount, memory.toByteArray(Charsets.UTF_8).size, roleplay.characters.size)
+                }
+            }
+        } catch (failure: Throwable) {
+            logFailure("export", phase, failure)
+            throw failure
+        }
     }
 
-    suspend fun export(context: Context, output: OutputStream): EtaBackupSummary =
-        withContext(Dispatchers.IO) {
-            val document = snapshot(context.applicationContext)
-            val bytes = json.encodeToString(document).toByteArray(Charsets.UTF_8)
-            if (bytes.size > MAX_BACKUP_BYTES) {
-                throw EtaBackupException("备份文件超过 64 MiB 限制")
-            }
-            output.write(bytes)
-            output.flush()
-            document.summary()
-        }
-
-    suspend fun import(context: Context, input: InputStream): EtaBackupSummary =
-        withContext(Dispatchers.IO) {
-            val document = readDocument(input)
-            validate(document)
+    suspend fun import(context: Context, input: InputStream): EtaBackupSummary = withContext(Dispatchers.IO) {
+        var phase = "stage_import"
+        try {
             val appContext = context.applicationContext
-            val database = EtaDatabase.get(appContext)
-            val previousMemory = AgentMemoryRepository.snapshot().content
-            val previousRoleMemories = document.roleplay?.assets.orEmpty().associate {
-                it.characterId to CharacterMemoryRepository.snapshot(appContext, it.characterId).content
-            }
-            val avatarPaths = document.roleplay?.let { CharacterBackupTransfer.restoreAssets(appContext, it) }.orEmpty()
-            var memoryWriteStarted = false
-            try {
-                database.withTransaction {
-                    database.providerDao().replaceAll(
-                        document.providers.map { provider ->
-                            ProviderWithModelsSeed(provider = provider.provider, models = provider.models)
-                        },
-                    )
-                    database.conversationDao().replaceAll(
-                        conversations = document.conversations.map { CharacterBackupTransfer.remapConversation(it, avatarPaths) },
-                        messages = document.messages,
-                        contextCheckpoints = document.contextCheckpoints,
-                        state = document.conversationState,
-                    )
-                    document.roleplay?.let { roleplay ->
-                        database.characterDao().replaceAll(
-                            roleplay.characters.map { it.copy(avatarPath = avatarPaths[it.id]) },
-                            roleplay.persona,
-                        )
-                    }
-                    // 文件写入失败使数据库事务回滚，再补偿已经替换的记忆文件。
-                    memoryWriteStarted = true
-                    AgentMemoryRepository.replaceAll(document.memoryMd)
-                    document.roleplay?.let { CharacterBackupTransfer.restoreMemories(appContext, it) }
+            EtaBackupJsonStreams.stage(appContext, input) { phase = it }.use { staged ->
+                phase = "validate_import"
+                val summary = EtaBackupValidation.validate(staged)
+                val document = staged.header
+                val database = EtaDatabase.get(appContext)
+                val previousMemory = AgentMemoryRepository.snapshot().content
+                val previousRoleMemories = document.roleplay?.assets.orEmpty().associate {
+                    it.characterId to CharacterMemoryRepository.snapshot(appContext, it.characterId).content
                 }
-            } catch (failure: Throwable) {
-                if (memoryWriteStarted) {
-                    try { AgentMemoryRepository.replaceAll(previousMemory) } catch (restoreFailure: Throwable) {
-                        failure.addSuppressed(restoreFailure)
+                phase = "restore_assets"
+                val avatarPaths = document.roleplay?.let { CharacterBackupTransfer.restoreAssets(appContext, it) }.orEmpty()
+                var memoryWriteStarted = false
+                try {
+                    database.withTransaction {
+                        phase = "restore_providers"
+                        database.providerDao().replaceAll(document.providers.map {
+                            ProviderWithModelsSeed(it.provider, it.models)
+                        })
+                        val dao = database.conversationDao()
+                        phase = "clear_conversations"
+                        dao.deleteMessages()
+                        dao.deleteContextCheckpoints()
+                        dao.deleteConversations()
+                        dao.deleteState()
+                        phase = "restore_conversations"
+                        staged.conversations { row ->
+                            dao.insertConversations(listOf(CharacterBackupTransfer.remapConversation(row, avatarPaths)))
+                        }
+                        phase = "restore_messages"
+                        staged.messages { dao.insertMessages(listOf(it)) }
+                        phase = "restore_checkpoints"
+                        staged.checkpoints { dao.insertContextCheckpoints(listOf(it)) }
+                        document.conversationState?.let { dao.insertState(it) }
+                        phase = "restore_roleplay"
+                        document.roleplay?.let { roleplay ->
+                            database.characterDao().replaceAll(
+                                roleplay.characters.map { it.copy(avatarPath = avatarPaths[it.id]) }, roleplay.persona,
+                            )
+                        }
+                        // 文件写入失败使数据库事务回滚，再补偿已经替换的记忆文件。
+                        phase = "restore_memory"
+                        memoryWriteStarted = true
+                        AgentMemoryRepository.replaceAll(document.memoryMd)
+                        document.roleplay?.let { CharacterBackupTransfer.restoreMemories(appContext, it) }
                     }
-                    previousRoleMemories.forEach { (id, content) ->
-                        try { CharacterMemoryRepository.replaceAll(appContext, id, content) } catch (restoreFailure: Throwable) {
+                } catch (failure: Throwable) {
+                    if (memoryWriteStarted) {
+                        try { AgentMemoryRepository.replaceAll(previousMemory) } catch (restoreFailure: Throwable) {
                             failure.addSuppressed(restoreFailure)
                         }
+                        previousRoleMemories.forEach { (id, content) ->
+                            try { CharacterMemoryRepository.replaceAll(appContext, id, content) } catch (restoreFailure: Throwable) {
+                                failure.addSuppressed(restoreFailure)
+                            }
+                        }
                     }
+                    CharacterBackupTransfer.discardAssets(avatarPaths, failure)
+                    throw failure
                 }
-                CharacterBackupTransfer.discardAssets(avatarPaths, failure)
-                throw failure
+                phase = "restore_settings"
+                SettingsDataStore.setSelection(document.selectedProviderId, document.selectedModelId)
+                SettingsDataStore.setOfficialModelCatalogRevision(document.catalogRevision)
+                ProviderRepository.ensureBuiltInsMerged()
+                ProviderRepository.repairSelection()
+                summary
             }
-            SettingsDataStore.setSelection(
-                providerId = document.selectedProviderId,
-                modelId = document.selectedModelId,
-            )
-            SettingsDataStore.setOfficialModelCatalogRevision(document.catalogRevision)
-            ProviderRepository.ensureBuiltInsMerged()
-            ProviderRepository.repairSelection()
-            document.summary()
-        }
-
-    suspend fun inspect(input: InputStream): EtaBackupSummary = withContext(Dispatchers.IO) {
-        val document = readDocument(input)
-        validate(document)
-        document.summary()
-    }
-
-    private suspend fun snapshot(context: Context): EtaBackupDocument {
-        val appContext = context.applicationContext
-        val database = EtaDatabase.get(appContext)
-        val providers = database.providerDao().providers().map { provider ->
-            EtaBackupProvider(
-                provider = provider.provider,
-                models = provider.models,
-            )
-        }
-        val conversations = database.conversationDao()
-        val settings = SettingsDataStore.settings()
-        val conversationRows = conversations.conversationEntities()
-        return EtaBackupDocument(
-            exportedAt = System.currentTimeMillis(),
-            providers = providers,
-            catalogRevision = SettingsDataStore.officialModelCatalogRevision(),
-            selectedProviderId = settings.selectedProviderId,
-            selectedModelId = settings.selectedModelId,
-            conversations = conversationRows,
-            messages = conversations.messages(),
-            contextCheckpoints = conversations.contextCheckpoints(),
-            conversationState = conversations.state(),
-            memoryMd = AgentMemoryRepository.snapshot().content,
-            roleplay = CharacterBackupTransfer.snapshot(appContext, conversationRows),
-        )
-    }
-
-    private fun readDocument(input: InputStream): EtaBackupDocument {
-        val bytes = input.readBytesLimited(MAX_BACKUP_BYTES)
-        if (bytes.isEmpty()) throw EtaBackupException("备份文件为空")
-        return runCatching {
-            json.decodeFromString<EtaBackupDocument>(bytes.toString(Charsets.UTF_8))
-        }.getOrElse { failure ->
-            throw EtaBackupException("备份文件格式无效", failure)
+        } catch (failure: Throwable) {
+            logFailure("import", phase, failure)
+            throw failure
         }
     }
 
-    private fun validate(document: EtaBackupDocument) {
-        if (document.format != EtaBackupDocument.FORMAT) {
-            throw EtaBackupException("这不是 Eta 备份文件")
-        }
-        if (document.schemaVersion !in 1..EtaBackupDocument.SCHEMA_VERSION) {
-            throw EtaBackupException("不支持的 Eta 备份版本：${document.schemaVersion}")
-        }
-        if (document.catalogRevision < 0) {
-            throw EtaBackupException("备份中的模型目录版本无效")
-        }
+    suspend fun inspect(context: Context, input: InputStream): EtaBackupSummary = withContext(Dispatchers.IO) {
+        EtaBackupJsonStreams.stage(context.applicationContext, input).use { EtaBackupValidation.validate(it) }
+    }
 
-        val providerIds = document.providers.map { it.provider.id }
-        if (providerIds.size != providerIds.toSet().size || providerIds.any(String::isBlank)) {
-            throw EtaBackupException("备份中的模型提供商存在重复或无效 ID")
-        }
-        val modelIds = document.providers.flatMap { provider ->
-            val ids = provider.models.map { it.id }
-            if (ids.size != ids.toSet().size || ids.any(String::isBlank)) {
-                throw EtaBackupException("备份中的模型存在重复或无效 ID")
+    private suspend fun <T> exportRows(load: suspend (Int) -> List<T>, write: suspend (T) -> Unit) {
+        var offset = 0
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val page = load(offset)
+            for (row in page) {
+                currentCoroutineContext().ensureActive()
+                write(row)
             }
-            if (provider.models.any { it.providerId != provider.provider.id }) {
-                throw EtaBackupException("备份中的模型与提供商不匹配")
-            }
-            provider.models.map { model -> model.id to provider.provider.id }
-        }
-        if (modelIds.size != modelIds.map { it.first }.toSet().size) {
-            throw EtaBackupException("备份中的模型 ID 重复")
-        }
-        if (document.selectedProviderId != null && document.selectedProviderId !in providerIds) {
-            throw EtaBackupException("备份中的当前提供商不存在")
-        }
-        val selectedModel = document.selectedModelId?.let { selectedId ->
-            modelIds.firstOrNull { it.first == selectedId }
-        }
-        if (document.selectedModelId != null && selectedModel == null) {
-            throw EtaBackupException("备份中的当前模型不存在")
-        }
-        if (selectedModel != null && selectedModel.second != document.selectedProviderId) {
-            throw EtaBackupException("备份中的当前模型与提供商不匹配")
-        }
-
-        val conversationIds = document.conversations.map { it.id }
-        if (conversationIds.size != conversationIds.toSet().size || conversationIds.any(String::isBlank)) {
-            throw EtaBackupException("备份中的会话存在重复或无效 ID")
-        }
-        if (document.messages.any { it.conversationId !in conversationIds }) {
-            throw EtaBackupException("备份中的消息缺少所属会话")
-        }
-        val messageIds = document.messages.map { it.id }
-        if (messageIds.any(String::isBlank) || messageIds.size != messageIds.toSet().size) {
-            throw EtaBackupException("备份中的消息 ID 重复")
-        }
-        val messagePositions = document.messages.map { it.conversationId to it.sortIndex }
-        if (messagePositions.size != messagePositions.toSet().size) {
-            throw EtaBackupException("备份中的消息顺序重复")
-        }
-        val checkpointIds = document.contextCheckpoints.map { it.conversationId }
-        if (checkpointIds.size != checkpointIds.toSet().size) {
-            throw EtaBackupException("备份中的上下文检查点重复")
-        }
-        if (document.contextCheckpoints.any { it.conversationId !in conversationIds }) {
-            throw EtaBackupException("备份中的上下文检查点缺少所属会话")
-        }
-        if (document.conversationState != null &&
-            document.conversationState.id != ConversationStateEntity.SINGLETON_ID
-        ) {
-            throw EtaBackupException("备份中的会话状态无效")
-        }
-        if (document.conversationState?.selectedConversationId !in conversationIds &&
-            document.conversationState != null
-        ) {
-            throw EtaBackupException("备份中的当前会话不存在")
-        }
-        if (document.memoryMd.toByteArray(Charsets.UTF_8).size > 1024 * 1024) {
-            throw EtaBackupException("MEMORY.md 超过 1 MiB 限制")
-        }
-        try {
-            CharacterBackupTransfer.validateRevisions(document.conversations, document.messages)
-            val roleplay = document.roleplay
-            if (roleplay != null) CharacterBackupTransfer.validate(roleplay, document.conversations)
-            else CharacterBackupTransfer.validateBindings(document.conversations)
-        } catch (failure: IllegalArgumentException) {
-            throw EtaBackupException("备份中的角色数据无效", failure)
+            if (page.size < EXPORT_PAGE_SIZE) return
+            offset += page.size
         }
     }
 
-    private fun EtaBackupDocument.summary(): EtaBackupSummary = EtaBackupSummary(
-        providerCount = providers.size,
-        modelCount = providers.sumOf { it.models.size },
-        conversationCount = conversations.size,
-        messageCount = messages.size,
-        memoryBytes = memoryMd.toByteArray(Charsets.UTF_8).size,
-        characterCount = roleplay?.characters?.size ?: 0,
-    )
-}
-
-private fun InputStream.readBytesLimited(maxBytes: Long): ByteArray {
-    val output = java.io.ByteArrayOutputStream()
-    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-    var total = 0L
-    while (true) {
-        val count = read(buffer)
-        if (count < 0) break
-        total += count
-        if (total > maxBytes) {
-            throw EtaBackupException("备份文件超过 64 MiB 限制")
-        }
-        output.write(buffer, 0, count)
+    private fun logFailure(operation: String, phase: String, failure: Throwable) {
+        if (failure is CancellationException) return
+        AndroidAgentLogger.error("Agent backup failed: operation=$operation phase=$phase " +
+            "type=${failure.safeLogType()}\n${failure.safeStackTrace()}")
     }
-    return output.toByteArray()
 }

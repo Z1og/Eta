@@ -9,7 +9,7 @@ internal class AgentModelRetry(
         controller.awaitRetryDelay(delay)
     },
 ) {
-    data class Result(val round: Int, val response: ProviderResponse, val recoveryAllowed: Boolean)
+    data class Result(val round: Int, val response: ProviderResponse)
 
     fun complete(
         initialRound: Int,
@@ -37,13 +37,13 @@ internal class AgentModelRetry(
                         throw failure
                     }
                 }
-                return Result(round, response, recoveryAllowed = !hostedToolStarted)
+                return Result(round, response)
             } catch (failure: Exception) {
                 controller.throwIfCancelled()
                 if (callbackFailed || Thread.currentThread().isInterrupted) throw failure
                 val classified = AgentModelFailure.transport(failure) ?: throw failure
                 if (hostedToolStarted) throw AgentModelFailure(
-                    classified.code, false, classified.message.orEmpty(), classified, recoveryAllowed = false,
+                    classified.code, false, classified.message.orEmpty(), classified,
                 )
                 if (!classified.retryable) throw classified
                 if (retries == MAX_RETRIES) {

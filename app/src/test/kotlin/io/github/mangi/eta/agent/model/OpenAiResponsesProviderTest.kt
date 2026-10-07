@@ -25,6 +25,23 @@ import org.junit.Test
 
 class OpenAiResponsesProviderTest {
     @Test
+    fun hostedSearchDeclarationExcludesSameNamedFunctionAndPreservesOtherTools() {
+        val functions = JSONArray().also { AgentWebToolCatalog.appendTo(it) }
+        for (enabled in listOf(false, true)) {
+            val request = OpenAiResponsesProvider.buildRequestJson(
+                config("https://example.com/v1").copy(hostedWebSearchEnabled = enabled),
+                JSONArray(), functions,
+            )
+            val tools = request.getJSONArray("tools")
+            val all = (0 until tools.length()).map { tools.getJSONObject(it) }
+            assertEquals(if (enabled) 1 else 0, all.count { it.optString("type") == "web_search" })
+            assertEquals(if (enabled) 0 else 1, all.count { it.optString("type") == "function" && it.optString("name") == "web_search" })
+            assertEquals(1, all.count { it.optString("name") == "fetch_url" })
+        }
+        assertEquals("原始目录不得被 Provider 投影修改", 2, functions.length())
+    }
+
+    @Test
     fun nativeReasoningDeltasArriveBeforeDoneAndTypedFinalContentIsNotDuplicated() {
         val firstDeltaDelivered = CountDownLatch(1)
         val completed = CountDownLatch(1)

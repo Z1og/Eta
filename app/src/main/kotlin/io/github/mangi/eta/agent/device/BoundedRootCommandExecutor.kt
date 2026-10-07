@@ -25,7 +25,9 @@ internal class BoundedRootCommandExecutor(
         command: String,
         timeoutMillis: Long = DEFAULT_TIMEOUT_MS,
         maxOutputBytes: Int = DEFAULT_MAX_OUTPUT_BYTES,
+        input: ByteArray? = null,
     ): Result {
+        if (input != null && input.size > 128 * 1024) return Result.failed("ROOT_INPUT_LIMIT")
         if (closed.get()) return Result.failed("ROOT_EXECUTOR_CLOSED")
         if (!rootAvailable()) return Result.failed("ROOT_REQUIRED")
         val envelope = RootCommandEnvelope(command)
@@ -41,7 +43,7 @@ internal class BoundedRootCommandExecutor(
             return Result.failed("ROOT_EXECUTOR_CLOSED")
         }
 
-        val ioPool = Executors.newFixedThreadPool(2)
+        val ioPool = Executors.newFixedThreadPool(if (input == null) 2 else 3)
         return try {
             val stdoutFuture = ioPool.submit<BoundedOutput> {
                 process.inputStream.use { it.readBounded(maxOutputBytes) }
@@ -51,17 +53,23 @@ internal class BoundedRootCommandExecutor(
                     it.readBounded(maxOutputBytes.coerceIn(1, MAX_MAX_OUTPUT_BYTES) + envelope.markerBytes)
                 }
             }
+            // 正文从 stdin 传递，避免进入 su/app_process 的进程参数。
+            val inputFuture = if (input == null) {
+                process.outputStream.close()
+                null
+            } else ioPool.submit { process.outputStream.use { it.write(input) } }
             val completed = runCatching {
                 process.waitFor(timeoutMillis.coerceIn(500L, MAX_TIMEOUT_MS), TimeUnit.MILLISECONDS)
             }.getOrDefault(false)
             if (!completed) {
                 terminate(process)
             }
-            val stdout = runCatching { stdoutFuture.get(IO_JOIN_TIMEOUT_MS, TimeUnit.MILLISECONDS) }
-                .getOrDefault(BoundedOutput.EMPTY)
+            val stdoutRead = runCatching { stdoutFuture.get(IO_JOIN_TIMEOUT_MS, TimeUnit.MILLISECONDS) }.getOrNull()
+            val stdout = stdoutRead ?: BoundedOutput.EMPTY
             val stderrRead = runCatching { stderrFuture.get(IO_JOIN_TIMEOUT_MS, TimeUnit.MILLISECONDS) }.getOrNull()
             val stderr = stderrRead ?: BoundedOutput.EMPTY
             val rootOutput = envelope.inspect(stderr.text)
+            val inputWritten = inputFuture == null || runCatching { inputFuture.get(IO_JOIN_TIMEOUT_MS, TimeUnit.MILLISECONDS) }.isSuccess
             if (stderrRead != null && rootOutput.denied(completed)) {
                 RootAccess.markDenied()
                 logger.warn("Agent root access outcome=denied code=ROOT_REQUIRED")
@@ -73,6 +81,11 @@ internal class BoundedRootCommandExecutor(
                 stderr = rootOutput.stderr,
                 timedOut = !completed,
                 truncated = stdout.truncated || stderr.truncated,
+                errorCode = when {
+                    !inputWritten -> "ROOT_INPUT_FAILED"
+                    stdoutRead == null || stderrRead == null -> "ROOT_OUTPUT_FAILED"
+                    else -> ""
+                },
             )
         } finally {
             activeProcesses.remove(process)

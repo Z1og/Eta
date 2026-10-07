@@ -8,6 +8,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -42,8 +44,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -52,7 +62,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mangi.eta.R
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
 
 @Composable
@@ -60,12 +69,12 @@ internal fun AssistantComposer(
     state: EtaVoiceUiState,
     input: String,
     speech: EtaSpeechState,
-    onMicrophone: () -> Unit,
+    onMicrophone: (holdToTalk: Boolean) -> Unit,
+    onCancelSpeech: () -> Unit,
     onFinishSpeech: () -> Unit,
     onDownloadModel: () -> Unit,
     onOpenSpeechSettings: () -> Unit,
     onKeyboard: () -> Unit,
-    onClose: () -> Unit,
     keyboardVisible: Boolean,
     colors: EtaVoicePanelColors,
     focusRequester: FocusRequester,
@@ -79,7 +88,8 @@ internal fun AssistantComposer(
     ) {
         EtaSpeechFeedback(speech, onDownloadModel, onOpenSpeechSettings)
         AnimatedContent(
-            targetState = speech.active && state.messages.isEmpty(),
+            // 按住说话期间保持输入栏：切换布局会移除正被按住的按钮，松手事件随之丢失。
+            targetState = speech.active && !speech.holdToTalk && state.messages.isEmpty(),
             transitionSpec = {
                 fadeIn(tween(250)) togetherWith fadeOut(tween(160)) using
                     SizeTransform(clip = false)
@@ -95,9 +105,8 @@ internal fun AssistantComposer(
                     input = input,
                     speech = speech,
                     onMicrophone = onMicrophone,
+                    onCancelSpeech = onCancelSpeech,
                     onFinishSpeech = onFinishSpeech,
-                    onKeyboard = onKeyboard,
-                    onClose = onClose,
                     keyboardVisible = keyboardVisible,
                     colors = colors,
                     focusRequester = focusRequester,
@@ -116,10 +125,9 @@ private fun AssistantInputBar(
     state: EtaVoiceUiState,
     input: String,
     speech: EtaSpeechState,
-    onMicrophone: () -> Unit,
+    onMicrophone: (holdToTalk: Boolean) -> Unit,
+    onCancelSpeech: () -> Unit,
     onFinishSpeech: () -> Unit,
-    onKeyboard: () -> Unit,
-    onClose: () -> Unit,
     keyboardVisible: Boolean,
     colors: EtaVoicePanelColors,
     focusRequester: FocusRequester,
@@ -132,7 +140,6 @@ private fun AssistantInputBar(
     var textFocused by remember { mutableStateOf(false) }
     val inputHighlighted = textFocused || keyboardVisible
     val contentColor = colors.inputPrimary
-    val secondaryColor = colors.inputSecondary
     val hintColor = colors.inputTertiary
     val inputShape = RoundedCornerShape(24.dp)
     val trailingIcon = when {
@@ -150,7 +157,7 @@ private fun AssistantInputBar(
         speech.active -> onFinishSpeech
         state.phase == EtaVoicePhase.PROCESSING -> onStop
         canSubmit -> onSubmit
-        else -> onMicrophone
+        else -> { { onMicrophone(false) } }
     }
     Row(
         modifier = modifier
@@ -170,25 +177,12 @@ private fun AssistantInputBar(
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
-            onClick = if (speech.active) onKeyboard else onClose,
-            minWidth = 40.dp,
-            minHeight = 40.dp,
-            backgroundColor = Color.Transparent,
-        ) {
-            Icon(
-                painter = painterResource(if (speech.active) R.drawable.ic_assistant_keyboard_float else R.drawable.ic_assistant_home),
-                contentDescription = stringResource(if (speech.active) R.string.voice_use_keyboard else R.string.action_close),
-                tint = secondaryColor,
-                modifier = Modifier.size(24.dp),
-            )
-        }
         BasicTextField(
             value = input,
             onValueChange = onInputChange,
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 4.dp, end = 2.dp, top = 6.dp, bottom = 6.dp)
+                .padding(start = 14.dp, end = 2.dp, top = 6.dp, bottom = 6.dp)
                 .onFocusChanged { textFocused = it.isFocused }
                 .focusRequester(focusRequester),
             enabled = state.phase != EtaVoicePhase.PROCESSING && !speech.active,
@@ -206,7 +200,9 @@ private fun AssistantInputBar(
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (input.isEmpty()) {
                         Text(
-                            text = stringResource(R.string.voice_input_hint),
+                            text = stringResource(
+                                if (speech.holdToTalk) R.string.voice_release_to_send else R.string.voice_input_hint,
+                            ),
                             color = hintColor,
                             fontSize = 16.sp,
                             maxLines = 1,
@@ -217,20 +213,89 @@ private fun AssistantInputBar(
                 }
             },
         )
-        IconButton(
-            onClick = trailingAction,
+        AssistantTrailingButton(
+            iconRes = trailingIcon,
+            contentDescription = stringResource(trailingDescription),
+            tint = contentColor,
             enabled = speech.phase != EtaSpeechPhase.RECOGNIZING,
-            minWidth = 40.dp,
-            minHeight = 40.dp,
-            backgroundColor = Color.Transparent,
-        ) {
-            Icon(
-                painter = painterResource(trailingIcon),
-                contentDescription = stringResource(trailingDescription),
-                modifier = Modifier.size(24.dp),
-                tint = contentColor,
-            )
-        }
+            holdToTalkAvailable = !speech.active && !canSubmit && state.phase != EtaVoicePhase.PROCESSING,
+            onClick = trailingAction,
+            onHoldStart = { onMicrophone(true) },
+            onHoldEnd = onFinishSpeech,
+            onHoldCancel = onCancelSpeech,
+        )
+    }
+}
+
+/**
+ * 输入栏尾部按钮。空闲时长按进入按住说话：松手发送，手指移出按钮取消；
+ * 长按触发后不再派发点击，避免松手时又按旧状态开始一次新的录音。
+ */
+@Composable
+private fun AssistantTrailingButton(
+    iconRes: Int,
+    contentDescription: String,
+    tint: Color,
+    enabled: Boolean,
+    holdToTalkAvailable: Boolean,
+    onClick: () -> Unit,
+    onHoldStart: () -> Unit,
+    onHoldEnd: () -> Unit,
+    onHoldCancel: () -> Unit,
+) {
+    val haptics = LocalHapticFeedback.current
+    val currentClick by rememberUpdatedState(onClick)
+    val currentHoldAvailable by rememberUpdatedState(holdToTalkAvailable)
+    val currentHoldStart by rememberUpdatedState(onHoldStart)
+    val currentHoldEnd by rememberUpdatedState(onHoldEnd)
+    val currentHoldCancel by rememberUpdatedState(onHoldCancel)
+    var pressed by remember { mutableStateOf(false) }
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .graphicsLayer {
+                val scale = if (pressed) 0.9f else 1f
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            // 手势检测不产生无障碍动作；读屏用户只需要点击语义，按住说话依赖触摸时长不适合读屏。
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                if (!enabled) disabled()
+                onClick { if (enabled) currentClick(); enabled }
+            }
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                var holding = false
+                detectTapGestures(
+                    onPress = {
+                        pressed = true
+                        val released = tryAwaitRelease()
+                        pressed = false
+                        if (holding) {
+                            holding = false
+                            if (released) currentHoldEnd() else currentHoldCancel()
+                        }
+                    },
+                    onLongPress = {
+                        if (currentHoldAvailable) {
+                            holding = true
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            currentHoldStart()
+                        }
+                    },
+                    onTap = { currentClick() },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = contentDescription,
+            modifier = Modifier.size(24.dp),
+            tint = if (enabled) tint else tint.copy(alpha = 0.4f),
+        )
     }
 }
 

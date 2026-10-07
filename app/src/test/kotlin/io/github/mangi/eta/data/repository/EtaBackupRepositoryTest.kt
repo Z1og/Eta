@@ -118,7 +118,7 @@ class EtaBackupRepositoryTest {
 
     @Test(expected = EtaBackupException::class)
     fun rejectsUnknownBackupFormatBeforeChangingData(): Unit = runBlocking {
-        EtaBackupRepository.inspect(
+        EtaBackupRepository.inspect(context,
             ByteArrayInputStream("{\"format\":\"other\",\"schemaVersion\":1,\"exportedAt\":0}".toByteArray())
         )
     }
@@ -162,7 +162,7 @@ class EtaBackupRepositoryTest {
 
     @Test
     fun versionOneBackupRemainsReadable() = runBlocking {
-        val summary = EtaBackupRepository.inspect(ByteArrayInputStream(
+        val summary = EtaBackupRepository.inspect(context, ByteArrayInputStream(
             """{"format":"eta-backup","schemaVersion":1,"exportedAt":0}""".toByteArray(),
         ))
         assertEquals(0, summary.characterCount)

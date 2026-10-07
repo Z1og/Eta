@@ -5,7 +5,7 @@ set -euo pipefail
 eta_repo=$(cd "$(dirname "$0")/.." && pwd)
 eta_ndk=${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}
 if [[ -z "$eta_ndk" ]]; then
-    printf '%s\n' '请设置 ANDROID_NDK_HOME，指向 Android NDK r29。' >&2
+    printf '%s\n' '请设置 ANDROID_NDK_HOME，指向 gradle/libs.versions.toml 指定的 Android NDK。' >&2
     exit 64
 fi
 python3 - "$eta_ndk/source.properties" "$eta_repo/gradle/libs.versions.toml" <<'PY'
@@ -32,7 +32,7 @@ eta_toolchain="$eta_ndk/toolchains/llvm/prebuilt/$eta_host/bin"
 eta_sources=${ETA_NATIVE_SOURCES:-$eta_repo/.analysis/eta-native-sources}
 eta_build=${ETA_NATIVE_BUILD:-$eta_repo/.analysis/eta-native-build}
 eta_output="$eta_repo/app/src/main/jniLibs"
-eta_api=34
+eta_api=33
 trap 'printf "本地构建失败，请检查 %s 下的 configure.log / build.log。\n" "$eta_build" >&2' ERR
 mkdir -p "$eta_sources" "$eta_build/tools" "$eta_output"
 ln -sf "$eta_toolchain/llvm-readelf" "$eta_build/tools/readelf"

@@ -39,7 +39,7 @@ class AgentCompactionProviderTest {
             listOf("user", "assistant", "system").forEach { role ->
                 val card = CharacterCardCodec.decodeJson("""{"name":"林舟","extensions":{"depth_prompt":{
                     "prompt":"深度设定","depth":1,"role":"$role"}}}""")
-                val context = RoleplayRunContext("fixture", card, "用户", "")
+                val context = RoleplayRunContext("fixture", card, "用户", "", contextWindow = 128_000)
                 val source = JSONArray().put(context.personaMessage())
                     .put(AgentConversationCodec.userTextMessage("第一句").put("_eta_message_id", "first"))
                     .put(JSONObject().put("role", "assistant").put("content", "第二句"))

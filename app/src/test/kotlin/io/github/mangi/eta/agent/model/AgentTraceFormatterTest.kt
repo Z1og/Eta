@@ -11,6 +11,51 @@ class AgentTraceFormatterTest {
     private val formatter = AgentTraceFormatter()
 
     @Test
+    fun publicWebArgumentsExposeOnlyActionAndHost() {
+        val search = formatter.summarizeArguments(AgentModelClient.ToolCall(
+            "search", "web_search", """{"query":"private-query","max_results":3}""",
+        ))
+        assertEquals("搜索网页", search)
+        val fetch = formatter.summarizeArguments(AgentModelClient.ToolCall(
+            "fetch", "fetch_url", """{"url":"https://alice:password@example.com/private-path?token=secret-query#private-fragment"}""",
+        ))
+        assertEquals("读取网页 · example.com", fetch)
+        val next = formatter.summarizeArguments(AgentModelClient.ToolCall(
+            "next", "fetch_url", """{"document_id":"private-document-id","offset_chars":12000}""",
+        ))
+        assertEquals("继续读取网页", next)
+    }
+
+    @Test
+    fun publicWebResultsNeverEchoQueryTitlesBodyOrCompleteUrl() {
+        val search = formatter.summarizeResult("web_search", AgentModelClient.ToolResult(
+            """{"ok":true,"query":"private-query","results":[{"title":"private-title","url":"https://example.com/private-path","snippet":"private-body"}]}""",
+        ))
+        assertEquals("1 条结果", search)
+        val fetch = formatter.summarizeResult("fetch_url", AgentModelClient.ToolResult(
+            """{"ok":true,"final_url":"https://alice:password@example.com/private-path?token=secret-query","title":"private-title","text":"private-body","has_more":true}""",
+        ))
+        assertEquals("已读前 12 字", fetch)
+        listOf("private-query", "private-title", "private-body", "private-path", "password", "secret-query").forEach {
+            assertFalse(search.contains(it))
+            assertFalse(fetch.contains(it))
+        }
+    }
+
+    @Test
+    fun publicWebFailureSummaryDoesNotEchoServerMessages() {
+        listOf("web_search", "fetch_url").forEach { name ->
+            val failure = formatter.summarizeResult(name, AgentModelClient.ToolResult(
+                """{"ok":false,"code":"HTTP_ERROR","message":"private-query https://alice:password@example.com/private-path?token=secret-query"}""",
+            ))
+            assertTrue(failure.contains("code=HTTP_ERROR"))
+            assertFalse(failure.contains("private"))
+            assertFalse(failure.contains("password"))
+            assertFalse(failure.contains("secret-query"))
+        }
+    }
+
+    @Test
     fun sensitiveToolArgumentsAreSummarizedWithoutRawValues() {
         val cases = listOf(
             RedactionCase(
@@ -23,7 +68,7 @@ class AgentTraceFormatterTest {
             RedactionCase(
                 toolName = "run_command",
                 argumentsJson = """{"command":"cat /data/local/tmp/private-token"}""",
-                expectedParts = listOf("执行命令", "Android", "root"),
+                expectedParts = listOf("执行命令", "Android"),
                 sensitiveParts = listOf("cat ", "/data/local/tmp/private-token", "private-token"),
             ),
             RedactionCase(
@@ -90,6 +135,15 @@ class AgentTraceFormatterTest {
     }
 
     @Test
+    fun stateChangeWithoutReadbackIsShownAsUnconfirmed() {
+        val result = AgentModelClient.ToolResult(
+            content = """{"ok":false,"status":"unconfirmed","verified":false,"code":"STATE_CHANGE_UNCONFIRMED"}""",
+        )
+        assertEquals("操作已提交，效果未确认", formatter.summarizeResult("set_device_state", result))
+        assertFalse(formatter.isSuccessResult(result))
+    }
+
+    @Test
     fun terminalCommandsAreExposedOnlyThroughDisplayField() {
         val terminal = AgentModelClient.ToolCall(
             id = "terminal-call",
@@ -105,7 +159,7 @@ class AgentTraceFormatterTest {
 
         assertEquals("git status --short", formatter.displayCommand(terminal))
         assertEquals("pm list packages | head", formatter.displayCommand(runCommand))
-        assertEquals("终端 · 单次执行 · Linux · root", formatter.summarizeArguments(terminal))
+        assertEquals("终端 · 单次执行 · Linux", formatter.summarizeArguments(terminal))
         assertFalse(formatter.summarizeArguments(terminal).contains("git status"))
         assertNull(
             formatter.displayCommand(
@@ -136,7 +190,7 @@ class AgentTraceFormatterTest {
                     ),
                 )
 
-                assertEquals("终端 · 单次执行 · $label · root", summary)
+                assertEquals("终端 · 单次执行 · $label", summary)
             }
     }
 

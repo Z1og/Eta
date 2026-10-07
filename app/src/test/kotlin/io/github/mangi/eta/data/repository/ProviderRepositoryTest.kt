@@ -2,6 +2,7 @@ package io.github.mangi.eta.data.repository
 
 import android.content.Context
 import io.github.mangi.eta.data.datastore.SettingsDataStore
+import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.data.model.AnthropicProviderSetting
 import io.github.mangi.eta.data.model.CustomHeader
@@ -45,12 +46,12 @@ class ProviderRepositoryTest {
     }
 
     @Test
-    fun existingOfficialModelWithoutWindowIsResolvedForEveryRead() = runBlocking {
+    fun existingOfficialModelWithoutWindowRemainsUnsetForEveryRead() = runBlocking {
         ProviderRepository.ensureBuiltInsMerged()
         val id = BuiltinProviders.DEEPSEEK_ID
         val stored = Model(id = "manual-flash", modelId = "deepseek-flash", displayName = "我的模型", isEnabled = false)
         ProviderRepository.replaceModels(id, listOf(stored))
-        val expected = stored.copy(contextWindow = 1_048_576)
+        val expected = stored
         assertEquals(expected, ProviderRepository.providerById(id)!!.models.single())
         assertEquals(expected, ProviderRepository.providerByModelId(stored.id)!!.models.single())
         assertEquals(expected, ProviderRepository.allProviders().first { it.id == id }.models.single())
@@ -59,13 +60,13 @@ class ProviderRepositoryTest {
     }
 
     @Test
-    fun resolvedWindowReachesRuntimeAndChatWithTheSamePrecedence() = runBlocking {
+    fun onlyUserConfiguredWindowReachesRuntimeAndChat() = runBlocking {
         ProviderRepository.ensureBuiltInsMerged()
         val id = BuiltinProviders.DEEPSEEK_ID
         val model = Model(id = "manual-flash", modelId = "deepseek-flash", displayName = "我的模型")
         val cases = listOf(
-            model to 1_048_576,
-            model.copy(contextWindow = 128_000) to 128_000,
+            model to null,
+            model.copy(contextWindow = 128_000) to null,
             model.copy(contextWindow = 128_000, contextWindowOverride = 64_000) to 64_000,
         )
         for ((stored, expected) in cases) {
@@ -75,6 +76,21 @@ class ProviderRepositoryTest {
             val picker = AgentModelPickerProjector.project(providers, id, stored.id)
             assertEquals(expected, picker.selectedModel!!.contextWindow)
             assertEquals(expected, RuntimeConfigRepository.currentRuntimeConfig()!!.contextWindow)
+        }
+    }
+
+    @Test
+    fun localAutoCompactionSettingReachesCurrentRuntimeConfig() = runBlocking {
+        Prefs.initLocal(context)
+        val preferences = requireNotNull(Prefs.localAgentPreferences())
+        ProviderRepository.ensureBuiltInsMerged()
+        try {
+            for (enabled in listOf(false, true)) {
+                assertTrue(preferences.edit().putBoolean(Prefs.Keys.AGENT_AUTO_COMPACTION_ENABLED, enabled).commit())
+                assertEquals(enabled, RuntimeConfigRepository.currentRuntimeConfig()!!.autoCompactionEnabled)
+            }
+        } finally {
+            preferences.edit().remove(Prefs.Keys.AGENT_AUTO_COMPACTION_ENABLED).commit()
         }
     }
 
@@ -234,7 +250,7 @@ class ProviderRepositoryTest {
         val merged = ProviderRepository.providerById(provider.id)!!.models
         assertEquals(retained, merged.first { it.id == retained.id })
         assertEquals(selected, merged.first { it.id == selected.id })
-        assertEquals(sameIdManual.copy(contextWindow = 1_050_000), merged.first { it.id == sameIdManual.id })
+        assertEquals(sameIdManual, merged.first { it.id == sameIdManual.id })
         assertTrue(merged.none { it.modelId == "gpt-5.6-terra" })
         assertEquals(1, merged.count { it.modelId.equals("gpt-6-sol", ignoreCase = true) })
         assertEquals(41, merged.filter { it.id !in setOf(retained.id, selected.id, sameIdManual.id) }

@@ -2,11 +2,14 @@ package io.github.mangi.eta.agent.tool
 
 import org.json.JSONArray
 import org.json.JSONObject
+import io.github.mangi.eta.agent.model.AgentFileToolCatalog
+import io.github.mangi.eta.agent.model.AgentPhoneToolCatalog
+import io.github.mangi.eta.agent.context.PersonalSearchTools
 
 internal enum class RootRequirement { NONE, PARTIAL, REQUIRED }
 internal enum class LsposedRequirement { NONE, OPTIONAL, REQUIRED }
 
-internal enum class ToolSystemAccess { NONE, NOTIFICATIONS, USAGE, LOCATION }
+internal enum class ToolSystemAccess { NONE, NOTIFICATIONS, USAGE, LOCATION, CALENDAR_READ, CALENDAR_WRITE }
 
 internal data class LocalToolRequirement(
     val rootRequirement: RootRequirement,
@@ -26,12 +29,12 @@ internal object AgentToolRequirements {
         }
         register(
             RootRequirement.NONE,
-            "get_current_context", "search_apps", "launch_app", "open_uri", "browser_use",
+            "get_current_context", "search_apps", "launch_app", "open_uri", "browser_use", "web_search", "fetch_url",
             "observe_screen", "tap", "tap_area", "tap_element", "long_press",
             "long_press_element", "swipe", "scroll", "scroll_element", "input_text",
             "replace_text", "clear_text", "set_clipboard", "get_clipboard", "paste_text",
             "wait", "wait_for_text", "wait_for_package", "open_system_panel",
-            "set_alarm", "set_timer", "device_status", "media_control", "set_volume",
+            "set_alarm", "set_timer", "device_status", "inspect_app", "media_control", "set_volume",
             "search_notification_history", "recent_app_activity", "app_usage_summary",
             "get_current_location", "get_device_environment", "memory_get", "memory_write",
             "character_memory_get", "character_memory_write",
@@ -42,7 +45,7 @@ internal object AgentToolRequirements {
             RootRequirement.PARTIAL,
             "press_key", "network_info", "get_setting", "recent_notifications",
             "search_personal_orders", "terminal", "run_command", "read_file",
-            "write_file", "list_directory", "read_image",
+            "write_file", "list_directory", "read_image", "edit_file", "stat_file", "glob_files", "grep_files",
         )
         register(
             RootRequirement.REQUIRED,
@@ -51,12 +54,20 @@ internal object AgentToolRequirements {
             "list_alarms", "list_active_timers", "get_health_summary", "search_clipboard_history",
             "search_media", "search_audio", "search_recordings", "search_files",
             "search_calendar_events", "search_contacts", "search_call_history", "search_messages",
-            "search_downloads", "search_coloros_notes", "search_coloros_recordings",
-            "search_recording_summaries", "search_coloros_memories", "search_saved_places",
+            "search_downloads", "search_notes", "search_coloros_recordings",
+            "search_recording_summaries", "search_system_memories", "search_saved_places",
             "search_qq_chat_images", "search_wechat_chat_images",
             "process_list", "mem_read", "mem_search", "mem_write", "frida_ps", "frida_script",
             "mcp_call",
         )
+        PersonalSearchTools.names.forEach { put(it, LocalToolRequirement(RootRequirement.REQUIRED, colorOs = true)) }
+        AgentPhoneToolCatalog.entries.forEach { entry ->
+            put(entry.name, LocalToolRequirement(entry.root, colorOs = entry.colorOs,
+                systemAccess = if (entry.name.contains("calendar")) {
+                    if (entry.write) ToolSystemAccess.CALENDAR_WRITE else ToolSystemAccess.CALENDAR_READ
+                } else ToolSystemAccess.NONE))
+        }
+        put("search_calendar_events", LocalToolRequirement(RootRequirement.PARTIAL, systemAccess = ToolSystemAccess.CALENDAR_READ))
         listOf(
             "observe_screen", "tap", "tap_area", "tap_element", "long_press",
             "long_press_element", "swipe", "scroll", "scroll_element", "input_text",
@@ -72,18 +83,18 @@ internal object AgentToolRequirements {
             "get_current_location" to ToolSystemAccess.LOCATION,
         ).forEach { (name, access) -> put(name, getValue(name).copy(systemAccess = access)) }
         listOf(
-            "search_coloros_notes", "search_coloros_recordings", "search_recording_summaries",
-            "search_coloros_memories", "search_saved_places",
+            "search_notes", "search_coloros_recordings", "search_recording_summaries",
+            "search_system_memories", "search_saved_places",
         ).forEach { name -> put(name, getValue(name).copy(colorOs = true)) }
         // 系统记忆优先使用 Hook 桥接，框架失联时仍有独立的 Root 快照来源。
-        listOf("search_coloros_memories", "search_saved_places", "search_personal_orders").forEach { name ->
+        listOf("search_system_memories", "search_saved_places", "search_personal_orders").forEach { name ->
             put(name, getValue(name).copy(lsposedRequirement = LsposedRequirement.OPTIONAL))
         }
     }
 
     val toolNames: Set<String> get() = definitions.keys
 
-    fun find(name: String): LocalToolRequirement? = definitions[name]
+    fun find(name: String): LocalToolRequirement? = definitions[PersonalSearchTools.canonical(name)]
 
     fun rootRequirement(name: String): RootRequirement =
         requireNotNull(find(name)) { "Missing tool requirements: $name" }.rootRequirement
@@ -94,7 +105,7 @@ internal object AgentToolRequirements {
         if (rootAvailable) return false
         if (rootRequirement(name) == RootRequirement.REQUIRED) return true
         return when (name) {
-            "terminal" -> arguments.optString("identity").equals("root", ignoreCase = true)
+            "terminal", in AgentFileToolCatalog.names -> arguments.optString("identity").equals("root", ignoreCase = true)
             "press_key" -> arguments.optString("button").equals("PASTE", ignoreCase = true)
             else -> false
         }
@@ -115,11 +126,16 @@ internal object AgentToolRequirements {
 
     private fun projectUnprivileged(function: JSONObject) {
         val properties = function.getJSONObject("parameters").optJSONObject("properties")
+        if (function.getString("name") in AgentFileToolCatalog.names) {
+            properties?.getJSONObject("identity")?.put("enum", JSONArray().put("user"))
+                ?.put("description", "宿主执行身份；当前仅支持 user（Eta App UID）。Linux 内的模拟 root 不提供 Android 特权。")
+            properties?.getJSONObject("cwd")?.put("description", "相对路径的基准目录；Android 默认 Eta 私有工作区，Linux 默认 /workspace。")
+        }
         when (function.getString("name")) {
             "terminal" -> {
                 function.put("description", "在当前设备管理普通 Android Shell 或用户选择的 Linux 环境。" +
                     "以 App UID 执行，支持会话、异步任务和后台服务；Linux 内的模拟身份不提供 Android 系统特权。" +
-                    "使用 open_and_exec 执行单次命令，open/exec 复用会话，daemon_start/list/logs/stop 管理后台服务。")
+                    "使用 exec 执行单次命令，open/exec 复用会话，daemon_start/list/logs/stop 管理后台服务。后台服务仍可能被系统回收。")
                 properties?.getJSONObject("identity")
                     ?.put("enum", JSONArray().put("user"))
                     ?.put("description", "宿主执行身份；当前仅支持 user，默认 user。")
@@ -132,13 +148,6 @@ internal object AgentToolRequirements {
                 function.put("description",
                     "通过普通 Android Shell 执行单次非交互命令，以 App UID 运行；只能访问当前应用有权访问的资源。")
                 properties?.getJSONObject("cwd")?.put("description", "工作目录，默认使用 Eta 私有工作区。")
-            }
-            "list_directory" -> {
-                function.put("description", "列出当前应用有权访问的目录，默认使用 Eta 私有工作区。")
-                properties?.optJSONObject("path")?.apply {
-                    put("description", "目录路径；未提供时使用 Eta 私有工作区。")
-                    remove("default")
-                }
             }
             "read_image" -> properties?.getJSONObject("path")?.put("description",
                 "当前应用有权读取的绝对图片路径、file URI 或已授权的 content URI。")

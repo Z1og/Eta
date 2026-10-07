@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources>
+  <string name="permission_local_network_title">區域網路存取</string>
+  <string name="permission_local_network_summary">用於模型、MCP、內建瀏覽器和終端機存取區域網路，請按需授權；未授權仍可存取網際網路。</string>
+  <string name="permission_local_network_denied">尚未授予區域網路存取權限。需要連線至本機服務時，可前往系統應用程式權限設定，允許「附近的裝置」；網際網路連線不受影響。</string>
+  <string name="permission_local_network_settings_unavailable">無法開啟設定，請在系統設定中找到 Eta 的應用程式權限，允許「附近的裝置」。</string>
   <string name="settings_language">語言</string>
   <string name="settings_language_system">跟隨系統</string>
   <string name="app_name">Eta</string>
@@ -34,10 +38,8 @@
   <string name="action_open_terminal">開啟終端機</string>
   <string name="action_open_browser">開啟瀏覽器</string>
   <string name="action_launch_kimi_web">啟動 Kimi Web</string>
-  <string name="route_chat">對話</string>
   <string name="route_browser">Agent 瀏覽器</string>
   <string name="route_tools">工具</string>
-  <string name="route_skills">Skills</string>
   <string name="route_permissions">權限</string>
   <string name="route_system_enhancements">系統增強</string>
   <string name="route_settings">設定</string>
@@ -325,7 +327,7 @@
   <string name="ui_enable_vendor_assistant_custom_models_c8e465">啟用廠商助手自訂模型</string>
   <string name="ui_enable_this_provider_683a76">啟用此 Provider</string>
   <string name="ui_enable_terminal_file_tools_18bb43">啟用終端機/檔案工具</string>
-  <string name="ui_enable_web_browsing_tools_8b6b03">啟用網頁瀏覽工具</string>
+  <string name="ui_enable_web_browsing_tools_8b6b03">啟用網頁搜尋、讀取與瀏覽器</string>
   <string name="ui_enable_memory_4b69b7">啟用記憶</string>
   <string name="ui_enable_device_direct_tools_e2d595">啟用裝置直達工具</string>
   <string name="ui_back_to_bottom_32282e">回到底部</string>
@@ -403,7 +405,6 @@
   <string name="ui_system_enhancement_dcd4ad">系統增強</string>
   <string name="ui_system_applications_have_voice_wake_up_permissions_f_0190f2">系統應用程式享有語音喚醒權限、較少的自啟動限制，體驗接近原生。將透過 Magisk / KernelSU 模組安裝，重新啟動後生效。</string>
   <string name="ui_system_prompt_word_193981">System prompt</string>
-  <string name="ui_result_0a2c91">結果</string>
   <string name="ui_absolute_path_9ac6fc">絕對路徑</string>
   <string name="ui_edit_a7f814">編輯</string>
   <string name="ui_edit_model_parameters_ba4864">編輯模型參數</string>
@@ -413,7 +414,6 @@
   <string name="ui_memory_b55ff5">記憶</string>
   <string name="ui_set_up_7debf9">設定</string>
   <string name="ui_access_7f5641">存取</string>
-  <string name="ui_this_value_is_used_for_session_clipping_and_context__c3f9e7">此值用於對話裁剪與內容預算；留空時使用遠端或官方目錄提供的值。</string>
   <string name="ui_input_file_path_36d474">輸入檔路徑</string>
   <string name="ui_return_11d024">返回</string>
   <string name="ui_connection_configuration_7d057b">連線設定</string>
@@ -458,8 +458,27 @@
     <item quantity="other">已完成 %d 個步驟</item>
   </plurals>
   <string name="work_completed">分析完成</string>
+  <string name="tool_elapsed_seconds">%1$d 秒</string>
+  <plurals name="tool_group_calls">
+    <item quantity="other">%d 次</item>
+  </plurals>
+  <plurals name="work_summary_thinking">
+    <item quantity="other">思考 %d 次</item>
+  </plurals>
+  <plurals name="work_summary_tools">
+    <item quantity="other">呼叫 %d 個工具</item>
+  </plurals>
+  <plurals name="work_summary_failed">
+    <item quantity="other">%d 個失敗</item>
+  </plurals>
   <string name="work_collapse">收合工作過程</string>
   <string name="work_expand">展開工作過程</string>
+  <string name="markdown_code_block">程式碼</string>
+  <string name="markdown_alert_note">說明</string>
+  <string name="markdown_alert_tip">提示</string>
+  <string name="markdown_alert_important">重要</string>
+  <string name="markdown_alert_warning">警告</string>
+  <string name="markdown_alert_caution">注意</string>
   <string name="copy_copied">已複製</string>
   <string name="copy_answer">複製回答</string>
   <string name="copy_code">複製程式碼</string>
@@ -475,7 +494,9 @@
   <string name="state_hook_secondary_ability_95afe3">Hook 二級能力</string>
   <string name="state_root_permissions_958906">Root 權限</string>
   <string name="state_runtime_displays_a_status_pop_up_window_when_the_ser_54f285">Runtime 服務運作時顯示狀態浮窗</string>
-  <string name="state_direct_access_to_personal_data_387d7b">個人資料直達</string>
+  <string name="state_direct_access_to_personal_data_387d7b">個人上下文</string>
+  <string name="tool_personal_context">個人上下文</string>
+  <string name="tool_personal_context_description">按內容與時間檢索照片、便箋、記憶、帳單和行程索引，讀取詳情並統計彙總。</string>
   <string name="state_location_permissions_b53f9c">位置權限</string>
   <string name="state_usage_access_20f1f8">使用情況存取權</string>
   <string name="state_the_built_in_skills_have_not_changed_please_try_agai_34e5e3">內建 Skills 未發生變化，請稍後重試。</string>
@@ -509,7 +530,7 @@
   <string name="state_used_to_read_recently_opened_applications_and_foregr_73e796">用於讀取最近開啟的應用程式和前台使用時長</string>
   <string name="state_system_enhancement_capabilities_are_reserved_for_sub_0a8b21">系統增強能力保留為後續二級功能</string>
   <string name="state_terminal_and_files_ae7c54">終端與檔案</string>
-  <string name="state_web_browsing_e56105">網頁瀏覽</string>
+  <string name="state_web_browsing_e56105">網頁工具</string>
   <string name="state_memory_b55ff5">記憶</string>
   <string name="state_memory_system_4903eb">記憶系統</string>
   <string name="state_direct_access_to_equipment_eda92c">裝置直達</string>
@@ -529,7 +550,6 @@
   <string name="page_root_environment_is_missing_available_busybox_or_nec_76f454">Root 環境缺少可用的 BusyBox 或必要 applet</string>
   <string name="page_ready_7cca0c">} 已就緒</string>
   <string name="page_context_unknown_b6ae7b">內容長度未知</string>
-  <string name="page_the_context_length_must_be_a_positive_integer_06ca7a">內容長度上限必須是正整數</string>
   <string name="page_download_the_alpine_base_environment_8433ea">下載 Alpine 基礎環境</string>
   <string name="page_download_and_install_f4df99">下載並安裝</string>
   <string name="page_not_supported_ef8274">不支援</string>
@@ -565,11 +585,10 @@
   <string name="page_installed_eb88ff">已安裝</string>
   <string name="page_ready_f2afde">已就緒</string>
   <string name="page_covered_model_automatic_capabilities_3fa7d4">已覆蓋模型自動能力</string>
-  <string name="page_overwritten_will_take_precedence_over_remote_metadat_59934d">已覆寫，將優先於遠端中繼資料</string>
   <string name="page_exceeded_the_1_mib_limit_please_delete_120a63">已超過 1 MiB 上限，請刪減</string>
   <string name="page_the_installation_of_common_tools_has_not_been_comple_d7f7c2">常用工具安裝尚未完成，可以從當前進度繼續</string>
   <string name="page_the_current_root_environment_cannot_create_an_isolat_4ca00a">目前 Root 環境無法建立隔離 mount namespace 或 chroot</string>
-  <string name="page_current_model_a0af8f">目前模型</string>
+  <string name="page_current_model_a0af8f">預設模型</string>
   <string name="page_busy_0212cc">忙碌</string>
   <string name="page_retrieving_a880c9">拉取中...</string>
   <string name="page_support_thinking_5b9e4c">支援思考</string>
@@ -594,9 +613,8 @@
   <string name="page_open_with_external_application_ab3d4c">用外部應用程式打開</string>
   <string name="page_continue_installation_62da0c">繼續安裝</string>
   <string name="page_edit_model_29e31e">編輯模型</string>
-  <string name="page_automatic_no_context_cap_was_provided_by_the_remote__db027f">自動：遠端未提供內容長度上限</string>
   <string name="page_custom_model_25be0f">自訂模型</string>
-  <string name="page_set_as_current_model_183d7d">設為當前模型</string>
+  <string name="page_set_as_current_model_183d7d">設為預設模型</string>
   <string name="page_please_complete_the_linux_basic_tool_installation_fi_2ab81b">請先完成 Linux 基礎工具安裝</string>
   <string name="page_the_remote_end_did_not_return_a_usable_conversation__781487">遠端未傳回可用對話模型，已保留現有模型</string>
   <string name="page_select_zip_skills_package_982a44">選擇 ZIP Skill 包</string>
@@ -669,7 +687,6 @@
   <string name="page_use_standard_chat_completions_ee4b1a">使用 Chat Completions API</string>
   <string name="page_using_typed_items_with_semantic_streaming_events_f9c906">使用 Responses API、typed Items 與語意化串流事件</string>
   <string name="voice_input_request">輸入要求</string>
-  <string name="voice_reasoning">Eta 正在思考</string>
   <string name="voice_completed">已完成</string>
   <string name="voice_failed">Eta 執行失敗</string>
   <string name="voice_running_tool">Eta 正在執行 %1$s</string>
@@ -924,7 +941,6 @@
   <plurals name="provider_models_selected">
     <item quantity="other">已選取 %d 個</item>
   </plurals>
-  <string name="provider_auto_context">自動：%1$s tokens</string>
   <string name="provider_auto_reasoning_supported">自動：支援思考</string>
   <string name="provider_auto_reasoning_unknown">自動：不支援或未知</string>
   <string name="provider_context_tag">%1$s 內容脈絡</string>
@@ -1048,7 +1064,7 @@
     <item quantity="other">%d 個模型</item>
   </plurals>
   <string name="provider_selected">已選取</string>
-  <string name="provider_set_current">設為目前使用</string>
+  <string name="provider_set_current">設為預設</string>
   <string name="skills_checking_package">正在檢查 Skill 包</string>
   <string name="skills_import_zip">從 ZIP 匯入</string>
   <string name="skills_installing_package">正在驗證並安裝，請稍候</string>
@@ -1076,16 +1092,17 @@
   <string name="browser_opening">正在開啟網頁</string>
   <string name="browser_opening_host">正在開啟 %1$s</string>
   <string name="model_not_selected">未選擇</string>
+  <string name="conversation_model_unavailable">此對話原用的模型無法使用，已改用 %1$s</string>
   <string name="model_switch_current">切換模型，目前為 %1$s</string>
   <string name="model_collapse_provider">收合 %1$s</string>
   <string name="model_expand_provider">展開 %1$s</string>
   <string name="context_no_previous_usage">暫無上輪用量</string>
-  <string name="context_no_model_limit">模型未提供上限</string>
+  <string name="context_no_model_limit">未知上下文視窗，自動壓縮已關閉。仍可手動壓縮，也可在設定 → 模型提供商中填寫視窗。</string>
   <string name="context_usage_after_response">完成首次回覆後顯示實測用量</string>
   <string name="context_usage_previous_response">%1$s\n上輪實測</string>
-  <string name="context_usage_estimated">%1$s\n壓縮後估算</string>
   <string name="context_compaction">上下文壓縮</string>
   <string name="context_compact_action">壓縮上下文</string>
+  <string name="settings_auto_compaction">自動壓縮上下文</string>
   <string name="context_usage_description">內容用量：%1$s</string>
   <string name="memory_budget_summary">每輪最多注入 %1$s 個字元，詳細內容由模型視需要讀取</string>
   <string name="memory_over_limit">已超過 1 MiB 上限，請刪減內容</string>
@@ -1210,12 +1227,19 @@
   <string name="speech_region_beijing">北京</string>
   <string name="speech_region_singapore">新加坡</string>
   <string name="speech_access_token">Access Token</string>
-  <string name="speech_api_key">API Key</string>
   <string name="speech_app_id">App ID</string>
   <string name="speech_base_url">服務地址</string>
   <string name="speech_qwen_base_url_hint">服務地址（留空使用地域預設地址）</string>
   <string name="speech_resource_id_hint">資源 ID（留空使用預設值）</string>
   <string name="speech_language_hint">識別語言（留空自動識別，如 zh、en、yue）</string>
+  <string name="speech_group_result">識別結果</string>
+  <string name="speech_auto_send_title">停頓後自動傳送</string>
+  <string name="speech_auto_send_off">不自動傳送</string>
+  <string name="speech_auto_send_seconds">%1$s 秒</string>
+  <string name="speech_auto_send_note">僅對助手浮窗生效；按住麥克風說話時，放開才傳送。</string>
+  <string name="speech_refine_title">智慧糾錯</string>
+  <string name="speech_refine_summary">用目前對話模型修正同音字和中英文術語，會增加少量延遲和費用</string>
+  <string name="voice_release_to_send">放開傳送，移出取消</string>
   <string name="speech_legacy_auth">使用舊版鑑權</string>
   <string name="speech_advanced">進階設定</string>
   <string name="speech_expand">展開</string>
@@ -1226,8 +1250,44 @@
   <string name="speech_voice">音色</string>
   <string name="speech_voice_custom">自訂音色</string>
   <string name="speech_voice_id">音色 ID</string>
+  <string name="speech_voice_female">女聲</string>
+  <string name="speech_voice_male">男聲</string>
+  <string name="speech_voice_beijing_male">北京話男聲</string>
+  <string name="speech_voice_shanghai_female">上海話女聲</string>
+  <string name="speech_voice_qwen_cherry">芊悅</string>
+  <string name="speech_voice_qwen_serena">蘇瑤</string>
+  <string name="speech_voice_qwen_ethan">晨煦</string>
+  <string name="speech_voice_qwen_chelsie">千雪</string>
+  <string name="speech_voice_qwen_momo">茉兔</string>
+  <string name="speech_voice_qwen_vivian">十三</string>
+  <string name="speech_voice_qwen_moon">月白</string>
+  <string name="speech_voice_qwen_maia">四月</string>
+  <string name="speech_voice_qwen_kai">凱</string>
+  <string name="speech_voice_qwen_nofish">不吃魚</string>
+  <string name="speech_voice_qwen_bella">萌寶</string>
+  <string name="speech_voice_qwen_katerina">卡捷琳娜</string>
+  <string name="speech_voice_qwen_vincent">田叔</string>
+  <string name="speech_voice_qwen_neil">阿聞</string>
+  <string name="speech_voice_qwen_dylan">曉東</string>
+  <string name="speech_voice_qwen_jada">阿珍</string>
+  <string name="speech_voice_doubao_vv">Vivi</string>
+  <string name="speech_voice_doubao_xiaohe">小何</string>
+  <string name="speech_voice_doubao_yunzhou">雲舟</string>
+  <string name="speech_voice_doubao_xiaotian">小天</string>
+  <string name="speech_voice_doubao_liufei">劉飛</string>
+  <string name="speech_voice_doubao_qingxin">清新女聲</string>
+  <string name="speech_voice_doubao_cancan">知性燦燦</string>
+  <string name="speech_voice_doubao_xiaoyuan">甜美小源</string>
+  <string name="speech_voice_doubao_taozi">甜美桃子</string>
+  <string name="speech_voice_doubao_sisi">爽快思思</string>
+  <string name="speech_voice_doubao_linjia">鄰家女孩</string>
+  <string name="speech_voice_doubao_zixin">少年梓辛</string>
+  <string name="speech_voice_doubao_ahu">溫暖阿虎</string>
+  <string name="speech_voice_doubao_yichen">儒雅逸辰</string>
+  <string name="speech_voice_doubao_xiaoming">解說小明</string>
+  <string name="speech_voice_doubao_podcast">深夜播客</string>
   <string name="speech_qwen_voice_note">模型：qwen3-tts-flash。音色須支援該模型。</string>
-  <string name="speech_doubao_voice_note">模型：豆包語音合成 2.0。音色 ID 可從控制台音色庫複製。</string>
+  <string name="speech_doubao_voice_note">模型：豆包語音合成 2.0。</string>
   <string name="speech_test_recognition">測試識別</string>
   <string name="speech_test_finish">完成錄音</string>
   <string name="speech_test_note">測試會調用所選服務，可能產生費用；使用當前填寫的配置，不會自動儲存。</string>
@@ -1254,4 +1314,5 @@
   <string name="speech_test_result">識別結果：%1$s</string>
   <string name="speech_credentials_lost">語音憑據無法解密，請重新填寫並儲存</string>
   <string name="speech_save_retry">請重試</string>
+  <string name="system_notice_model_retry">模型請求重試</string>
 </resources>

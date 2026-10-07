@@ -46,6 +46,8 @@ internal data class EtaSpeechState(
     val configureAvailable: Boolean = false,
     val downloadAvailable: Boolean = false,
     val feedbackIsError: Boolean = true,
+    /** 用户正按住麦克风说话：松手才结束，界面保持输入栏而不切到语音态。 */
+    val holdToTalk: Boolean = false,
 ) {
     val active: Boolean get() = phase != EtaSpeechPhase.IDLE
 }

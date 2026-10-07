@@ -22,6 +22,8 @@ internal data class ConversationEntity(
     @ColumnInfo(name = "revisions_json", defaultValue = "''") val revisionsJson: String = "",
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    /** 会话最近使用的本地 Model.id；null 表示跟随默认模型。 */
+    @ColumnInfo(name = "model_id") val modelId: String? = null,
 )
 
 internal data class ConversationMetadata(
@@ -34,6 +36,7 @@ internal data class ConversationMetadata(
     @ColumnInfo(name = "revisions_json") val revisionsJson: String = "",
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "model_id") val modelId: String? = null,
 )
 
 @Serializable

@@ -16,15 +16,13 @@ class AgentCompactionUiTest {
     }
 
     @Test
-    fun compactionEstimateReplacesPreviousUsageUntilNextModelResponse() {
+    fun compactionInvalidatesPreviousUsageUntilNextModelResponse() {
         val response = AgentMessageUi("answer", "答案", usage = TokenUsageUi(contextTokens = 30_000))
         val compaction = SystemNoticeMessageUi("compact", SystemNoticeCode.ContextCompaction,
             "已压缩", contextTokens = 3_000)
-        val estimate = latestContextUsage(listOf(response, compaction), null)
-        assertEquals(3_000, estimate.contextTokens)
-        assertTrue(estimate.estimated)
+        val usage = latestContextUsage(listOf(response, compaction), null)
+        assertNull(usage.contextTokens)
         val next = latestContextUsage(listOf(response, compaction, response.copy(id = "next", usage = TokenUsageUi(contextTokens = 4_000))), null)
         assertEquals(4_000, next.contextTokens)
-        assertFalse(next.estimated)
     }
 }

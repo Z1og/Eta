@@ -14,14 +14,13 @@ internal sealed interface AgentEvent {
     data class ContextCompaction(
         val operationId: String,
         val phase: String,
-        val tokensBefore: Int,
+        val tokensBefore: Int? = null,
         val tokensAfter: Int? = null,
         val reasonCode: String = "",
     ) : AgentEvent {
         val displayMessage: String get() = when (phase) {
             PHASE_STARTED -> RUNNING_DETAIL
-            PHASE_COMPLETED -> "上下文已压缩：约 ${compactionTokenCount(tokensBefore)} → " +
-                "${compactionTokenCount(tokensAfter ?: 0)} tokens"
+            PHASE_COMPLETED -> "上下文已压缩，用量将在下一次模型响应后更新。"
             else -> "上下文压缩失败，原始上下文已保留。"
         }
         override fun toLogLine(): String =
@@ -222,9 +221,6 @@ internal sealed interface AgentEvent {
 
 private const val MAX_LOGGED_TOOL_NAMES = 8
 private const val RESULT_CODE_MARKER = "code="
-
-private fun compactionTokenCount(value: Int): String =
-    java.text.NumberFormat.getIntegerInstance().format(value)
 
 /** 摘要字段分隔符：旧格式用逗号，人文化摘要用间隔号。 */
 private val RESULT_FIELD_SEPARATORS = listOf(", ", " · ")

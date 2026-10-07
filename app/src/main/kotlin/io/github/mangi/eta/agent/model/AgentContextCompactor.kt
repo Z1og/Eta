@@ -15,7 +15,6 @@ internal class AgentContextCompactor(
         messages: JSONArray,
         systemCount: Int,
         sensitiveIds: Set<String>,
-        force: Boolean = false,
     ): JSONArray {
         controller.throwIfCancelled()
         if (AnthropicEphemeralState.hasPendingToolResponse(messages)) {
@@ -26,21 +25,8 @@ internal class AgentContextCompactor(
             it.optString("role") == "user" && !it.has("_eta_observation")
         }
         // 最新用户请求及其后尚在进行的工具链必须可以继续；长任务允许压缩该请求之后的已完成批次。
-        val safeEnds = (1..history.size).filter { canSplit(history, it) }
-        val recentLimit = config.contextWindow?.takeIf { it > 0 }?.let { (it * AgentContextBudget.RECENT_RATIO).toInt() }
-        val initialEnd = if (force) {
-            safeEnds.lastOrNull()
-        } else {
-            safeEnds.lastOrNull { it <= history.size - AgentContextBudget.RECENT_MESSAGES }
-                ?: safeEnds.firstOrNull()
-        }
-        if (initialEnd == null || initialEnd <= 0) throw failure("CONTEXT_NOT_COMPACTABLE", "没有可安全压缩的完整历史批次。")
-        var end: Int = initialEnd
-        if (recentLimit != null) {
-            while (AgentContextBudget.rawEstimate(JSONArray(history.drop(end))) > recentLimit) {
-                end = safeEnds.firstOrNull { it > end } ?: break
-            }
-        }
+        val end = (history.size downTo 1).firstOrNull { canSplit(history, it) }
+            ?: throw failure("CONTEXT_NOT_COMPACTABLE", "没有可安全压缩的完整历史批次。")
         val protectedUser = history.getOrNull(latestUser)?.takeIf { latestUser < end }
         val source = JSONArray(history.take(end).filterNot { it === protectedUser })
         val durable = AgentConversationCodec.transcript(source, 0, sensitiveIds)
@@ -57,7 +43,7 @@ internal class AgentContextCompactor(
             message.copy(content = text, contentJson = "", reasoningContent = "")
         }
         val summary = AgentContextSummarizer(config, provider, controller, roleplay)
-            .summarize(completeGroups(safe))
+            .summarize(safe)
         val covered = safe.sumOf { it.compactedUserTurns + if (it.role == "user") 1 else 0 }
         val result = JSONArray()
         for (index in 0 until systemCount) result.put(messages.getJSONObject(index))
@@ -76,7 +62,7 @@ internal class AgentContextCompactor(
             } else message
             result.put(AnthropicEphemeralState.withoutContentBlocks(withoutResponsesItems))
         }
-        if (AgentContextBudget.rawEstimate(result) >= AgentContextBudget.rawEstimate(messages)) {
+        if (result.toString().length >= messages.toString().length) {
             throw failure("CONTEXT_NO_REDUCTION", "摘要未能缩小上下文，原始上下文已保留。")
         }
         return result
@@ -98,20 +84,6 @@ internal class AgentContextCompactor(
                 if (message.optString("role") == "tool") open.remove(message.optString("tool_call_id"))
             }
             return open.isEmpty()
-        }
-
-        private fun completeGroups(messages: List<AgentModelClient.ConversationMessage>): List<List<AgentModelClient.ConversationMessage>> {
-            val json = messages.map(AgentConversationCodec::toJsonObject)
-            val groups = mutableListOf<List<AgentModelClient.ConversationMessage>>()
-            var start = 0
-            for (end in 1..json.size) {
-                if (canSplit(json, end)) {
-                    groups += messages.subList(start, end)
-                    start = end
-                }
-            }
-            if (start < messages.size) groups += messages.subList(start, messages.size)
-            return groups
         }
 
         fun failure(code: String, message: String) = AgentModelFailure(code, false, message)

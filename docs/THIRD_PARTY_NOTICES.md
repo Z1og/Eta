@@ -10,6 +10,12 @@ APK 的 `assets/native-sources` 附带校验过的原始源码，以及从实际
 
 Eta 的离线模型目录快照来自 [models.dev](https://models.dev/api.json)，由 `scripts/update-models-dev-catalog.py` 获取原始 JSON 并压缩后随 APK 分发。models.dev 的目录数据和源码采用 [MIT License](https://github.com/anomalyco/models.dev/blob/dev/LICENSE)，版权归 © 2025 models.dev。版权与许可全文随 APK 保存在 [`assets/licenses/models-dev-MIT.txt`](../app/src/main/assets/licenses/models-dev-MIT.txt)。
 
+## 网页正文解析
+
+Eta 使用 [jsoup](https://jsoup.org/) 在本机解析已经下载的 HTML。jsoup 采用 MIT License，版权归 Jonathan Hedley；许可全文随 APK 保存在 [`assets/licenses/jsoup-MIT.txt`](../app/src/main/assets/licenses/jsoup-MIT.txt)。依赖版本以 `gradle/libs.versions.toml` 为准。
+
+Android 标准库兼容使用 [desugar_jdk_libs](https://github.com/google/desugar_jdk_libs) 的 NIO 规格，按 GNU GPL v2 with Classpath Exception 分发，许可全文保存在 [`assets/licenses/desugar-jdk-libs-LICENSE.txt`](../app/src/main/assets/licenses/desugar-jdk-libs-LICENSE.txt)。这些组件保留各自许可证权利。
+
 ## Miuix
 
 Eta 的应用界面使用 [Miuix](https://github.com/compose-miuix-ui/miuix)，其采用 [Apache License 2.0](https://github.com/compose-miuix-ui/miuix/blob/main/LICENSE)。

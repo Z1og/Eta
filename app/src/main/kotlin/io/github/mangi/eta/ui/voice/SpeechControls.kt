@@ -13,8 +13,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Check
@@ -36,13 +34,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +54,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.mangi.eta.R
+import kotlin.math.sqrt
+import kotlin.random.Random
 import io.github.mangi.eta.agent.voice.EtaSpeechPhase
 import io.github.mangi.eta.agent.voice.SpeechInputController
 import io.github.mangi.eta.agent.voice.SpeechPlaybackController
@@ -163,8 +168,8 @@ internal fun SpeechInputFeedback(controller: SpeechInputController) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (state.active) {
-                SpeechLevelDot(level = state.level)
-                Spacer(modifier = Modifier.width(6.dp))
+                SpeechLevelBars(level = { controller.state.value.level })
+                Spacer(modifier = Modifier.width(8.dp))
             }
             Text(
                 text = state.error ?: state.preview.ifBlank { state.progress },
@@ -213,20 +218,45 @@ internal fun SpeechInputFeedback(controller: SpeechInputController) {
     }
 }
 
-/** 电平是帧率级状态，只在绘制阶段读取，避免每次采样都重组状态条。 */
+/**
+ * 录音电平波形。录音端约 5 次/秒上报 RMS，这里逐帧做包络插值：上升快、回落慢，
+ * 说话时跳动跟手，停顿时平滑收回。电平与包络只在绘制阶段读取，帧循环不触发重组。
+ */
 @Composable
-private fun SpeechLevelDot(level: Float) {
-    Box(
-        modifier = Modifier
-            .size(8.dp)
-            .graphicsLayer {
-                val scale = 1f + level.coerceIn(0f, 1f) * 0.9f
-                scaleX = scale
-                scaleY = scale
-            }
-            .background(MiuixTheme.colorScheme.primary, CircleShape),
-    )
+private fun SpeechLevelBars(level: () -> Float) {
+    val color = MiuixTheme.colorScheme.primary
+    val envelope = remember { FloatArray(LEVEL_BAR_WEIGHTS.size) }
+    var frame by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) withFrameNanos { frame = it }
+    }
+    Canvas(modifier = Modifier.size(width = 22.dp, height = 16.dp)) {
+        frame
+        // RMS 与听感近似对数关系，开方后小声说话也能看到明显起伏。
+        val input = sqrt(level().coerceIn(0f, 1f))
+        val barWidth = 2.5.dp.toPx()
+        val gap = (size.width - barWidth * envelope.size) / (envelope.size - 1)
+        val minHeight = barWidth
+        envelope.indices.forEach { index ->
+            val jitter = 1f + (Random.nextFloat() * 2f - 1f) * LEVEL_BAR_JITTER
+            val target = (input * LEVEL_BAR_WEIGHTS[index] * jitter).coerceIn(0f, 1f)
+            val current = envelope[index]
+            envelope[index] = current + (target - current) * if (target > current) LEVEL_ATTACK else LEVEL_RELEASE
+            val height = minHeight + (size.height - minHeight) * envelope[index]
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(index * (barWidth + gap), (size.height - height) / 2f),
+                size = Size(barWidth, height),
+                cornerRadius = CornerRadius(barWidth / 2f),
+            )
+        }
+    }
 }
+
+private val LEVEL_BAR_WEIGHTS = floatArrayOf(0.5f, 0.8f, 1f, 0.75f, 0.55f)
+private const val LEVEL_ATTACK = 0.4f
+private const val LEVEL_RELEASE = 0.15f
+private const val LEVEL_BAR_JITTER = 0.04f
 
 @Composable
 private fun SpeechFeedbackAction(text: String, primary: Boolean = false, onClick: () -> Unit) {

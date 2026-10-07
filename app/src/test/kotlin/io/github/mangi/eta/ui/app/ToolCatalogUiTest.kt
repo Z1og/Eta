@@ -1,6 +1,7 @@
 package io.github.mangi.eta.ui.app
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Language
@@ -8,6 +9,8 @@ import androidx.compose.material.icons.rounded.TravelExplore
 import io.github.mangi.eta.agent.model.AgentToolCatalog
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
 import io.github.mangi.eta.agent.tool.RootRequirement
+import io.github.mangi.eta.R
+import io.github.mangi.eta.agent.overlay.toolDisplayNameResource
 import io.github.mangi.eta.ui.components.iconForTool
 import io.github.mangi.eta.ui.model.projectToolGroups
 import io.github.mangi.eta.ui.model.toolCardRequirement
@@ -50,8 +53,29 @@ class ToolCatalogUiTest {
         assertEquals(Icons.Rounded.TravelExplore, iconForTool("网页搜索"))
         assertEquals(iconForTool("网页搜索"), iconForTool("web_search"))
         assertEquals(Icons.Rounded.Language, iconForTool("browser_use"))
+        assertEquals(Icons.AutoMirrored.Rounded.Article, iconForTool("fetch_url"))
         assertEquals(Icons.Rounded.Extension, iconForTool("mcp_server_search_012345"))
         assertEquals(Icons.Rounded.Build, iconForTool("unknown_tool"))
+    }
+
+    @Test
+    fun publicWebCardsHaveNamesAndStayInTheWebGroup() {
+        val web = buildToolsState(RuntimeEnvironment.getApplication()).groups.first { it.id == "web" }
+        assertTrue(web.tools.map { it.id }.containsAll(listOf("web_search", "fetch_url", "browser_use")))
+        assertEquals(R.string.tool_web_search, toolDisplayNameResource("web_search"))
+        assertEquals(R.string.tool_fetch_url, toolDisplayNameResource("fetch_url"))
+    }
+
+    @Test
+    fun personalQueriesAndNativeOperationsHaveSeparateGroups() {
+        val group = buildToolsState(RuntimeEnvironment.getApplication()).groups.first { it.id == "personal_data" }
+        assertTrue(group.tools.any { it.id == "search_bills" })
+        assertTrue(group.tools.none { it.id == "personal_context" || it.id == "create_note" })
+        val operations = buildToolsState(RuntimeEnvironment.getApplication()).groups.first { it.id == "device_direct" }
+        assertTrue(operations.tools.any { it.id == "set_flashlight" })
+        assertTrue(operations.tools.any { it.id == "create_calendar_event" })
+        assertEquals(RootRequirement.REQUIRED, toolCardRequirement("search_bills").rootRequirement)
+        assertTrue(toolCardRequirement("search_bills").colorOs)
     }
 
     @Test

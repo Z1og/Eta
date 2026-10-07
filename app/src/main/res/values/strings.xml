@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources>
+  <string name="permission_local_network_title">Local network access</string>
+  <string name="permission_local_network_summary">Allow models, MCP, the built-in browser and terminals to access your local network when needed. Internet access remains available without this permission.</string>
+  <string name="permission_local_network_denied">Local network access was not granted. You can allow Nearby devices in the system app permission settings when you need a local service. Internet access remains available.</string>
+  <string name="permission_local_network_settings_unavailable">Could not open settings. Open Eta’s app permissions in system settings to allow Nearby devices.</string>
   <string name="settings_language">Language</string>
   <string name="settings_language_system">Follow system</string>
   <string name="app_name">Eta</string>
@@ -36,10 +40,9 @@
   <string name="action_open_terminal">Open terminal</string>
   <string name="action_open_browser">Open browser</string>
   <string name="action_launch_kimi_web">Launch Kimi Web</string>
-  <string name="route_chat">Chat</string>
   <string name="route_browser">Agent browser</string>
   <string name="route_tools">Tools</string>
-  <string name="route_skills">Skills</string>
+  <string name="route_skills" translatable="false">Skills</string>
   <string name="route_permissions">Permissions</string>
   <string name="route_system_enhancements">System enhancements</string>
   <string name="route_settings">Settings</string>
@@ -277,7 +280,7 @@
   <string name="system_notice_stopped">Stopped</string>
   <string name="system_notice_empty_result">The run completed without a text response.</string>
   <string name="system_notice_runtime_failed">Runtime failed</string>
-  <string name="system_notice_model_retry">模型请求重试</string>
+  <string name="system_notice_model_retry">Retrying model request</string>
   <string name="conversation_persistence_failed">Couldn’t save the conversation. Please try again.</string>
   <string name="system_notice_interrupted">The run was interrupted. Partial output is preserved; unfinished actions were not retried.</string>
   <string name="tool_status_unknown">Result unknown</string>
@@ -303,7 +306,6 @@
   <string name="voice_model_download_failed">Could not download the speech model</string>
   <string name="voice_request_failed">The request failed. Please try again.</string>
   <string name="voice_input_request">Enter a request</string>
-  <string name="voice_reasoning">Eta is reasoning</string>
   <string name="voice_completed">Completed</string>
   <string name="voice_failed">Eta failed to complete the task</string>
   <string name="voice_running_tool">Eta is running %1$s</string>
@@ -349,7 +351,7 @@
   <string name="ui_enable_vendor_assistant_custom_models_c8e465">Enable vendor assistant custom models</string>
   <string name="ui_enable_this_provider_683a76">Enable this provider</string>
   <string name="ui_enable_terminal_file_tools_18bb43">Enable terminal/file tools</string>
-  <string name="ui_enable_web_browsing_tools_8b6b03">Enable web browsing tools</string>
+  <string name="ui_enable_web_browsing_tools_8b6b03">Enable web search, reading and browser</string>
   <string name="ui_enable_memory_4b69b7">Enable memory</string>
   <string name="ui_enable_device_direct_tools_e2d595">Enable device direct tools</string>
   <string name="ui_back_to_bottom_32282e">back to bottom</string>
@@ -427,7 +429,6 @@
   <string name="ui_system_enhancement_dcd4ad">System enhancement</string>
   <string name="ui_system_applications_have_voice_wake_up_permissions_f_0190f2">System applications have voice wake-up permissions, fewer self-start restrictions, and the experience is close to native. Will be installed via Magisk/KernelSU module and will take effect after reboot.</string>
   <string name="ui_system_prompt_word_193981">System prompt</string>
-  <string name="ui_result_0a2c91">result</string>
   <string name="ui_absolute_path_9ac6fc">absolute path</string>
   <string name="ui_edit_a7f814">edit</string>
   <string name="ui_edit_model_parameters_ba4864">Edit model parameters</string>
@@ -437,7 +438,6 @@
   <string name="ui_memory_b55ff5">Memory</string>
   <string name="ui_set_up_7debf9">set up</string>
   <string name="ui_access_7f5641">Access</string>
-  <string name="ui_this_value_is_used_for_session_clipping_and_context__c3f9e7">This value is used for session clipping and context budgeting. When left blank, the remote or official directory value is used.</string>
   <string name="ui_input_file_path_36d474">input file path</string>
   <string name="ui_return_11d024">return</string>
   <string name="ui_connection_configuration_7d057b">Connection</string>
@@ -484,8 +484,31 @@
     <item quantity="other">Completed %d steps</item>
   </plurals>
   <string name="work_completed">Analysis complete</string>
+  <string name="tool_elapsed_seconds">%1$ds</string>
+  <plurals name="tool_group_calls">
+    <item quantity="one">%d call</item>
+    <item quantity="other">%d calls</item>
+  </plurals>
+  <plurals name="work_summary_thinking">
+    <item quantity="one">Thought %d time</item>
+    <item quantity="other">Thought %d times</item>
+  </plurals>
+  <plurals name="work_summary_tools">
+    <item quantity="one">%d tool call</item>
+    <item quantity="other">%d tool calls</item>
+  </plurals>
+  <plurals name="work_summary_failed">
+    <item quantity="one">%d failed</item>
+    <item quantity="other">%d failed</item>
+  </plurals>
   <string name="work_collapse">Collapse work details</string>
   <string name="work_expand">Expand work details</string>
+  <string name="markdown_code_block">Code</string>
+  <string name="markdown_alert_note">Note</string>
+  <string name="markdown_alert_tip">Tip</string>
+  <string name="markdown_alert_important">Important</string>
+  <string name="markdown_alert_warning">Warning</string>
+  <string name="markdown_alert_caution">Caution</string>
   <string name="copy_copied">Copied</string>
   <string name="copy_answer">Copy answer</string>
   <string name="copy_code">Copy code</string>
@@ -502,7 +525,9 @@
   <string name="state_hook_secondary_ability_95afe3">Hook secondary ability</string>
   <string name="state_root_permissions_958906">Root permissions</string>
   <string name="state_runtime_displays_a_status_pop_up_window_when_the_ser_54f285">Runtime displays a status pop-up window when the service is running</string>
-  <string name="state_direct_access_to_personal_data_387d7b">Direct access to personal data</string>
+  <string name="state_direct_access_to_personal_data_387d7b">Personal context</string>
+  <string name="tool_personal_context">Personal context</string>
+  <string name="tool_personal_context_description">Search indexed photos, notes, memories, bills and travel by content or time; read details and calculate totals.</string>
   <string name="state_location_permissions_b53f9c">location permissions</string>
   <string name="state_usage_access_20f1f8">usage access</string>
   <string name="state_the_built_in_skills_have_not_changed_please_try_agai_34e5e3">The built-in skills have not changed, please try again later.</string>
@@ -536,10 +561,10 @@
   <string name="state_used_to_read_recently_opened_applications_and_foregr_73e796">Used to read recently opened applications and foreground usage time</string>
   <string name="state_system_enhancement_capabilities_are_reserved_for_sub_0a8b21">System enhancement capabilities are reserved for subsequent secondary functions</string>
   <string name="state_terminal_and_files_ae7c54">Terminal and files</string>
-  <string name="state_web_browsing_e56105">web browsing</string>
+  <string name="state_web_browsing_e56105">Web tools</string>
   <string name="state_memory_b55ff5">memory</string>
   <string name="state_memory_system_4903eb">memory system</string>
-  <string name="state_direct_access_to_equipment_eda92c">Direct access to equipment</string>
+  <string name="state_direct_access_to_equipment_eda92c">System and built-in apps</string>
   <string name="state_please_select_the_zip_file_provided_by_the_system_fi_fea145">Please select the ZIP file provided by the system file selector.</string>
   <string name="state_run_floating_window_48af02">Run floating window</string>
   <string name="state_notice_of_use_rights_1ae29a">Notice of use rights</string>
@@ -556,7 +581,6 @@
   <string name="page_root_environment_is_missing_available_busybox_or_nec_76f454">Root environment is missing available BusyBox or necessary applets</string>
   <string name="page_ready_7cca0c">} Ready</string>
   <string name="page_context_unknown_b6ae7b">context unknown</string>
-  <string name="page_the_context_length_must_be_a_positive_integer_06ca7a">The context window must be a positive integer</string>
   <string name="page_download_the_alpine_base_environment_8433ea">Download the Alpine base environment</string>
   <string name="page_download_and_install_f4df99">Download and install</string>
   <string name="page_not_supported_ef8274">Not supported</string>
@@ -592,11 +616,10 @@
   <string name="page_installed_eb88ff">Installed</string>
   <string name="page_ready_f2afde">Ready</string>
   <string name="page_covered_model_automatic_capabilities_3fa7d4">Covered model automatic capabilities</string>
-  <string name="page_overwritten_will_take_precedence_over_remote_metadat_59934d">Overwritten, will take precedence over remote metadata</string>
   <string name="page_exceeded_the_1_mib_limit_please_delete_120a63">Exceeded the 1 MiB limit, please delete</string>
   <string name="page_the_installation_of_common_tools_has_not_been_comple_d7f7c2">The installation of common tools has not been completed, you can continue from the current progress</string>
   <string name="page_the_current_root_environment_cannot_create_an_isolat_4ca00a">The current Root environment cannot create an isolated mount namespace or chroot</string>
-  <string name="page_current_model_a0af8f">current model</string>
+  <string name="page_current_model_a0af8f">default model</string>
   <string name="page_busy_0212cc">Busy</string>
   <string name="page_retrieving_a880c9">Retrieving...</string>
   <string name="page_support_thinking_5b9e4c">Supports Reasoning</string>
@@ -621,9 +644,8 @@
   <string name="page_open_with_external_application_ab3d4c">Open with external application</string>
   <string name="page_continue_installation_62da0c">Continue installation</string>
   <string name="page_edit_model_29e31e">Edit model</string>
-  <string name="page_automatic_no_context_cap_was_provided_by_the_remote__db027f">Automatic: no context cap was provided by the remote end</string>
   <string name="page_custom_model_25be0f">custom model</string>
-  <string name="page_set_as_current_model_183d7d">Set as current model</string>
+  <string name="page_set_as_current_model_183d7d">Set as default model</string>
   <string name="page_please_complete_the_linux_basic_tool_installation_fi_2ab81b">Please complete the Linux basic tool installation first</string>
   <string name="page_the_remote_end_did_not_return_a_usable_conversation__781487">The remote end did not return a usable conversation model, the existing model has been retained</string>
   <string name="page_select_zip_skills_package_982a44">Select ZIP skills package</string>
@@ -949,7 +971,6 @@
     <item quantity="one">%d selected</item>
     <item quantity="other">%d selected</item>
   </plurals>
-  <string name="provider_auto_context">Auto: %1$s tokens</string>
   <string name="provider_auto_reasoning_supported">Auto: supports reasoning</string>
   <string name="provider_auto_reasoning_unknown">Auto: unsupported or unknown</string>
   <string name="provider_context_tag">%1$s context</string>
@@ -1076,7 +1097,7 @@
     <item quantity="other">%d models</item>
   </plurals>
   <string name="provider_selected">Selected</string>
-  <string name="provider_set_current">Set as current</string>
+  <string name="provider_set_current">Set as default</string>
   <string name="skills_checking_package">Checking skill package</string>
   <string name="skills_import_zip">Import from ZIP</string>
   <string name="skills_installing_package">Verifying and installing. Please wait</string>
@@ -1104,11 +1125,12 @@
   <string name="browser_opening">Opening webpage</string>
   <string name="browser_opening_host">Opening %1$s</string>
   <string name="model_not_selected">Not selected</string>
+  <string name="conversation_model_unavailable">Model unavailable for this conversation. Using %1$s.</string>
   <string name="model_switch_current">Switch model. Current: %1$s</string>
   <string name="model_collapse_provider">Collapse %1$s</string>
   <string name="model_expand_provider">Expand %1$s</string>
   <string name="context_no_previous_usage">No usage data yet</string>
-  <string name="context_no_model_limit">This model has no context limit</string>
+  <string name="context_no_model_limit">Context window unknown, so automatic compaction is off. You can still compact manually, or set the window in Settings → Model Providers.</string>
   <string name="context_usage_after_response">Measured after the first response</string>
   <string name="context_usage_previous_response">%1$s\nMeasured last turn</string>
   <string name="context_usage_description">Context usage: %1$s</string>
@@ -1202,7 +1224,7 @@
   <string name="data_backup_file_open_failed">Unable to open the selected file</string>
   <string name="context_compaction">Context compaction</string>
   <string name="context_compact_action">Compact context</string>
-  <string name="context_usage_estimated">%1$s\nEstimated after compaction</string>
+  <string name="settings_auto_compaction">Automatic context compaction</string>
   <string name="voice_audio_permission">请在 Eta 应用权限中允许麦克风，然后重新唤醒；点击麦克风可打开设置</string>
   <string name="voice_no_speech">没有听清，请点击麦克风重试，或改用键盘输入</string>
   <string name="voice_use_keyboard">切换键盘输入</string>
@@ -1239,12 +1261,20 @@
   <string name="speech_region_beijing">Beijing</string>
   <string name="speech_region_singapore">Singapore</string>
   <string name="speech_access_token">Access Token</string>
-  <string name="speech_api_key">API Key</string>
+  <string name="speech_api_key" translatable="false">API Key</string>
   <string name="speech_app_id">App ID</string>
   <string name="speech_base_url">Base URL</string>
   <string name="speech_qwen_base_url_hint">Base URL (leave empty for the region default)</string>
   <string name="speech_resource_id_hint">Resource ID (leave empty for the default)</string>
   <string name="speech_language_hint">Recognition language (empty = auto, e.g. zh, en, yue)</string>
+  <string name="speech_group_result">Recognition result</string>
+  <string name="speech_auto_send_title">Auto-send after pause</string>
+  <string name="speech_auto_send_off">Off</string>
+  <string name="speech_auto_send_seconds">%1$s s</string>
+  <string name="speech_auto_send_note">Applies to the assistant overlay only. When you hold the microphone, it sends on release.</string>
+  <string name="speech_refine_title">Smart correction</string>
+  <string name="speech_refine_summary">Uses the current chat model to fix homophones and mixed Chinese–English terms. Adds a little latency and cost.</string>
+  <string name="voice_release_to_send">Release to send, slide away to cancel</string>
   <string name="speech_legacy_auth">Use legacy authentication</string>
   <string name="speech_advanced">Advanced</string>
   <string name="speech_expand">Expand</string>
@@ -1255,8 +1285,44 @@
   <string name="speech_voice">Voice</string>
   <string name="speech_voice_custom">Custom voice</string>
   <string name="speech_voice_id">Voice ID</string>
+  <string name="speech_voice_female">Female</string>
+  <string name="speech_voice_male">Male</string>
+  <string name="speech_voice_beijing_male">Beijing dialect, male</string>
+  <string name="speech_voice_shanghai_female">Shanghai dialect, female</string>
+  <string name="speech_voice_qwen_cherry">Cherry</string>
+  <string name="speech_voice_qwen_serena">Serena</string>
+  <string name="speech_voice_qwen_ethan">Ethan</string>
+  <string name="speech_voice_qwen_chelsie">Chelsie</string>
+  <string name="speech_voice_qwen_momo">Momo</string>
+  <string name="speech_voice_qwen_vivian">Vivian</string>
+  <string name="speech_voice_qwen_moon">Moon</string>
+  <string name="speech_voice_qwen_maia">Maia</string>
+  <string name="speech_voice_qwen_kai">Kai</string>
+  <string name="speech_voice_qwen_nofish">Nofish</string>
+  <string name="speech_voice_qwen_bella">Bella</string>
+  <string name="speech_voice_qwen_katerina">Katerina</string>
+  <string name="speech_voice_qwen_vincent">Vincent</string>
+  <string name="speech_voice_qwen_neil">Neil</string>
+  <string name="speech_voice_qwen_dylan">Dylan</string>
+  <string name="speech_voice_qwen_jada">Jada</string>
+  <string name="speech_voice_doubao_vv">Vivi</string>
+  <string name="speech_voice_doubao_xiaohe">Xiaohe</string>
+  <string name="speech_voice_doubao_yunzhou">Yunzhou</string>
+  <string name="speech_voice_doubao_xiaotian">Xiaotian</string>
+  <string name="speech_voice_doubao_liufei">Liufei</string>
+  <string name="speech_voice_doubao_qingxin">Fresh Voice</string>
+  <string name="speech_voice_doubao_cancan">Cancan</string>
+  <string name="speech_voice_doubao_xiaoyuan">Xiaoyuan</string>
+  <string name="speech_voice_doubao_taozi">Taozi</string>
+  <string name="speech_voice_doubao_sisi">Sisi</string>
+  <string name="speech_voice_doubao_linjia">Girl Next Door</string>
+  <string name="speech_voice_doubao_zixin">Zixin</string>
+  <string name="speech_voice_doubao_ahu">Ahu</string>
+  <string name="speech_voice_doubao_yichen">Yichen</string>
+  <string name="speech_voice_doubao_xiaoming">Xiaoming</string>
+  <string name="speech_voice_doubao_podcast">Late Night Podcast</string>
   <string name="speech_qwen_voice_note">Model: qwen3-tts-flash. The voice must support this model.</string>
-  <string name="speech_doubao_voice_note">Model: Doubao Speech Synthesis 2.0. Copy a voice ID from the console voice library.</string>
+  <string name="speech_doubao_voice_note">Model: Doubao Speech Synthesis 2.0.</string>
   <string name="speech_test_recognition">Test recognition</string>
   <string name="speech_test_finish">Finish recording</string>
   <string name="speech_test_note">Testing calls the selected service and may incur charges. It uses the current form values and does not save them.</string>
@@ -1283,4 +1349,18 @@
   <string name="speech_test_result">Recognition result: %1$s</string>
   <string name="speech_credentials_lost">Speech credentials could not be decrypted; enter and save them again</string>
   <string name="speech_save_retry">try again</string>
+  <string name="tool_inspect_app">检查应用</string>
+  <string name="tool_inspect_app_description">查看指定应用的版本、UID、安装信息、启用状态与权限。</string>
+  <string name="tool_edit_file">精确编辑文件</string>
+  <string name="tool_edit_file_description">使用旧文本定位片段，检查匹配和版本后替换。</string>
+  <string name="tool_stat_file">查看文件信息</string>
+  <string name="tool_stat_file_description">查询 Android 或 Linux 文件的类型、大小和版本。</string>
+  <string name="tool_glob_files">按路径查找文件</string>
+  <string name="tool_glob_files_description">使用路径模式递归查找文件，支持有界续查。</string>
+  <string name="tool_grep_files">搜索文件内容</string>
+  <string name="tool_grep_files_description">搜索 UTF-8 文本，返回匹配路径、行号与采集范围。</string>
+  <string name="tool_web_search">搜索网页</string>
+  <string name="tool_web_search_description">未使用 Provider 托管搜索时检索公开网页，返回标题、链接与摘要，无需额外 API Key。</string>
+  <string name="tool_fetch_url">读取网页正文</string>
+  <string name="tool_fetch_url_description">读取静态网页正文并分页续读；不执行网页脚本或共享浏览器登录状态。</string>
 </resources>

@@ -3,7 +3,7 @@ package io.github.mangi.eta.agent.model
 /** 标记原始参数或结果不得进入持久会话的工具。 */
 internal object AgentSensitiveToolPolicy {
     fun isSensitive(toolName: String): Boolean =
-        toolName.startsWith("mcp_") || toolName in sensitiveTools
+        toolName.startsWith("mcp_") || toolName in sensitiveTools || toolName in io.github.mangi.eta.agent.context.PersonalSearchTools.names || toolName in AgentPhoneToolCatalog.names
 
     private val sensitiveTools = setOf(
         "get_setting",
@@ -30,9 +30,11 @@ internal object AgentSensitiveToolPolicy {
         "search_messages",
         "search_downloads",
         "search_coloros_notes",
+        "search_notes",
         "search_coloros_recordings",
         "search_recording_summaries",
         "search_coloros_memories",
+        "search_system_memories",
         "search_saved_places",
         "search_personal_orders",
         "search_qq_chat_images",

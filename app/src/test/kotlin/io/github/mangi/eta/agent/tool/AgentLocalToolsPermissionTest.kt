@@ -28,14 +28,29 @@ class AgentLocalToolsPermissionTest {
         )
         root.set(false)
         listOf(
+            "search_bills" to "{}",
             "set_setting" to "{}",
             "terminal" to "{\"action\":\"open\",\"identity\":\"root\"}",
+            "edit_file" to "{\"path\":\"x\",\"identity\":\"root\",\"old_text\":\"a\",\"new_text\":\"b\"}",
             "press_key" to "{\"button\":\"PASTE\"}",
         ).forEach { (name, args) ->
             val result = tools.execute(AgentModelClient.ToolCall("old-$name", name, args))
             assertEquals("ROOT_REQUIRED", JSONObject(result.content).getString("code"))
         }
         tools.close()
+    }
+
+    @Test
+    fun personalContextRechecksSensitiveReadPermissionAndRedactsDeniedCalls() {
+        val enabled = AtomicBoolean(true)
+        val tools = tools(rootAvailable = { true }, sensitiveReadEnabled = enabled::get,
+            beforeToolExecution = { error("已关闭个人信息读取时不能进入数据源执行阶段") })
+        tools.use {
+            enabled.set(false)
+            val result = it.execute(AgentModelClient.ToolCall("personal", "search_bills", "{}"))
+            assertEquals("DEVICE_SENSITIVE_READ_TOOLS_DISABLED", JSONObject(result.content).getString("code"))
+            assertTrue(result.sensitive)
+        }
     }
 
     @Test
@@ -53,6 +68,10 @@ class AgentLocalToolsPermissionTest {
         )
 
         assertEquals("TERMINAL_TOOLS_DISABLED", JSONObject(result.content).getString("code"))
+        listOf("read_file", "edit_file", "glob_files", "grep_files", "stat_file").forEach { name ->
+            val fileResult = tools.execute(AgentModelClient.ToolCall("disabled-$name", name, "{}"))
+            assertEquals(name, "TERMINAL_TOOLS_DISABLED", JSONObject(fileResult.content).getString("code"))
+        }
         tools.close()
     }
 
@@ -71,6 +90,10 @@ class AgentLocalToolsPermissionTest {
         )
 
         assertEquals("BROWSER_TOOLS_DISABLED", JSONObject(result.content).getString("code"))
+        listOf("web_search", "fetch_url").forEach { name ->
+            val webResult = tools.execute(AgentModelClient.ToolCall("disabled-$name", name, "{}"))
+            assertEquals(name, "BROWSER_TOOLS_DISABLED", JSONObject(webResult.content).getString("code"))
+        }
         tools.close()
     }
 
@@ -259,6 +282,7 @@ class AgentLocalToolsPermissionTest {
         memoryEnabled: () -> Boolean = { false },
         memoryWritable: Boolean = true,
         rootAvailable: () -> Boolean = { false },
+        sensitiveReadEnabled: () -> Boolean = { false },
         screenObservationProvider: (
             (AgentScreenObservationContract.Options) -> RootShellDeviceController.Observation
         )? = null,
@@ -275,6 +299,7 @@ class AgentLocalToolsPermissionTest {
             memoryToolsEnabled = memoryEnabled,
             memoryWritable = memoryWritable,
             rootAvailable = rootAvailable,
+            deviceSensitiveReadToolsEnabled = sensitiveReadEnabled,
             screenObservationProvider = screenObservationProvider,
             beforeToolExecution = beforeToolExecution,
         )

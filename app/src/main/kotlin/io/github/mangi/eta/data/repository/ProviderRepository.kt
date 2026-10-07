@@ -41,7 +41,7 @@ internal object ProviderRepository {
     fun providersFlow(): Flow<List<ProviderSetting>> =
         dao().providersFlow().map { providers ->
             providers
-                .map { it.toDomain().withContextWindows() }
+                .map { it.toDomain() }
                 .sortedBy(ProviderSetting::sortOrder)
         }
 
@@ -53,18 +53,14 @@ internal object ProviderRepository {
 
     suspend fun allProviders(): List<ProviderSetting> =
         dao().providers()
-            .map { it.toDomain().withContextWindows() }
+            .map { it.toDomain() }
             .sortedBy(ProviderSetting::sortOrder)
 
     suspend fun providerById(id: String): ProviderSetting? =
-        dao().providerById(id)?.toDomain()?.withContextWindows()
+        dao().providerById(id)?.toDomain()
 
     suspend fun providerByModelId(modelId: String): ProviderSetting? =
-        dao().providerByModelId(modelId)?.toDomain()?.withContextWindows()
-
-    // 读取出口统一补齐已知窗口，UI 与 Runtime 只消费解析后的领域模型。
-    private fun ProviderSetting.withContextWindows(): ProviderSetting =
-        withModels(models.map { OfficialModelCatalog.withContextWindow(this, it) })
+        dao().providerByModelId(modelId)?.toDomain()
 
     suspend fun addProvider(provider: ProviderSetting): ProviderSetting {
         val nextOrder = (allProviders().maxOfOrNull { it.sortOrder } ?: -1) + 1

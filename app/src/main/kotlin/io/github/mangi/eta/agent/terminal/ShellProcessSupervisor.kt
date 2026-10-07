@@ -517,6 +517,8 @@ internal data class OneShotShellResult(
     val exitCode: Int,
     val output: ByteArray,
     val stderr: ByteArray,
+    val outputTruncated: Boolean = false,
+    val stderrTruncated: Boolean = false,
 )
 
 /**
@@ -549,6 +551,7 @@ internal fun runOneShotShell(
     environment: TerminalEnvironment = TerminalEnvironment.ANDROID,
     linuxRootfsPath: String? = null,
     linuxSharedMounts: List<SharedFolderMount> = emptyList(),
+    maxOutputBytes: Int = Int.MAX_VALUE,
 ): OneShotShellResult {
     val process = processSupervisor.startShellProcess(
         identity = identity,
@@ -567,10 +570,10 @@ internal fun runOneShotShell(
         val output = ByteArrayOutputCollector()
         val stderr = ByteArrayOutputCollector()
         val outputThread = thread(name = "agent-terminal-stdout") {
-            process.inputStream.use { input -> output.readFrom(input) }
+            process.inputStream.use { input -> output.readFrom(input, maxOutputBytes) }
         }
         val stderrThread = thread(name = "agent-terminal-stderr") {
-            process.errorStream.use { input -> stderr.readFrom(input) }
+            process.errorStream.use { input -> stderr.readFrom(input, minOf(maxOutputBytes, 64 * 1024)) }
         }
         val stdinThread = thread(name = "agent-terminal-stdin") {
             process.outputStream.use { out ->
@@ -585,13 +588,15 @@ internal fun runOneShotShell(
             stderrThread.join(500)
             stdinThread.join(500)
             processSupervisor.reapProcess(process)
-            return OneShotShellResult(-2, output.bytes(), "命令执行超时".toByteArray())
+            return OneShotShellResult(-2, output.bytes(), "命令执行超时".toByteArray(), output.isTruncated(), stderr.isTruncated())
         }
 
         outputThread.join(500)
         stderrThread.join(500)
         stdinThread.join(500)
-        return OneShotShellResult(process.exitValue(), output.bytes(), stderr.bytes())
+        return OneShotShellResult(
+            process.exitValue(), output.bytes(), stderr.bytes(), output.isTruncated(), stderr.isTruncated(),
+        )
     } finally {
         if (processSupervisor.isClosing) {
             processSupervisor.terminateAndReap(process)

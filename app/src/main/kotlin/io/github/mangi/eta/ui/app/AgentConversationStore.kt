@@ -1,6 +1,7 @@
 package io.github.mangi.eta.ui.app
 
 import android.content.Context
+import androidx.room.withTransaction
 import io.github.mangi.eta.agent.model.AgentConversationCodec
 import io.github.mangi.eta.agent.model.AgentModelClient
 import io.github.mangi.eta.agent.roleplay.RoleplayBinding
@@ -12,6 +13,9 @@ import io.github.mangi.eta.data.db.ConversationMessageEntity
 import io.github.mangi.eta.data.db.ConversationStateEntity
 import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.data.model.ReasoningEffort
+import io.github.mangi.eta.core.AndroidAgentLogger
+import io.github.mangi.eta.core.safeLogType
+import io.github.mangi.eta.core.safeStackTrace
 import io.github.mangi.eta.ui.model.AgentChatHomeUiState
 import io.github.mangi.eta.ui.model.AgentChatMessageUi
 import io.github.mangi.eta.ui.model.AgentMessageUi
@@ -24,6 +28,7 @@ import io.github.mangi.eta.ui.model.ToolActivityStatusUi
 import io.github.mangi.eta.ui.model.ToolSummaryMessageUi
 import io.github.mangi.eta.ui.model.UserMessageUi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -43,6 +48,11 @@ internal object AgentConversationStore {
         val conversationsById: Map<String, AgentChatHomeUiState>,
         val titles: Map<String, String>,
         val updatedAt: Map<String, Long>,
+        /**
+         * 加载后列表下标与库中 sort_index 不一致的会话。流式占位等未入库消息会在排序中留下空洞，
+         * 重启后列表被压紧；增量保存按下标截断后缀，这些会话必须先整段重写一次。
+         */
+        val unalignedConversationIds: Set<String> = emptySet(),
     )
 
     private val saveMutex = Mutex()
@@ -58,52 +68,91 @@ internal object AgentConversationStore {
         conversationsById: Map<String, AgentChatHomeUiState>,
         titles: Map<String, String>,
         updatedAt: Map<String, Long>,
+    ) = AgentConversationPersistence().save(
+        context, Snapshot(selectedConversationId, conversationsById, titles, updatedAt),
+    )
+
+    internal suspend fun saveChanges(
+        context: Context,
+        selectedConversationId: String?,
+        current: Map<String, AgentConversationPersistence.Content>,
+        previous: Map<String, AgentConversationPersistence.Content>,
     ) {
         val appContext = context.applicationContext
         saveMutex.withLock {
             withContext(Dispatchers.IO) {
-                val sorted = conversationsById.entries
-                    .sortedByDescending { (id, _) -> updatedAt[id] ?: 0L }
-
-                val storedIds = sorted.mapTo(mutableSetOf()) { it.key }
-                val selected = selectedConversationId
-                    ?.takeIf { it in storedIds }
-                    ?: sorted.firstOrNull()?.key
-                val now = System.currentTimeMillis()
-                val conversations = sorted.map { (id, state) ->
-                    ConversationEntity(
-                        id = id,
-                        title = titles[id].orEmpty(),
-                        thinkingEnabled = state.reasoningEffort.enablesReasoning,
-                        reasoningEffort = state.reasoningEffort.wireValue,
-                        appliedRuntimeRunIdsJson = json.encodeToString(state.appliedRuntimeRunIds),
-                        roleplayJson = state.roleplay?.let { json.encodeToString(it) }.orEmpty(),
-                        revisionsJson = if (state.roleplay == null) "" else json.encodeToString(state.roleplayMessages),
-                        createdAt = updatedAt[id] ?: now,
-                        updatedAt = updatedAt[id] ?: now,
-                    )
-                }
-                val messages = sorted.flatMap { (conversationId, state) ->
-                    state.messages
-                        .mapIndexedNotNull { index, message ->
-                            message.toEntityOrNull(conversationId, index)
+                var phase = "read_metadata"
+                try {
+                    val database = EtaDatabase.get(appContext)
+                    val dao = database.conversationDao()
+                    database.withTransaction {
+                        val stored = dao.conversationMetadataRows().associateBy { it.id }
+                        phase = "delete_conversations"
+                        (stored.keys - current.keys).forEach { dao.deleteConversation(it) }
+                        for ((id, state) in current) {
+                            val old = previous[id].takeIf { id in stored }
+                            if (old == null || !state.sameMetadata(old)) {
+                                phase = "encode_metadata"
+                                val row = ConversationEntity(
+                                    id = id, title = state.title,
+                                    thinkingEnabled = state.reasoningEffort.enablesReasoning,
+                                    reasoningEffort = state.reasoningEffort.wireValue,
+                                    appliedRuntimeRunIdsJson = json.encodeToString(state.appliedRuntimeRunIds),
+                                    roleplayJson = state.roleplay?.let { json.encodeToString(it) }.orEmpty(),
+                                    revisionsJson = if (state.roleplay == null) "" else json.encodeToString(state.roleplayMessages),
+                                    createdAt = stored[id]?.createdAt ?: state.updatedAt.takeIf { it != 0L } ?: System.currentTimeMillis(),
+                                    updatedAt = state.updatedAt.takeIf { it != 0L } ?: System.currentTimeMillis(),
+                                    modelId = state.modelId,
+                                )
+                                phase = "write_metadata"
+                                dao.insertConversations(listOf(row))
+                            }
+                            if (old == null || state.history != old.history || state.journal != old.journal) {
+                                val missing = dao.contextCheckpointRow(id) == null
+                                phase = "encode_history"
+                                val history = if (missing || old == null || state.history != old.history) {
+                                    AgentConversationCodec.encodeConversationCheckpoint(state.history)
+                                } else null
+                                phase = "encode_journal"
+                                val journal = if (missing || old == null || state.journal != old.journal) {
+                                    AgentConversationCodec.encodeTranscriptForStorage(state.journal)
+                                } else null
+                                phase = "write_checkpoint"
+                                dao.updateContextCheckpoint(id, history, journal)
+                            }
+                            val oldMessages = old?.messages.orEmpty()
+                            var prefix = 0
+                            while (prefix < minOf(oldMessages.size, state.messages.size)) {
+                                val before = oldMessages[prefix]
+                                val after = state.messages[prefix]
+                                if (before != after && before.toEntityOrNull(id, prefix) != after.toEntityOrNull(id, prefix)) break
+                                prefix++
+                            }
+                            if (old == null || prefix != oldMessages.size || prefix != state.messages.size) {
+                                phase = "delete_message_suffix"
+                                dao.deleteMessagesFrom(id, prefix)
+                                for (index in prefix until state.messages.size) {
+                                    phase = "encode_message"
+                                    val row = state.messages[index].toEntityOrNull(id, index) ?: continue
+                                    phase = "write_message"
+                                    dao.insertMessages(listOf(row))
+                                }
+                            }
                         }
-                }
-                val contextCheckpoints = sorted.map { (conversationId, state) ->
-                    ConversationContextCheckpointEntity(
-                        conversationId = conversationId,
-                        historyJson = AgentConversationCodec.encodeConversationCheckpoint(state.history),
-                        journalJson = AgentConversationCodec.encodeTranscriptForStorage(state.journal.ifEmpty { state.history }),
+                        phase = "write_selection"
+                        val selected = selectedConversationId?.takeIf { it in current }
+                            ?: current.maxByOrNull { it.value.updatedAt }?.key
+                        if (selected == null) dao.deleteState()
+                        else dao.insertState(ConversationStateEntity(selectedConversationId = selected))
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Throwable) {
+                    AndroidAgentLogger.error(
+                        "Agent conversation persistence failed: phase=$phase type=${failure.safeLogType()}\n${failure.safeStackTrace()}",
                     )
+                    throw failure
                 }
-                EtaDatabase.get(appContext)
-                    .conversationDao()
-                    .replaceAll(
-                        conversations = conversations,
-                        messages = messages,
-                        contextCheckpoints = contextCheckpoints,
-                        state = selected?.let { ConversationStateEntity(selectedConversationId = it) },
-                    )
             }
         }
     }
@@ -120,26 +169,25 @@ internal object AgentConversationStore {
             )
         }
 
-        val messagesByConversation = conversations.associate { conversation ->
-            conversation.id to buildList {
+        val states = linkedMapOf<String, AgentChatHomeUiState>()
+        val titles = mutableMapOf<String, String>()
+        val updatedAt = mutableMapOf<String, Long>()
+        val unaligned = mutableSetOf<String>()
+
+        conversations.forEach { conversation ->
+            val messages = buildList {
                 var offset = 0
                 while (true) {
-                    val page = dao.messagesPage(
-                        conversationId = conversation.id,
-                        limit = MESSAGE_LOAD_PAGE_SIZE,
-                        offset = offset,
-                    )
+                    val page = dao.messagesPage(conversation.id, MESSAGE_LOAD_PAGE_SIZE, offset)
                     addAll(page)
                     if (page.size < MESSAGE_LOAD_PAGE_SIZE) break
                     offset += page.size
                 }
             }
-        }
-        val states = linkedMapOf<String, AgentChatHomeUiState>()
-        val titles = mutableMapOf<String, String>()
-        val updatedAt = mutableMapOf<String, Long>()
-
-        conversations.forEach { conversation ->
+            val restored = messages.mapNotNull { it.toMessageOrNull() }
+            if (restored.size != messages.size || messages.withIndex().any { (index, row) -> row.sortIndex != index }) {
+                unaligned += conversation.id
+            }
             val checkpoint = dao.contextCheckpoint(conversation.id)
             states[conversation.id] = AgentChatHomeUiState(
                 roleplay = conversation.roleplayJson.takeIf(String::isNotBlank)?.let { json.decodeFromString<RoleplayBinding>(it) },
@@ -147,24 +195,19 @@ internal object AgentConversationStore {
                     json.decodeFromString<RoleplayMessageState>(it)
                 } ?: RoleplayMessageState(),
                 journal = AgentConversationCodec.decodeTranscript(checkpoint?.journalJson),
-                messages = messagesByConversation[conversation.id]
-                    .orEmpty()
-                    .sortedBy { it.sortIndex }
-                    .mapNotNull { it.toMessageOrNull() },
+                messages = restored,
                 history = AgentConversationCodec.decodeTranscript(
                     checkpoint?.historyJson
                 )
                     .ifEmpty {
-                        messagesByConversation[conversation.id]
-                            .orEmpty()
-                            .sortedBy { it.sortIndex }
-                            .toLegacyHistory()
+                        messages.toLegacyHistory()
                     },
                 appliedRuntimeRunIds = conversation.appliedRuntimeRunIdsJson.toStringList(),
                 input = "",
                 isStreaming = false,
                 thinkingEnabled = conversation.reasoningEffortValue.enablesReasoning,
                 reasoningEffort = conversation.reasoningEffortValue,
+                modelId = conversation.modelId,
             ).let(RoleplayConversationReducer::decorate)
             titles[conversation.id] = conversation.title.takeUnless { it == LEGACY_UNNAMED_TITLE }.orEmpty()
             updatedAt[conversation.id] = conversation.updatedAt
@@ -179,6 +222,7 @@ internal object AgentConversationStore {
             conversationsById = states,
             titles = titles,
             updatedAt = updatedAt,
+            unalignedConversationIds = unaligned,
         )
     }
 

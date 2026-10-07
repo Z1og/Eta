@@ -1,9 +1,6 @@
 package io.github.mangi.eta.agent.voice
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.data.model.SpeechCredentials
 import io.github.mangi.eta.data.model.SpeechSettings
@@ -13,10 +10,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
@@ -54,15 +55,12 @@ internal class SpeechPlaybackController(
                 lease?.requestPlaybackFocus { beforePlayback(); playbackActive = true }
                 val player = createOutput()
                 output = player
-                val announced = java.util.concurrent.atomic.AtomicBoolean(false)
-                for (chunk in SpeechText.chunks(readable)) {
-                    synthesize(config, secrets, chunk) { bytes ->
-                        player.write(bytes)
-                        if (announced.compareAndSet(false, true)) scope.launch(Dispatchers.Main.immediate) {
-                            if (session == generation) mutableState.value = SpeechPlaybackState(messageId)
-                        }
+                playChunks(config, secrets, SpeechText.chunks(readable), player) {
+                    scope.launch(Dispatchers.Main.immediate) {
+                        if (session == generation) mutableState.value = SpeechPlaybackState(messageId)
                     }
                 }
+                player.finish()
                 withTimeout(180_000) { while (!player.drained()) delay(20) }
                 if (session == generation) stop()
             } catch (error: Exception) {
@@ -79,6 +77,54 @@ internal class SpeechPlaybackController(
         }
     }
 
+    /**
+     * 合成按网络速度下载，播放按实时速度写入音轨，两者经队列解耦。若在合成回调里直接写音轨，
+     * 读流会被播放节奏拖住，一段音频时长超过合成超时就会中断，服务端也会长时间等待客户端读取。
+     * 最多领先播放 [PREFETCH_CHUNKS] 段，既消除段间等待首包的停顿，也限制缓冲的 PCM 内存。
+     * 段与段无缝相接，接缝处由 [SpeechSegmentFade] 淡入淡出。
+     */
+    private suspend fun playChunks(
+        config: SpeechSettings,
+        secrets: SpeechCredentials,
+        chunks: List<String>,
+        player: SpeechAudioOutput,
+        onFirstAudio: () -> Unit,
+    ) = coroutineScope {
+        val queue = Channel<SpeechQueueItem>(Channel.UNLIMITED)
+        val ahead = Semaphore(PREFETCH_CHUNKS)
+        launch {
+            try {
+                for (chunk in chunks) {
+                    ahead.acquire()
+                    synthesize(config, secrets, chunk) { bytes -> queue.trySend(SpeechQueueItem.Audio(bytes)) }
+                    queue.send(SpeechQueueItem.ChunkEnd)
+                }
+                queue.close()
+            } catch (error: Throwable) {
+                // 合成超时是 CancellationException，子协程以它结束不会取消父作用域，必须经队列交给播放端。
+                queue.close(error)
+            }
+        }
+        withContext(Dispatchers.IO) {
+            var announced = false
+            val fade = SpeechSegmentFade()
+            // 音轨写满时 write 会休眠重试；可中断才能让宿主取消立即结束这里，随后关闭音轨。
+            suspend fun play(bytes: ByteArray) {
+                if (bytes.isNotEmpty()) runInterruptible { player.write(bytes) }
+            }
+            for (item in queue) when (item) {
+                is SpeechQueueItem.Audio -> {
+                    if (!announced) { announced = true; onFirstAudio() }
+                    play(fade.write(item.bytes))
+                }
+                SpeechQueueItem.ChunkEnd -> {
+                    play(fade.end())
+                    ahead.release()
+                }
+            }
+        }
+    }
+
     fun stop() {
         generation++
         output?.close(); output = null
@@ -90,40 +136,15 @@ internal class SpeechPlaybackController(
     }
 }
 
-internal interface SpeechAudioOutput : Closeable {
-    fun write(bytes: ByteArray)
-    fun drained(): Boolean
+private sealed interface SpeechQueueItem {
+    class Audio(val bytes: ByteArray) : SpeechQueueItem
+    data object ChunkEnd : SpeechQueueItem
 }
 
-internal class SpeechPcmOutput : SpeechAudioOutput {
-    private var track: AudioTrack? = AudioTrack.Builder()
-        .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-        .setAudioFormat(AudioFormat.Builder().setSampleRate(24_000).setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
-        .setBufferSizeInBytes(maxOf(24_000, AudioTrack.getMinBufferSize(24_000,
-            AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)))
-        .setTransferMode(AudioTrack.MODE_STREAM).build().also { it.play() }
-    private var frames = 0L
+private const val PREFETCH_CHUNKS = 2
 
-    override fun write(bytes: ByteArray) {
-        var offset = 0
-        while (offset < bytes.size) {
-            val written = synchronized(this) {
-                val audio = track ?: throw CancellationException("Speech playback stopped")
-                audio.write(bytes, offset, bytes.size - offset, AudioTrack.WRITE_NON_BLOCKING).also {
-                    if (it < 0) throw SpeechFailure(SpeechErrorCode.AUDIO, "音频播放失败")
-                    frames += it / 2
-                }
-            }
-            offset += written
-            if (written == 0) Thread.sleep(5)
-        }
-    }
-
-    @Synchronized override fun drained(): Boolean = track?.let { (it.playbackHeadPosition.toLong() and 0xffffffffL) >= frames } ?: true
-    @Synchronized override fun close() {
-        track?.let { it.pause(); it.flush(); it.release() }
-        track = null
-    }
+internal interface SpeechAudioOutput : Closeable {
+    fun write(bytes: ByteArray)
+    fun finish()
+    fun drained(): Boolean
 }

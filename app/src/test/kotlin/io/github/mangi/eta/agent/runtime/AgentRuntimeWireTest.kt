@@ -25,8 +25,42 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(sdk = [33, 36])
 class AgentRuntimeWireTest {
+    @Test
+    fun automaticCompactionSettingSurvivesIpcAndDefaultsForOldRequests() {
+        val config = AgentModelClient.ModelConfig(
+            baseUrl = "https://example.invalid", apiKey = "fixture", model = "fixture", systemPrompt = "",
+            contextWindow = 900_000,
+            reasoningEffort = ReasoningEffort.OFF,
+        )
+        for (enabled in listOf(false, true)) {
+            val request = AgentRuntimeWire.RunRequest(
+                runId = "automatic-compaction", prompt = "继续", config = config.copy(autoCompactionEnabled = enabled),
+                images = emptyList(),
+            )
+            val bundle = AgentRuntimeWire.toLegacyBundle(request)
+            assertEquals(request, AgentRuntimeWire.runRequestFromBundle(bundle))
+            bundle.remove("auto_compaction_enabled")
+            assertTrue(AgentRuntimeWire.runRequestFromBundle(bundle).config.autoCompactionEnabled)
+        }
+    }
+
+    @Test
+    fun compactionUsageIsOptionalAndOldMeasuredFieldsRemainReadable() {
+        for (event in listOf(
+            AgentEvent.ContextCompaction("manual", "started"),
+            AgentEvent.ContextCompaction("automatic", "completed", tokensBefore = 765_000),
+            AgentEvent.ContextCompaction("legacy", "completed", tokensBefore = 9_000, tokensAfter = 2_000),
+        )) {
+            val bundle = AgentRuntimeWire.eventToBundle(event)
+            assertEquals(event.tokensBefore != null, bundle.containsKey("tokens_before"))
+            assertEquals(event.tokensAfter != null, bundle.containsKey("tokens_after"))
+            assertEquals(event, AgentRuntimeWire.eventFromBundle(bundle))
+            assertEquals(event, AgentEventJsonCodec.decode(AgentEventJsonCodec.encode(event)))
+        }
+    }
+
     @Test
     fun screenshotsKeepExactBytesAndFormatAcrossDescriptorAndInlineTransport() {
         val bitmap = Bitmap.createBitmap(32, 24, Bitmap.Config.ARGB_8888).apply {

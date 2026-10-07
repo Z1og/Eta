@@ -1,6 +1,7 @@
 package io.github.mangi.eta.ui.components
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.automirrored.rounded.ManageSearch
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
@@ -76,6 +77,7 @@ internal fun iconForTool(toolId: String): ImageVector = when (toolId) {
     "browser_use", "网页浏览" -> Icons.Rounded.Language
     "web_search", "web_search_call", "网页搜索" -> Icons.Rounded.TravelExplore
     "browser_read" -> Icons.AutoMirrored.Rounded.MenuBook
+    "fetch_url" -> Icons.AutoMirrored.Rounded.Article
     "browser_interact" -> Icons.Rounded.AdsClick
     "browser_screenshot" -> Icons.Rounded.ScreenshotMonitor
     "file_search", "file_search_call", "文件搜索" -> Icons.AutoMirrored.Rounded.ManageSearch
@@ -83,7 +85,8 @@ internal fun iconForTool(toolId: String): ImageVector = when (toolId) {
     "computer", "computer_call", "计算机操作" -> Icons.Rounded.Computer
     "image_generation", "image_generation_call", "图像生成" -> Icons.Rounded.Image
     "mcp_call", "MCP 工具" -> Icons.Rounded.Extension
-    "memory_get", "memory_write" -> Icons.Rounded.Psychology
+    "memory_get", "memory_write", "character_memory_get", "character_memory_write" ->
+        Icons.Rounded.Psychology
     "press_key" -> Icons.Rounded.KeyboardCommandKey
     "open_system_panel" -> Icons.Rounded.WebAsset
     "read_image" -> Icons.Rounded.Image
@@ -101,7 +104,7 @@ internal fun iconForTool(toolId: String): ImageVector = when (toolId) {
     "read_sms_code" -> Icons.Rounded.Key
     "recent_notifications", "search_notification_history" -> Icons.Rounded.Notifications
     "get_setting", "set_setting" -> Icons.Rounded.Settings
-    "app_state_control" -> Icons.Rounded.AdminPanelSettings
+    "inspect_app", "app_state_control" -> Icons.Rounded.AdminPanelSettings
     "get_logcat" -> Icons.Rounded.Description
     "get_current_location", "search_saved_places" -> Icons.Rounded.LocationOn
     "get_health_summary" -> Icons.Rounded.MonitorHeart
@@ -118,12 +121,22 @@ internal fun iconForTool(toolId: String): ImageVector = when (toolId) {
     "search_files" -> Icons.Rounded.FolderOpen
     "search_downloads" -> Icons.Rounded.Download
     "search_clipboard_history" -> Icons.Rounded.ContentPaste
-    "search_coloros_notes" -> Icons.AutoMirrored.Rounded.StickyNote2
-    "search_coloros_memories" -> Icons.Rounded.Psychology
+    "search_notes", "search_coloros_notes" -> Icons.AutoMirrored.Rounded.StickyNote2
+    "search_system_memories", "search_coloros_memories" -> Icons.Rounded.Psychology
     "search_personal_orders" -> Icons.Rounded.ShoppingBag
     "terminal", "terminal_job", "run_command" -> Icons.Rounded.Terminal
-    "read_file" -> Icons.Rounded.Description
-    "write_file" -> Icons.Rounded.EditNote
-    "list_directory" -> Icons.Rounded.FolderOpen
-    else -> if (toolId.startsWith("mcp_")) Icons.Rounded.Extension else Icons.Rounded.Build
+    "read_file", "stat_file" -> Icons.Rounded.Description
+    "write_file", "edit_file" -> Icons.Rounded.EditNote
+    "list_directory", "glob_files", "grep_files" -> Icons.Rounded.FolderOpen
+    else -> when {
+        toolId in io.github.mangi.eta.agent.context.PersonalSearchTools.names -> Icons.Rounded.Insights
+        toolId in io.github.mangi.eta.agent.model.AgentPhoneToolCatalog.names -> when {
+            "calendar" in toolId -> Icons.Rounded.CalendarMonth
+            "alarm" in toolId -> Icons.Rounded.Alarm
+            "note" in toolId -> Icons.AutoMirrored.Rounded.StickyNote2
+            else -> Icons.Rounded.Smartphone
+        }
+        toolId.startsWith("mcp_") -> Icons.Rounded.Extension
+        else -> Icons.Rounded.Build
+    }
 }

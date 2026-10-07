@@ -9,6 +9,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Rect
+import android.os.Build
 import android.os.SystemClock
 import java.io.IOException
 import java.io.StringReader
@@ -704,10 +705,10 @@ internal class RootShellDeviceController(
 
     private fun captureScreenshot(): ScreenCapture {
         val excludedPackages = screenshotExcludedPackages()
-        // 优先用无障碍截图：takeScreenshotOfWindow 逐窗口过滤 TYPE_ACCESSIBILITY_OVERLAY，
-        // 天然排除浮层（glow/orb/bubble 等），对 Agent 透明
+        // Android 14 起优先逐窗口截图，排除 Eta 浮层；旧系统只保留满足排除合同的 Root 回退。
         val service = AgentAccessibilityService.current()
-        if (service != null) {
+        val windowScreenshotSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        if (service != null && windowScreenshotSupported) {
             val captureStartedAt = SystemClock.elapsedRealtime()
             val result = runCatching {
                 service.captureScreenshotExcludingOverlays(excludedPackages)
@@ -776,11 +777,16 @@ internal class RootShellDeviceController(
                 criticalWindowMissing = false,
             )
         ) {
-            logger.warn(
-                "Agent device action=capture_screenshot outcome=failed " +
-                    "reason=package_exclusion_unavailable excludedPackages=${excludedPackages.size}"
-            )
-            return ScreenCapture.failed(source = "accessibility")
+            val code = if (!windowScreenshotSupported) {
+                "WINDOW_SCREENSHOT_UNSUPPORTED"
+            } else {
+                "SCREENSHOT_UNAVAILABLE"
+            }
+            logger.debug {
+                "Agent device action=capture_screenshot outcome=unavailable " +
+                    "code=$code excludedPackages=${excludedPackages.size}"
+            }
+            return ScreenCapture.failed(source = "accessibility", code = code)
         }
         logger.debug {
             "Agent device action=capture_screenshot outcome=fallback source=root"
@@ -1335,6 +1341,7 @@ internal class RootShellDeviceController(
         val timedOut: Boolean = false,
         val criticalWindowMissing: Boolean = false,
         val requested: Boolean = true,
+        val code: String? = null,
     ) {
         fun toJson(): JSONObject {
             val failures = JSONArray()
@@ -1364,6 +1371,7 @@ internal class RootShellDeviceController(
                 .put("failures", failures)
                 .put("timed_out", timedOut)
                 .put("critical_window_missing", criticalWindowMissing)
+                .also { result -> code?.let { result.put("code", it) } }
         }
 
         companion object {
@@ -1377,13 +1385,14 @@ internal class RootShellDeviceController(
                 requested = false,
             )
 
-            fun failed(source: String): ScreenCapture = ScreenCapture(
+            fun failed(source: String, code: String? = null): ScreenCapture = ScreenCapture(
                 image = null,
                 source = source,
                 complete = false,
                 partial = false,
                 expectedWindows = 0,
                 capturedWindows = 0,
+                code = code,
             )
         }
     }

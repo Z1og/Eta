@@ -41,7 +41,7 @@ class RuntimeConfigRepositoryTest {
         )
 
         val config = RuntimeConfigRepository.buildRuntimeConfig(provider, model)
-        val raw = RuntimeConfigRepository.runtimeConfigJson(config)
+        val raw = RuntimeConfigRepository.runtimeConfigJson(config.copy(autoCompactionEnabled = false))
         val root = Json.parseToJsonElement(raw).jsonObject
 
         assertEquals(ProviderTypes.OPENAI_COMPATIBLE, root.getValue("providerType").jsonPrimitive.content)
@@ -58,6 +58,9 @@ class RuntimeConfigRepositoryTest {
             ),
             config.reasoningCapabilities?.selectableEfforts,
         )
-        assertEquals(config, Json.decodeFromString<AgentModelClient.ModelConfig>(raw))
+        assertEquals("false", root.getValue("autoCompactionEnabled").jsonPrimitive.content)
+        assertEquals(config.copy(autoCompactionEnabled = false), Json.decodeFromString<AgentModelClient.ModelConfig>(raw))
+        assertEquals(config.autoCompactionEnabled,
+            Json.decodeFromString<AgentModelClient.ModelConfig>(RuntimeConfigRepository.runtimeConfigJson(config)).autoCompactionEnabled)
     }
 }

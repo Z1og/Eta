@@ -3,6 +3,8 @@ package io.github.mangi.eta.agent.model
 import io.github.mangi.eta.agent.runtime.AgentEvent
 import io.github.mangi.eta.agent.runtime.AgentRunController
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
+import io.github.mangi.eta.data.model.OpenAiEndpointMode
+import io.github.mangi.eta.data.model.ProviderTypes
 import java.util.concurrent.atomic.AtomicInteger
 import org.json.JSONArray
 import org.json.JSONObject
@@ -13,6 +15,55 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AgentModelClientLoopTest {
+    @Test
+    fun hostedSearchReplacesOnlyTheLocalSearchInSupportedConfigurations() {
+        for (providerType in listOf(ProviderTypes.OPENAI_COMPATIBLE, ProviderTypes.ANTHROPIC)) {
+            for (endpoint in listOf(OpenAiEndpointMode.RESPONSES, OpenAiEndpointMode.CHAT_COMPLETIONS)) {
+                for (hosted in listOf(false, true)) for (browser in listOf(false, true)) {
+                    val effectiveHosted = providerType == ProviderTypes.OPENAI_COMPATIBLE &&
+                        endpoint == OpenAiEndpointMode.RESPONSES && hosted
+                    val config = modelConfig().copy(
+                        providerType = providerType, openAiEndpointMode = endpoint,
+                        hostedWebSearchEnabled = hosted, browserTools = browser,
+                    )
+                    val provider = ScriptedProvider(listOf({ request, _ ->
+                        val names = (0 until request.tools.length()).map {
+                            request.tools.getJSONObject(it).getJSONObject("function").getString("name")
+                        }
+                        assertEquals(browser && !effectiveHosted, "web_search" in names)
+                        assertEquals(browser, "fetch_url" in names)
+                        assertEquals(browser, "browser_use" in names)
+                        assertEquals(effectiveHosted, request.messages.toString().contains("Provider 托管的 web_search"))
+                        assertEquals(browser && !effectiveHosted, request.messages.toString().contains("使用本地 web_search"))
+                        if (effectiveHosted) {
+                            val outgoing = ResponsesRequestBuilder.build(config, request.messages, request.tools).getJSONArray("tools")
+                            assertEquals(1, (0 until outgoing.length()).count { outgoing.getJSONObject(it).optString("type") == "web_search" })
+                            assertFalse((0 until outgoing.length()).any { outgoing.getJSONObject(it).optString("name") == "web_search" })
+                        }
+                        assistant(content = "完成", finishReason = "stop")
+                    }))
+                    AgentModelClient.complete(config, "查询公开信息", AgentModelClient.ToolExecutor { error("不应执行本地请求") }, provider = provider)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun hiddenLocalSearchCannotBeExecutedAsAFunctionDuringHostedSearch() {
+        val provider = ScriptedProvider(listOf(
+            { _, _ -> assistant(finishReason = "tool_calls", toolCalls = listOf(toolCall("local-search", "web_search", """{"query":"example"}"""))) },
+            { request, _ ->
+                assertTrue(request.messages.toString().contains("INVALID_TOOL_ARGUMENTS"))
+                assistant(content = "已使用可用能力", finishReason = "stop")
+            },
+        ))
+        AgentModelClient.complete(
+            config = modelConfig().copy(openAiEndpointMode = OpenAiEndpointMode.RESPONSES, hostedWebSearchEnabled = true, browserTools = true),
+            prompt = "查询公开信息", provider = provider,
+            toolExecutor = AgentModelClient.ToolExecutor { error("托管搜索不应误入本地执行器") },
+        )
+    }
+
     @Test
     fun eachRoundUsesOneCapabilitySnapshotForDeclarationValidationAndPrompt() {
         var root = true
@@ -483,7 +534,7 @@ class AgentModelClientLoopTest {
 
     @Test
     fun contradictoryStopReasonNeverExecutesToolCalls() {
-        listOf("stop", "content_filter", "refusal").forEach { finishReason ->
+        listOf("stop").forEach { finishReason ->
             val provider = ScriptedProvider(
                 assistant(
                     finishReason = finishReason,
@@ -510,6 +561,45 @@ class AgentModelClientLoopTest {
                     .getString("content")
                     .contains("UNEXPECTED_TOOL_CALL")
             )
+        }
+    }
+
+    @Test
+    fun refusalEndsRunWithoutReplayingPartialAssistantOrExecutingTools() {
+        listOf("content_filter", "refusal").forEach { finishReason ->
+            val provider = ScriptedProvider(
+                assistant(
+                    content = "半截回复",
+                    reasoning = "半截思考",
+                    finishReason = finishReason,
+                    toolCalls = listOf(toolCall("call-1", "tap", "{\"x\":1,\"y\":2}")),
+                ).put(
+                    "stop_details",
+                    JSONObject().put("type", "refusal").put("category", "cyber").put("explanation", "服务商说明文本"),
+                ),
+                assistant(content = "不应再请求", finishReason = "stop"),
+            )
+            var executed = false
+
+            val failure = assertThrows(AgentModelExecutionException::class.java) {
+                AgentModelClient.complete(
+                    config = modelConfig(),
+                    prompt = "开始",
+                    toolExecutor = AgentModelClient.ToolExecutor {
+                        executed = true
+                        AgentModelClient.ToolResult("unexpected")
+                    },
+                    provider = provider,
+                )
+            }
+
+            assertFalse(executed)
+            assertEquals(1, provider.requests.size)
+            val cause = failure.cause as AgentModelFailure
+            assertEquals("MODEL_CONTENT_FILTER", cause.code)
+            assertFalse(cause.retryable)
+            assertTrue(cause.message.orEmpty().contains("服务商说明文本"))
+            assertTrue(failure.transcript.none { it.role == "assistant" })
         }
     }
 
@@ -707,6 +797,7 @@ class AgentModelClientLoopTest {
             baseUrl = "https://example.invalid/v1",
             apiKey = "test-key",
             model = "test-model",
+            contextWindow = 128_000,
             systemPrompt = "",
             browserTools = false,
         )

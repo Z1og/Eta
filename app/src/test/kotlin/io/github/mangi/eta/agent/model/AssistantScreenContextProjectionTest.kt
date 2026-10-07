@@ -21,7 +21,7 @@ class AssistantScreenContextProjectionTest {
             }
         }
         val result = AgentModelClient.complete(
-            config = AgentModelClient.ModelConfig(baseUrl = "https://example.invalid", apiKey = "fixture", model = "fixture", systemPrompt = ""),
+            config = AgentModelClient.ModelConfig(baseUrl = "https://example.invalid", apiKey = "fixture", model = "fixture", contextWindow = 128_000, systemPrompt = ""),
             prompt = "当前是什么页面？",
             assistantScreenContext = "PRIVATE_SCREEN_TEXT",
             provider = provider,

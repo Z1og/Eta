@@ -2,6 +2,7 @@ package io.github.mangi.eta.agent.voice
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -55,6 +56,8 @@ internal class EtaSpeechInput(
     private val onResult: (String) -> Unit,
     private val onError: (EtaSpeechIssue) -> Unit,
     private val onDownloadStatus: (EtaSpeechDownloadStatus) -> Unit,
+    /** 期望的说完判定静音时长；系统服务可以忽略该提示，结果仍以服务回调为准。 */
+    private val completeSilenceMs: Int? = null,
 ) {
     private val handler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
@@ -205,6 +208,13 @@ internal class EtaSpeechInput(
         downloadRecognizer = delegate
         onDownloadStatus(EtaSpeechDownloadStatus.DOWNLOADING)
         try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                delegate.triggerModelDownload(recognitionIntent())
+                downloadSource = null
+                // Android 13 没有下载回调，保留识别器到入口取消，避免服务连接前请求就被销毁。
+                onDownloadStatus(EtaSpeechDownloadStatus.SCHEDULED)
+                return
+            }
             delegate.triggerModelDownload(recognitionIntent(), context.mainExecutor, object : ModelDownloadListener {
                 private fun current() = downloadRecognizer === delegate
                 override fun onProgress(completedPercent: Int) {
@@ -293,6 +303,12 @@ internal class EtaSpeechInput(
         .putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
         .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        .apply {
+            completeSilenceMs?.let {
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, it.toLong())
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, it.toLong())
+            }
+        }
 
     private fun Bundle?.text(): String =
         this?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty().trim()

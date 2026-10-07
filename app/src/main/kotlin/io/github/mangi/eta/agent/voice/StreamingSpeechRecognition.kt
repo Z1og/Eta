@@ -19,16 +19,23 @@ internal suspend fun recognizeSpeechStream(
     onReady: () -> Unit,
     onPreview: (String) -> Unit,
     onEndpoint: () -> Unit,
-    automaticEndpoint: Boolean,
+    endpointSilenceMs: Int,
 ): String = withTimeout(90_000) {
+    // 服务端在静音达到断句时长后给出确定结果；自动结束时断句时长就是用户可感知的“停顿多久算说完”。
+    // 不自动结束时沿用服务默认断句，只影响预览分段，不会提前结束录音。
+    val automaticEndpoint = endpointSilenceMs > 0
+    val sentenceSilenceMs = if (automaticEndpoint) endpointSilenceMs else DEFAULT_SENTENCE_SILENCE_MS
     if (settings.asr == AsrProvider.DOUBAO) {
-        recognizeDoubao(settings, credentials, frames, onReady, onPreview, onEndpoint, automaticEndpoint)
-    } else recognizeQwen(settings, credentials, frames, onReady, onPreview, onEndpoint, automaticEndpoint)
+        recognizeDoubao(settings, credentials, frames, onReady, onPreview, onEndpoint, automaticEndpoint, sentenceSilenceMs)
+    } else recognizeQwen(settings, credentials, frames, onReady, onPreview, onEndpoint, automaticEndpoint, sentenceSilenceMs)
 }
+
+private const val DEFAULT_SENTENCE_SILENCE_MS = 800
 
 private suspend fun recognizeQwen(
     settings: SpeechSettings, credentials: SpeechCredentials, frames: ReceiveChannel<ByteArray>,
     onReady: () -> Unit, onPreview: (String) -> Unit, onEndpoint: () -> Unit, automaticEndpoint: Boolean,
+    sentenceSilenceMs: Int,
 ): String = coroutineScope {
     val request = Request.Builder().url(speechBaseUrl(settings.qwenAsr.endpoint())
         .replaceFirst("https://", "wss://") + "/api-ws/v1/realtime?model=qwen3-asr-flash-realtime")
@@ -42,7 +49,7 @@ private suspend fun recognizeQwen(
             .put("input_audio_format", "pcm").put("sample_rate", SpeechRecorder.RATE)
             .put("input_audio_transcription", transcription)
             .put("turn_detection", JSONObject().put("type", "server_vad")
-                .put("threshold", 0.2).put("silence_duration_ms", 800))).toString())
+                .put("threshold", 0.2).put("silence_duration_ms", sentenceSilenceMs))).toString())
         val transcript = QwenTranscript()
         var sender: kotlinx.coroutines.Job? = null
         var endpointSent = false
@@ -80,6 +87,7 @@ private suspend fun recognizeQwen(
 private suspend fun recognizeDoubao(
     settings: SpeechSettings, credentials: SpeechCredentials, frames: ReceiveChannel<ByteArray>,
     onReady: () -> Unit, onPreview: (String) -> Unit, onEndpoint: () -> Unit, automaticEndpoint: Boolean,
+    sentenceSilenceMs: Int,
 ): String = coroutineScope {
     val request = Request.Builder().url(speechBaseUrl(settings.doubaoAsr.baseUrl)
         .replaceFirst("https://", "wss://") + "/api/v3/sauc/bigmodel_async")
@@ -92,7 +100,7 @@ private suspend fun recognizeDoubao(
                 .put("rate", SpeechRecorder.RATE).put("bits", 16).put("channel", 1))
             .put("request", JSONObject().put("model_name", "bigmodel").put("result_type", "full")
                 .put("enable_nonstream", true).put("show_utterances", true)
-                .put("end_window_size", 800).put("enable_itn", true).put("enable_punc", true))))
+                .put("end_window_size", sentenceSilenceMs).put("enable_itn", true).put("enable_punc", true))))
         onReady()
         val sender = launch {
             var pending: ByteArray? = null

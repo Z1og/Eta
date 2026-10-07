@@ -1,6 +1,10 @@
 package io.github.mangi.eta.hook.breeno
 
+import android.graphics.Bitmap
+import android.util.Base64
 import io.github.mangi.eta.agent.model.AgentModelClient
+import java.io.ByteArrayOutputStream
+import kotlin.random.Random
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -258,8 +262,23 @@ class BreenoRequestImagesTest {
 
     @Test
     fun inlineImageIsNoLongerRejectedByBinderStringBudget() {
+        val random = Random(0)
+        val bitmap = Bitmap.createBitmap(
+            IntArray(320 * 320) { random.nextInt() or 0xff000000.toInt() },
+            320, 320, Bitmap.Config.ARGB_8888,
+        )
+        val bytes = try {
+            ByteArrayOutputStream().use { output ->
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+                output.toByteArray()
+            }
+        } finally {
+            bitmap.recycle()
+        }
+        val dataUri = "data:image/png;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
+        assertTrue(dataUri.length > 300_000)
         val snapshot = BreenoRequestImages.captureText(
-            text = "data:image/png;base64," + "A".repeat(300_000),
+            text = dataUri,
             source = "image.data",
         )
 
@@ -267,6 +286,24 @@ class BreenoRequestImagesTest {
 
         assertTrue(resolution is BreenoRequestImages.Resolution.Success)
         assertEquals(1, (resolution as BreenoRequestImages.Resolution.Success).images.size)
+        assertEquals(320, resolution.images.single().width)
+        assertEquals(320, resolution.images.single().height)
+    }
+
+    @Test
+    fun invalidInlineImageIsRejectedEvenWithinTheDataBudget() {
+        val snapshot = BreenoRequestImages.captureText(
+            text = "data:image/png;base64," + "A".repeat(300_000),
+            source = "image.data",
+        )
+
+        val resolution = BreenoRequestImages.resolve(null, snapshot)
+
+        assertTrue(resolution is BreenoRequestImages.Resolution.Failure)
+        assertEquals(
+            BreenoRequestImages.FailureCode.IMAGE_REFERENCE_UNREADABLE,
+            (resolution as BreenoRequestImages.Resolution.Failure).code,
+        )
     }
 
     @Test

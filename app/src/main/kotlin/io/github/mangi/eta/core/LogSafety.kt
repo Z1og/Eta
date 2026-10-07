@@ -6,6 +6,26 @@ private const val UNKNOWN_LOG_TOKEN = "unknown"
 internal fun Throwable.safeLogType(): String =
     javaClass.simpleName.takeIf { it.isNotBlank() } ?: Throwable::class.java.simpleName
 
+/** 保留失败位置与原因类型，禁止异常消息、载荷或 suppressed 内容进入诊断日志。 */
+internal fun Throwable.safeStackTrace(): String = buildString {
+    var failure: Throwable? = this@safeStackTrace
+    val visited = java.util.IdentityHashMap<Throwable, Boolean>()
+    repeat(3) {
+        val current = failure ?: return@buildString
+        if (visited.put(current, true) != null) return@buildString
+        if (isNotEmpty()) append("\nCaused by: ")
+        append(current.safeLogType().take(128))
+        val frames = current.stackTrace
+        frames.take(16).forEach { frame ->
+            append("\n at ")
+            append(frame.className.take(256)).append('.').append(frame.methodName.take(128))
+            append('(').append(frame.fileName?.take(128) ?: "unknown").append(':').append(frame.lineNumber).append(')')
+        }
+        if (frames.size > 16) append("\n ...")
+        failure = current.cause
+    }
+}
+
 /**
  * 将外部或模型生成的标识约束为低基数、单行的日志 token。
  */

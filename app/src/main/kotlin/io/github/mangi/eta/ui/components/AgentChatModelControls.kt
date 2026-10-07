@@ -280,7 +280,7 @@ internal fun AgentContextUsageButton(
         locale = locale,
     )
     val detail = when {
-        usage.estimated -> stringResource(R.string.context_usage_estimated, summary)
+        usage.contextWindow == null -> summary
         usage.contextTokens == null -> stringResource(R.string.context_usage_after_response)
         else -> stringResource(R.string.context_usage_previous_response, summary)
     }

@@ -401,15 +401,6 @@ internal object OfficialModelCatalog {
     fun enrich(provider: ProviderSetting, models: List<Model>): List<Model> =
         enrich(catalogId = catalogIdFor(provider), models = models)
 
-    /** 旧记录和手动模型也需要窗口预算；只补缺失元数据，不覆盖用户设置或猜测未知别名。 */
-    fun withContextWindow(provider: ProviderSetting, model: Model): Model {
-        if (model.contextWindow != null) return model
-        val window = modelsForCatalogId(catalogIdFor(provider))
-            .firstOrNull { it.modelId.equals(model.modelId.trim(), ignoreCase = true) }
-            ?.contextWindow ?: return model
-        return model.copy(contextWindow = window)
-    }
-
     internal fun enrich(catalogId: String?, models: List<Model>): List<Model> {
         if (catalogId == null) return models
         val officialById = modelsByCatalogId[catalogId]

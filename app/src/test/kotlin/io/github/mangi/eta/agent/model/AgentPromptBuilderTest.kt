@@ -91,7 +91,7 @@ class AgentPromptBuilderTest {
         assertTrue(messages.systemContents().any { it.contains("合法且克制的 GitHub Flavored Markdown") })
         assertTrue(messages.systemContents().any { it.contains("不用整句粗体冒充标题") })
         assertTrue(messages.systemContents().any { it.contains("表格前后留空行") })
-        assertTrue(messages.getJSONObject(2).getString("content").contains("open_and_exec"))
+        assertTrue(messages.getJSONObject(2).getString("content").contains("action=exec"))
         assertTrue(messages.getJSONObject(2).getString("content").contains("同一轮模型回复最多调用一次 read_image"))
         assertTrue(messages.getJSONObject(2).getString("content").contains("再在下一轮调用下一张"))
         assertFalse(messages.systemContents().any { it.contains("网页浏览、读取") })
@@ -134,7 +134,7 @@ class AgentPromptBuilderTest {
         assertEquals(listOf("system", "system", "system", "user"), messages.roles())
         val systemContents = messages.systemContents()
         assertTrue(systemContents.any { it.contains("browser_use") })
-        assertFalse(systemContents.any { it.contains("open_and_exec") })
+        assertFalse(systemContents.any { it.contains("action=exec") })
         val skillMessage = systemContents.single { it.contains("id=screen-audit") }
         assertTrue(skillMessage.contains("path=/skills/screen-audit/SKILL.md"))
         assertTrue(skillMessage.contains("capabilities=scripts, assets"))

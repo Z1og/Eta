@@ -2,6 +2,7 @@ package io.github.mangi.eta.agent.runtime
 
 import android.content.SharedPreferences
 import io.github.mangi.eta.agent.model.AgentModelClient
+import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.data.model.CustomBody
 import io.github.mangi.eta.data.model.ReasoningEffort
 import java.lang.reflect.Proxy
@@ -21,6 +22,7 @@ class AgentRuntimePolicyTest {
                 terminalTools = false,
                 browserTools = false,
                 thinking = false,
+                autoCompaction = false,
             ),
             AgentRuntimePolicy.permissions(null),
         )
@@ -52,9 +54,24 @@ class AgentRuntimePolicyTest {
                 terminalTools = false,
                 browserTools = false,
                 thinking = false,
+                autoCompaction = false,
             ),
             AgentRuntimePolicy.permissions(preferences),
         )
+    }
+
+    @Test
+    fun automaticCompactionRequiresBothLocalSettingAndRequestSelection() {
+        for (localEnabled in listOf(false, true)) {
+            val preferences = booleanPreferences { key, default ->
+                if (key == Prefs.Keys.AGENT_AUTO_COMPACTION_ENABLED) localEnabled else default
+            }
+            val permissions = AgentRuntimePolicy.permissions(preferences)
+            for (requested in listOf(false, true)) {
+                val config = modelConfig(false, false, false).copy(autoCompactionEnabled = requested)
+                assertEquals(localEnabled && requested, AgentRuntimePolicy.constrain(config, permissions).autoCompactionEnabled)
+            }
+        }
     }
 
     @Test

@@ -12,7 +12,6 @@ internal class AgentModelFailure(
     val retryable: Boolean,
     message: String,
     cause: Throwable? = null,
-    val recoveryAllowed: Boolean = true,
 ) : IllegalStateException(message, cause) {
     companion object {
         private val transientStatus = setOf(408, 429, 500, 502, 503, 504, 524, 529)

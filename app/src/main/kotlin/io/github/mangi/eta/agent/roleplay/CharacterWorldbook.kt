@@ -13,6 +13,14 @@ internal data class WorldbookProjection(
 )
 
 internal object CharacterWorldbook {
+    /** 仅用于角色卡 token_budget 的条目选择，不参与模型输入用量与压缩判断。 */
+    fun estimateEntryTokens(text: String): Int {
+        var ascii = 0
+        var other = 0
+        text.codePoints().forEach { if (it < 128) ascii++ else other++ }
+        return (ascii + 2) / 3 + other
+    }
+
     fun unsupportedEntries(card: CharacterCard): List<UnsupportedWorldbookEntry> =
         (card.characterBook?.get("entries") as? JsonArray).orEmpty().mapIndexedNotNull { index, value ->
             val entry = value as? JsonObject ?: return@mapIndexedNotNull null

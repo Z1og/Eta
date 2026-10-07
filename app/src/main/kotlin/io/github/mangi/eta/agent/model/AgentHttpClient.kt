@@ -23,6 +23,15 @@ internal object AgentHttpClient {
             .build()
     }
 
+    private val compactionClient: OkHttpClient by lazy {
+        modelClient.newBuilder()
+            .callTimeout(MODEL_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .build()
+    }
+
+    fun modelClient(purpose: ProviderRequestPurpose): OkHttpClient =
+        if (purpose == ProviderRequestPurpose.COMPACTION) compactionClient else modelClient
+
     val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)

@@ -1,10 +1,16 @@
 package io.github.mangi.eta.agent.terminal
 
 import io.github.mangi.eta.core.AgentLogger
+import io.github.mangi.eta.agent.model.AgentModelClient
+import io.github.mangi.eta.agent.model.AgentTerminalToolCatalog
+import io.github.mangi.eta.agent.model.AgentToolCallValidator
 import java.io.File
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -142,11 +148,140 @@ class RootShellTerminalControllerTest {
 
             assertTrue(result.toString(), result.getBoolean("ok"))
             val logs = logger.messages.joinToString("\n")
-            assertTrue(logs, logs.contains("action=open_and_exec"))
+            assertTrue(logs, logs.contains("action=exec"))
             assertTrue(logs, logs.contains("commandChars=${command.length}"))
             assertFalse(logs, logs.contains("sensitive_command_marker"))
             assertFalse(logs, logs.contains("sensitive_cwd_marker"))
             assertFalse(logs, logs.contains(cwd))
+        } finally {
+            controller.closeAll()
+        }
+    }
+
+    @Test
+    fun terminalSchemaAndExecutionRejectIgnoredOrConflictingArguments() {
+        val tools = JSONArray().also(AgentTerminalToolCatalog::appendTo)
+        assertEquals(1, tools.length())
+        assertEquals("terminal", tools.getJSONObject(0).getJSONObject("function").getString("name"))
+        val validator = AgentToolCallValidator(tools)
+        val invalid = listOf(
+            """{"action":"exec"}""",
+            """{"action":"exec","command":"pwd","session_id":"session","cwd":"/tmp"}""",
+            """{"action":"exec","command":"pwd","session_id":"session","identity":"user"}""",
+            """{"action":"exec","command":"pwd","session_id":"session","environment":"android"}""",
+            """{"action":"exec","command":"pwd","session_id":"session","async":true}""",
+            """{"action":"open","command":"pwd"}""",
+            """{"action":"close"}""",
+            """{"action":"close","session_id":"session","job_id":"job"}""",
+            """{"action":"daemon_list","identity":"root"}""",
+            """{"action":"daemon_logs"}""",
+            """{"action":"daemon_start","command":"sleep 1","timeout_ms":1000}""",
+            """{"action":"read_async_result","job_id":"job","offset_chars":-1}""",
+            """{"action":"exec","command":"pwd","timeout_ms":"1000"}""",
+        )
+        val controller = RootShellTerminalController(NoopLogger)
+        try {
+            invalid.forEach { json ->
+                assertNotNull(json, validator.validate(AgentModelClient.ToolCall("call", "terminal", json)))
+                val result = JSONObject(controller.terminalAction(JSONObject(json)))
+                assertFalse(json, result.getBoolean("ok"))
+                assertTrue(result.toString(), result.getString("code") in setOf("INVALID_ARGUMENT", "ASYNC_SESSION_UNSUPPORTED"))
+            }
+            listOf(
+                """{"action":"open"}""",
+                """{"action":"exec","command":"pwd"}""",
+                """{"action":"exec","command":"pwd","session_id":"session","async":false}""",
+                """{"action":"close","job_id":"job"}""",
+                """{"action":"daemon_start","command":"sleep 1"}""",
+                """{"action":"daemon_list"}""",
+                """{"action":"daemon_logs","task_id":"task"}""",
+                """{"action":"daemon_stop","task_id":"task"}""",
+                """{"action":"read_async_result","job_id":"job"}""",
+            ).forEach { json ->
+                assertNull(json, validator.validate(AgentModelClient.ToolCall("call", "terminal", json)))
+                assertNull(json, TerminalToolContract.validate(JSONObject(json)))
+            }
+            val legacy = """{"action":"open_and_exec","command":"pwd"}"""
+            assertNotNull(validator.validate(AgentModelClient.ToolCall("call", "terminal", legacy)))
+            assertNull(TerminalToolContract.validate(JSONObject(legacy)))
+        } finally {
+            controller.closeAll()
+        }
+    }
+
+    @Test
+    fun oneShotReturnsObservedRuntimeWithoutMixingMetadataIntoOutput() {
+        val controller = RootShellTerminalController(NoopLogger)
+        try {
+            val args = JSONObject().put("action", "exec").put("command", "printf visible_output")
+                .put("identity", "user").put("cwd", temporaryFolder.root.absolutePath)
+            val result = JSONObject(controller.terminalAction(args))
+            assertTrue(result.toString(), result.getBoolean("ok"))
+            assertEquals("visible_output", result.getString("stdout"))
+            assertEquals("exited", result.getString("status"))
+            assertEquals("exec", result.getString("action"))
+            val runtime = result.getJSONObject("runtime")
+            assertEquals("user", runtime.getString("host_identity"))
+            assertTrue(runtime.toString(), runtime.getInt("uid") >= 0)
+            assertFalse(runtime.getString("shell_provider").isBlank())
+            assertTrue(runtime.getJSONArray("available_commands").toString().contains("sh"))
+        } finally {
+            controller.closeAll()
+        }
+    }
+
+    @Test
+    fun outputJustOverDisplayLimitIsMarkedTruncated() {
+        val controller = RootShellTerminalController(NoopLogger)
+        try {
+            val result = JSONObject(controller.terminalAction(JSONObject()
+                .put("action", "exec")
+                .put("command", "awk 'BEGIN { for (i=0;i<16001;i++) printf \"x\" }'")
+                .put("identity", "user")
+                .put("cwd", temporaryFolder.root.absolutePath)))
+            assertTrue(result.toString(), result.getBoolean("ok"))
+            assertTrue(result.toString(), result.getBoolean("stdout_truncated"))
+            assertFalse(result.getString("stdout").contains("__ETA_RUNTIME_"))
+        } finally {
+            controller.closeAll()
+        }
+    }
+
+    @Test
+    fun runtimeProbeHandlesPartialHeaderAndDistinguishesGuestUid() {
+        val marker = TerminalExecutionProbe.marker()
+        assertEquals("", TerminalExecutionProbe.extract(marker.take(10), marker, "user", TerminalEnvironment.ANDROID).text)
+        val text = "$marker:begin\nuid=0\nprovider=sh\ncommand=sh\n$marker:end\nhello"
+        val parsed = TerminalExecutionProbe.extract(text, marker, "user", TerminalEnvironment.ALPINE)
+        assertEquals("hello", parsed.text)
+        assertEquals("guest", parsed.runtime!!.getString("uid_scope"))
+        assertEquals("user", parsed.runtime.getString("host_identity"))
+    }
+
+    @Test
+    fun completedAsyncJobIsRetainedUntilLastRequestedPage() {
+        val controller = RootShellTerminalController(NoopLogger)
+        try {
+            val started = JSONObject(controller.terminalAction(JSONObject()
+                .put("action", "exec").put("command", "printf abcdef").put("async", true)
+                .put("identity", "user").put("cwd", temporaryFolder.root.absolutePath)))
+            val jobId = started.getString("job_id")
+            val request = JSONObject().put("action", "read_async_result").put("job_id", jobId)
+                .put("max_chars", 3).put("close_if_done", true)
+            var first = JSONObject(controller.terminalAction(request))
+            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3)
+            while (first.getBoolean("running") && System.nanoTime() < deadline) {
+                Thread.sleep(10)
+                first = JSONObject(controller.terminalAction(request))
+            }
+            assertFalse(first.toString(), first.getBoolean("running"))
+            assertEquals("abc", first.getString("stdout"))
+            assertFalse(first.getBoolean("job_closed"))
+            assertEquals(6, first.getInt("total_chars"))
+            val last = JSONObject(controller.terminalAction(request.put("offset_chars", first.getInt("next_offset_chars"))))
+            assertEquals("def", last.getString("stdout"))
+            assertTrue(last.getBoolean("job_closed"))
+            assertEquals("JOB_NOT_FOUND", JSONObject(controller.terminalAction(request)).getString("code"))
         } finally {
             controller.closeAll()
         }

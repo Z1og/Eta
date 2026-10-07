@@ -30,10 +30,8 @@ internal class RootShellTerminalController(
         const val MAX_TIMEOUT_SECONDS = 180
         const val MAX_COMMAND_CHARS = 4_000
         const val MAX_OUTPUT_CHARS = 16_000
-        const val MAX_READ_BYTES = 256 * 1024
-        const val MAX_WRITE_BYTES = 512 * 1024
-        const val MAX_LIST_ENTRIES = 200
         const val MAX_ASYNC_OUTPUT_CHARS = 64_000
+        const val MAX_COMMAND_OUTPUT_BYTES = 256 * 1024
     }
 
     private val sessions = linkedMapOf<String, TerminalSession>()
@@ -70,6 +68,26 @@ internal class RootShellTerminalController(
             environment = normalizeEnvironment(environment),
             mergeStderr = mergeStderr,
             toolName = "terminal"
+        )
+    }
+
+    fun terminalAction(args: JSONObject): String {
+        TerminalToolContract.validate(args)?.let { return errorJson(it.code, it.message) }
+        return terminalAction(
+            action = args.getString("action"),
+            command = args.optString("command"),
+            cwd = args.optString("cwd").ifBlank { null },
+            timeoutMs = args.optInt("timeout_ms", 30_000),
+            identity = args.optString("identity"),
+            mergeStderr = args.optBoolean("merge_stderr", false),
+            sessionId = args.optString("session_id").ifBlank { null },
+            jobId = args.optString("job_id").ifBlank { null },
+            async = args.optBoolean("async", false),
+            offsetChars = args.optInt("offset_chars", 0),
+            maxChars = args.optInt("max_chars", 8_000),
+            closeIfDone = args.optBoolean("close_if_done", false),
+            environment = args.optString("environment", TerminalEnvironment.ANDROID.wireName),
+            taskId = args.optString("task_id").ifBlank { null },
         )
     }
 
@@ -178,13 +196,15 @@ internal class RootShellTerminalController(
         }
 
         val mkdirDefault = if (safeCwd == TerminalRuntime.workspace(normalizedIdentity)) "mkdir -p ${shellQuote(safeCwd)} && " else ""
-        val setup = "${mkdirDefault}cd ${shellQuote(safeCwd)} && export TERM=dumb NO_COLOR=1"
+        val probeMarker = TerminalExecutionProbe.marker()
+        val setup = "${mkdirDefault}cd ${shellQuote(safeCwd)} && export TERM=dumb NO_COLOR=1 && {\n${TerminalExecutionProbe.script(probeMarker)}\n}"
         val setupResult = runSessionCommand(session, setup, timeoutMs = 5_000)
         if (setupResult.exitCode != 0 || setupResult.timedOut) {
             closeSession(id)
             return errorJson("SESSION_OPEN_FAILED", setupResult.stderr.ifBlank { "exit=${setupResult.exitCode}" })
         }
         session.cwd = setupResult.cwd ?: safeCwd
+        session.runtime = TerminalExecutionProbe.extract(setupResult.stdout, probeMarker, normalizedIdentity, normalizedEnvironment).runtime
         session.stdout.clear()
         session.stderr.clear()
         return JSONObject()
@@ -195,6 +215,8 @@ internal class RootShellTerminalController(
             .put("identity", normalizedIdentity)
             .put("environment", normalizedEnvironment.wireName)
             .put("cwd", session.cwd)
+            .put("runtime", session.runtime ?: JSONObject.NULL)
+            .put("status", "open")
             .toString()
     }
 
@@ -214,6 +236,12 @@ internal class RootShellTerminalController(
         }
         val effectiveEnvironment = session?.environment ?: normalizeEnvironment(environment)
         val effectiveIdentity = session?.identity ?: normalizeIdentity(identity.ifBlank { defaultIdentity(effectiveEnvironment) })
+        if (session != null && !cwd.isNullOrBlank()) {
+            return errorJson("INVALID_ARGUMENT", "session_id 不能与 cwd 同时提供；需要切换目录请在会话中执行 cd")
+        }
+        if (session != null && identity.isNotBlank() && !identity.equals(session.identity, ignoreCase = true)) {
+            return errorJson("INVALID_ARGUMENT", "identity 与已有会话不一致")
+        }
         environmentPreflight(effectiveIdentity, effectiveEnvironment, session?.rootfsPath ?: rootfsPathFor(effectiveEnvironment))?.let { return it }
         val effectiveCwd = cwd?.takeIf { it.isNotBlank() } ?: session?.cwd
         if (async) {
@@ -270,7 +298,8 @@ internal class RootShellTerminalController(
         environmentPreflight(normalizedIdentity, environment)?.let { return it }
         val safeCwd = normalizeCwd(cwd, environment, normalizedIdentity)
         val setup = if (safeCwd == TerminalRuntime.workspace(normalizedIdentity)) "mkdir -p ${shellQuote(safeCwd)} && " else ""
-        val fullCommand = "${setup}cd ${shellQuote(safeCwd)} && export TERM=dumb NO_COLOR=1 && $trimmed"
+        val probeMarker = TerminalExecutionProbe.marker()
+        val fullCommand = "${setup}cd ${shellQuote(safeCwd)} && export TERM=dumb NO_COLOR=1 && {\n${TerminalExecutionProbe.script(probeMarker)}\n$trimmed\n}"
         val process = processSupervisor.startShellProcess(
             identity = normalizedIdentity,
             command = fullCommand,
@@ -296,6 +325,7 @@ internal class RootShellTerminalController(
             environment = environment,
             mergeStderr = mergeStderr,
             sessionId = sessionId,
+            probeMarker = probeMarker,
             startedAt = System.currentTimeMillis(),
             timeoutMs = timeoutMs.coerceIn(1_000, MAX_TIMEOUT_SECONDS * 1000)
         )
@@ -312,6 +342,8 @@ internal class RootShellTerminalController(
                     job.timedOut = true
                     processSupervisor.terminateProcessTree(process)
                 }
+                job.stdoutThread.join(500)
+                job.stderrThread.join(500)
                 job.exitCode = runCatching { process.exitValue() }.getOrDefault(-2)
                 job.completedAt = System.currentTimeMillis()
             } finally {
@@ -326,14 +358,14 @@ internal class RootShellTerminalController(
             return errorJson("TERMINAL_CLOSED", "terminal controller 已关闭")
         }
         logger.info(
-            "Agent terminal action=open_and_exec outcome=started async=true " +
+            "Agent terminal action=exec outcome=started async=true " +
                 "identity=$normalizedIdentity environment=${environment.wireName} " +
                 "timeoutMs=${job.timeoutMs} commandChars=${trimmed.length}"
         )
         return JSONObject()
             .put("ok", true)
             .put("tool", "terminal")
-            .put("action", "open_and_exec")
+            .put("action", "exec")
             .put("async", true)
             .put("job_id", id)
             .put("session_id", sessionId ?: JSONObject.NULL)
@@ -341,6 +373,8 @@ internal class RootShellTerminalController(
             .put("environment", environment.wireName)
             .put("cwd", safeCwd)
             .put("running", true)
+            .put("status", "running")
+            .put("runtime", TerminalExecutionProbe.extract(stdout.text(), probeMarker, normalizedIdentity, environment).runtime ?: JSONObject.NULL)
             .toString()
     }
 
@@ -353,14 +387,20 @@ internal class RootShellTerminalController(
         val job = synchronized(asyncJobs) { asyncJobs[jobId] }
             ?: return errorJson("JOB_NOT_FOUND", "未找到 async terminal job：$jobId")
         if (job.identity == "root" && !rootAvailable()) return errorJson("ROOT_REQUIRED", "Root 授权不可用")
-        val stdoutRaw = job.stdout.text()
+        val observation = TerminalExecutionProbe.extract(job.stdout.text(), job.probeMarker, job.identity, job.environment)
+        val stdoutRaw = observation.text
         val stderrRaw = job.stderr.text()
         val merged = stdoutRaw
-        val offset = offsetChars.coerceAtLeast(0).coerceAtMost(merged.length)
+        if (offsetChars < 0 || offsetChars > merged.length) {
+            return errorJson("INVALID_ARGUMENT", "offset_chars 超出当前保留输出范围")
+        }
+        val offset = offsetChars
         val limit = maxChars.coerceIn(1, MAX_OUTPUT_CHARS)
         val slice = merged.substring(offset, (offset + limit).coerceAtMost(merged.length))
         val done = job.exitCode != null
-        if (done && closeIfDone) {
+        val pageComplete = offset + slice.length >= merged.length
+        val closed = done && closeIfDone && pageComplete
+        if (closed) {
             synchronized(asyncJobs) { asyncJobs.remove(jobId) }?.let(::closeJob)
         }
         return JSONObject()
@@ -370,20 +410,25 @@ internal class RootShellTerminalController(
             .put("job_id", job.id)
             .put("session_id", job.sessionId ?: JSONObject.NULL)
             .put("environment", job.environment.wireName)
+            .put("identity", job.identity)
+            .put("cwd", job.cwd)
+            .put("runtime", observation.runtime ?: JSONObject.NULL)
             .put("running", !done)
+            .put("status", when { !done -> "running"; job.timedOut -> "timed_out"; job.exitCode == 0 -> "exited"; else -> "failed" })
+            .put("job_closed", closed)
             .put("exit_code", job.exitCode ?: JSONObject.NULL)
             .put("timed_out", job.timedOut)
             .put("stdout", slice)
             .put("next_offset_chars", offset + slice.length)
             .put("total_chars", merged.length)
             .put("retained_chars", merged.length)
-            .put("stdout_total_bytes", job.stdout.totalBytesRead())
+            .put("stdout_total_bytes", (job.stdout.totalBytesRead() - observation.metadataBytes).coerceAtLeast(0))
             .put("stderr_total_bytes", job.stderr.totalBytesRead())
             .put("truncated", offset + slice.length < merged.length)
-            .put("output_truncated", job.stdout.isTruncated() || job.stderr.isTruncated())
+            .put("output_truncated", job.stdout.isTruncated() || job.stderr.isTruncated() || (!job.mergeStderr && stderrRaw.length > MAX_OUTPUT_CHARS))
             .put("stderr", if (job.mergeStderr) "" else stderrRaw.truncateForJson())
             .put("stdout_truncated", job.stdout.isTruncated())
-            .put("stderr_truncated", !job.mergeStderr && job.stderr.isTruncated())
+            .put("stderr_truncated", !job.mergeStderr && (job.stderr.isTruncated() || stderrRaw.length > MAX_OUTPUT_CHARS))
             .toString()
     }
 
@@ -481,6 +526,9 @@ internal class RootShellTerminalController(
     }
 
     private fun closeTerminal(sessionId: String?, jobId: String?): String {
+        if (sessionId.isNullOrBlank() == jobId.isNullOrBlank()) {
+            return errorJson("INVALID_ARGUMENT", "close 必须且只能提供 session_id 或 job_id")
+        }
         var closedSession = false
         var closedJob = false
         sessionId?.takeIf { it.isNotBlank() }?.let { id ->
@@ -488,6 +536,10 @@ internal class RootShellTerminalController(
         }
         jobId?.takeIf { it.isNotBlank() }?.let { id ->
             closedJob = closeJob(id)
+        }
+        if (!closedSession && !closedJob) {
+            return if (sessionId != null) errorJson("SESSION_NOT_FOUND", "未找到 terminal session")
+            else errorJson("JOB_NOT_FOUND", "未找到 async terminal job")
         }
         return JSONObject()
             .put("ok", closedSession || closedJob)
@@ -612,12 +664,15 @@ internal class RootShellTerminalController(
             .put("identity", session.identity)
             .put("environment", session.environment.wireName)
             .put("cwd", session.cwd)
+            .put("runtime", session.runtime ?: JSONObject.NULL)
+            .put("status", when { result.timedOut -> "timed_out"; session.closed -> "cancelled"; result.exitCode == 0 -> "exited"; else -> "failed" })
             .put("exit_code", result.exitCode)
             .put("timed_out", result.timedOut)
             .put("stdout", stdout)
             .put("stderr", stderr)
-            .put("stdout_truncated", rawStdout.length > stdout.length)
-            .put("stderr_truncated", !mergeStderr && result.stderr.length > stderr.length)
+            .put("stdout_truncated", rawStdout.length > MAX_OUTPUT_CHARS)
+            .put("stderr_truncated", !mergeStderr && result.stderr.length > MAX_OUTPUT_CHARS)
+            .put("output_truncated", rawStdout.length > MAX_OUTPUT_CHARS || (!mergeStderr && result.stderr.length > MAX_OUTPUT_CHARS))
             .put("session_closed", result.timedOut || session.closed)
             .toString()
     }
@@ -726,7 +781,8 @@ internal class RootShellTerminalController(
         val safeCwd = normalizeCwd(cwd, environment, normalizedIdentity)
         val timeout = timeoutSeconds.coerceIn(1, MAX_TIMEOUT_SECONDS)
         val setup = if (safeCwd == TerminalRuntime.workspace(normalizedIdentity)) "mkdir -p ${shellQuote(safeCwd)} && " else ""
-        val fullCommand = "${setup}cd ${shellQuote(safeCwd)} && export TERM=dumb NO_COLOR=1 && $trimmed"
+        val probeMarker = TerminalExecutionProbe.marker()
+        val fullCommand = "${setup}cd ${shellQuote(safeCwd)} && export TERM=dumb NO_COLOR=1 && {\n${TerminalExecutionProbe.script(probeMarker)}\n$trimmed\n}"
         val result = runText(
             identity = normalizedIdentity,
             command = fullCommand,
@@ -738,7 +794,7 @@ internal class RootShellTerminalController(
             -2 -> "timed_out"
             else -> "failed"
         }
-        val action = if (toolName == "terminal") "open_and_exec" else "run_command"
+        val action = if (toolName == "terminal") "exec" else "run_command"
         val logMessage =
             "Agent terminal action=$action outcome=$outcome identity=$normalizedIdentity " +
                 "environment=${environment.wireName} " +
@@ -748,116 +804,103 @@ internal class RootShellTerminalController(
         } else {
             logger.warn(logMessage)
         }
+        val observation = TerminalExecutionProbe.extract(result.output, probeMarker, normalizedIdentity, environment)
         val rawStdout = if (mergeStderr && result.stderr.isNotBlank()) {
-            result.output + "\n[stderr]\n" + result.stderr
+            observation.text + "\n[stderr]\n" + result.stderr
         } else {
-            result.output
+            observation.text
         }
         val stdout = rawStdout.truncateForJson()
         val stderr = if (mergeStderr) "" else result.stderr.truncateForJson()
         return JSONObject()
             .put("ok", result.exitCode == 0)
             .put("tool", toolName)
-            .put("action", if (toolName == "terminal") "open_and_exec" else JSONObject.NULL)
+            .put("action", if (toolName == "terminal") "exec" else JSONObject.NULL)
             .put("identity", normalizedIdentity)
             .put("environment", environment.wireName)
             .put("cwd", safeCwd)
+            .put("runtime", observation.runtime ?: JSONObject.NULL)
+            .put("status", when { processSupervisor.isClosing -> "cancelled"; result.exitCode == -2 -> "timed_out"; result.exitCode == 0 -> "exited"; else -> "failed" })
             .put("exit_code", result.exitCode)
             .put("timed_out", result.exitCode == -2)
             .put("stdout", stdout)
             .put("stderr", stderr)
-            .put("stdout_truncated", rawStdout.length > stdout.length)
-            .put("stderr_truncated", !mergeStderr && result.stderr.length > stderr.length)
+            .put("stdout_truncated", result.outputTruncated || rawStdout.length > MAX_OUTPUT_CHARS || (mergeStderr && result.stderrTruncated))
+            .put("stderr_truncated", !mergeStderr && (result.stderrTruncated || result.stderr.length > MAX_OUTPUT_CHARS))
+            .put("output_truncated", result.outputTruncated || result.stderrTruncated || rawStdout.length > MAX_OUTPUT_CHARS || result.stderr.length > MAX_OUTPUT_CHARS)
             .toString()
     }
 
-    fun readFile(path: String, offsetBytes: Int, maxBytes: Int): String {
-        if (!rootAvailable()) return UserFileAccess.read(path, offsetBytes, maxBytes)
-        val safePath = normalizePath(path)
-        val offset = offsetBytes.coerceAtLeast(0)
-        val limit = maxBytes.coerceIn(1, MAX_READ_BYTES)
-        val command = "dd if=${shellQuote(safePath)} bs=1 skip=$offset count=$limit 2>/dev/null"
-        val result = runSuBytes(command, timeoutSeconds = 20)
-        if (result.exitCode != 0) {
-            logger.warn(
-                "Agent terminal action=read_file outcome=failed offsetBytes=$offset " +
-                    "maxBytes=$limit exitCode=${result.exitCode} errorChars=${result.stderr.length}"
-            )
-            return errorJson("READ_FAILED", result.stderr.ifBlank { "exit=${result.exitCode}" })
-        }
-        logger.info(
-            "Agent terminal action=read_file outcome=succeeded offsetBytes=$offset " +
-                "maxBytes=$limit bytesRead=${result.output.size} exitCode=${result.exitCode}"
-        )
-        val text = result.output.decodeToString()
-        val truncated = result.output.size >= limit
-        return JSONObject()
-            .put("ok", true)
-            .put("tool", "read_file")
-            .put("path", safePath)
-            .put("offset_bytes", offset)
-            .put("bytes_read", result.output.size)
-            .put("truncated", truncated)
-            .put("content", text.truncateForJson())
-            .toString()
-    }
-
-    fun writeFile(path: String, content: String, append: Boolean): String {
-        if (!rootAvailable()) return UserFileAccess.write(path, content, append)
-        val safePath = normalizePath(path)
-        val bytes = content.toByteArray(Charsets.UTF_8)
-        require(bytes.size <= MAX_WRITE_BYTES) { "写入内容过大：${bytes.size} bytes" }
-        val mode = if (append) ">>" else ">"
-        val command = "mkdir -p ${shellQuote(File(safePath).parent ?: "/")} && cat $mode ${shellQuote(safePath)}"
-        val result = runSuTextWithStdin(command, bytes, timeoutSeconds = 20)
-        return if (result.exitCode == 0) {
-            logger.info(
-                "Agent terminal action=write_file outcome=succeeded append=$append " +
-                    "bytesWritten=${bytes.size} exitCode=${result.exitCode}"
-            )
-            JSONObject()
-                .put("ok", true)
-                .put("tool", "write_file")
-                .put("path", safePath)
-                .put("mode", if (append) "append" else "overwrite")
-                .put("bytes_written", bytes.size)
-                .toString()
-        } else {
-            logger.warn(
-                "Agent terminal action=write_file outcome=failed append=$append " +
-                    "inputBytes=${bytes.size} exitCode=${result.exitCode} " +
-                    "outputChars=${result.output.length} errorChars=${result.stderr.length}"
-            )
-            errorJson("WRITE_FAILED", result.stderr.ifBlank { result.output.ifBlank { "exit=${result.exitCode}" } })
+    fun fileTool(name: String, args: JSONObject): String {
+        return try {
+            val environment = normalizeEnvironment(args.optString("environment", "android"))
+            val rootfsPath = rootfsPathFor(environment)
+            val identity = args.optString("identity").ifBlank {
+                if (environment.isLinux) TerminalRuntime.defaultIdentity(environment, rootfsPath) else "user"
+            }.let(::normalizeIdentity)
+            environmentPreflight(identity, environment, rootfsPath)?.let { return it }
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
+            fun checkActive() {
+                if (processSupervisor.isClosing) throw FileToolException("CANCELLED", "文件操作已取消")
+                if (identity == "root" && !rootAvailable()) throw FileToolException("ROOT_REQUIRED", "Root 授权已不可用")
+                if (System.nanoTime() >= deadline) throw FileToolException("FILE_TIMEOUT", "文件操作达到时间预算，请缩小范围")
+            }
+            val cwd = normalizeCwd(args.optString("cwd").takeIf(String::isNotEmpty), environment, identity)
+            val backend = if (environment == TerminalEnvironment.ANDROID && identity == "user") {
+                UserFileAccess.backend(cwd, isCancelled = { checkActive(); false })
+            } else {
+                val mounts = sharedMountsFor(environment)
+                ShellFileToolBackend(
+                    environment = if (environment.isLinux) "linux" else "android",
+                    identity = identity,
+                    cwd = cwd,
+                    home = if (environment.isLinux) "/root" else USER_STORAGE,
+                    ensureActive = ::checkActive,
+                ) { command, input, outputLimit ->
+                    checkActive()
+                    runOneShotShell(
+                        processSupervisor = processSupervisor,
+                        identity = identity,
+                        command = command,
+                        timeoutSeconds = ((deadline - System.nanoTime()) / 1_000_000_000L + 1).coerceIn(1, 20),
+                        stdin = input,
+                        environment = environment,
+                        linuxRootfsPath = rootfsPath,
+                        linuxSharedMounts = mounts,
+                        maxOutputBytes = outputLimit,
+                    )
+                }
+            }
+            FileToolDispatcher.execute(backend, name, args)
+        } catch (failure: FileToolException) {
+            errorJson(failure.code, failure.message ?: "文件操作失败")
+        } catch (_: IllegalArgumentException) {
+            errorJson("INVALID_ARGUMENT", "文件环境、路径或参数无效")
+        } catch (_: org.json.JSONException) {
+            errorJson("INVALID_ARGUMENT", "文件参数缺失或类型错误")
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            errorJson("CANCELLED", "文件操作已取消")
+        } catch (_: java.io.IOException) {
+            errorJson("FILE_IO_ERROR", "文件环境不可访问")
         }
     }
 
-    fun listDirectory(path: String, showHidden: Boolean, limit: Int): String {
-        if (!rootAvailable()) return UserFileAccess.list(path, showHidden, limit)
-        val safePath = normalizePath(path.ifBlank { DEFAULT_CWD })
-        val maxEntries = limit.coerceIn(1, MAX_LIST_ENTRIES)
-        val flags = if (showHidden) "-la" else "-l"
-        val command = "cd ${shellQuote(safePath)} && ls $flags | head -n $maxEntries"
-        val result = runSuText(command, timeoutSeconds = 15)
-        val logMessage =
-            "Agent terminal action=list_directory " +
-                "outcome=${if (result.exitCode == 0) "succeeded" else "failed"} " +
-                "showHidden=$showHidden limit=$maxEntries exitCode=${result.exitCode} " +
-                "outputChars=${result.output.length} errorChars=${result.stderr.length}"
-        if (result.exitCode == 0) {
-            logger.info(logMessage)
-        } else {
-            logger.warn(logMessage)
-        }
-        return JSONObject()
-            .put("ok", result.exitCode == 0)
-            .put("tool", "list_directory")
-            .put("path", safePath)
-            .put("exit_code", result.exitCode)
-            .put("entries_text", result.output.truncateForJson())
-            .put("stderr", result.stderr.truncateForJson())
-            .toString()
-    }
+    fun readFile(path: String, offsetBytes: Int, maxBytes: Int): String = fileTool(
+        "read_file", JSONObject().put("path", path).put("offset_bytes", offsetBytes)
+            .put("max_bytes", maxBytes).put("max_lines", 2000)
+            .put("identity", defaultIdentity(TerminalEnvironment.ANDROID)),
+    )
+
+    fun writeFile(path: String, content: String, append: Boolean): String = fileTool(
+        "write_file", JSONObject().put("path", path).put("content", content).put("append", append)
+            .put("identity", defaultIdentity(TerminalEnvironment.ANDROID)),
+    )
+
+    fun listDirectory(path: String, showHidden: Boolean, limit: Int): String = fileTool(
+        "list_directory", JSONObject().put("path", path).put("show_hidden", showHidden).put("limit", limit)
+            .put("identity", defaultIdentity(TerminalEnvironment.ANDROID)),
+    )
 
     private fun normalizeIdentity(identity: String): String {
         val normalized = identity.ifBlank { "root" }.lowercase()
@@ -904,14 +947,15 @@ internal class RootShellTerminalController(
 
     private fun normalizeCwd(cwd: String?, environment: TerminalEnvironment, identity: String): String {
         val defaultCwd = if (environment.isLinux) LINUX_DEFAULT_CWD else TerminalRuntime.workspace(identity)
-        val requested = cwd?.trim().orEmpty().ifBlank { defaultCwd }
+        val requested = cwd.orEmpty().ifEmpty { defaultCwd }
+        require('\u0000' !in requested && requested.length <= 4096) { "工作目录无效或过长" }
         val environmentPath = when {
             requested == "~" || requested.startsWith("~/") || requested.startsWith("/") -> requested
             else -> "$defaultCwd/$requested"
         }
         return if (environment.isLinux) {
             val value = when { environmentPath == "~" -> "/root"; environmentPath.startsWith("~/") -> "/root/${environmentPath.removePrefix("~/")}"; else -> environmentPath }
-            File(value).toPath().normalize().toString()
+            value
         } else if (identity == "user") {
             val value = when { environmentPath == "~" -> defaultCwd; environmentPath.startsWith("~/") -> "$defaultCwd/${environmentPath.removePrefix("~/")}"; else -> environmentPath }
             File(value).canonicalPath
@@ -919,16 +963,16 @@ internal class RootShellTerminalController(
     }
 
     private fun normalizePath(path: String): String {
-        val raw = path.trim()
-        require(raw.isNotBlank()) { "path 不能为空" }
+        val raw = path
+        require(raw.isNotEmpty() && '\u0000' !in raw) { "path 无效" }
         val effective = when {
             raw == "~" -> USER_STORAGE
             raw.startsWith("~/") -> USER_STORAGE + "/" + raw.removePrefix("~/")
             raw.startsWith("/") -> raw
             else -> "$DEFAULT_CWD/$raw"
         }
-        val normalized = File(effective).canonicalPath
-        return normalized
+        // Root 可见的链接未必对 App UID 可见，交给目标 Shell 按真实命名空间解析。
+        return effective
     }
 
     private fun startSessionProcess(
@@ -964,53 +1008,15 @@ internal class RootShellTerminalController(
             timeoutSeconds = timeoutSeconds,
             stdin = null,
             environment = environment,
+            maxOutputBytes = MAX_COMMAND_OUTPUT_BYTES,
         )
         return ShellTextResult(
             exitCode = result.exitCode,
             output = result.output.decodeToString().trimEnd(),
             stderr = result.stderr.decodeToString().trimEnd(),
+            outputTruncated = result.outputTruncated,
+            stderrTruncated = result.stderrTruncated,
         )
-    }
-
-    private fun runSuText(command: String, timeoutSeconds: Long): ShellTextResult {
-        val result = runProcess(
-            identity = "root",
-            command = command,
-            timeoutSeconds = timeoutSeconds,
-            stdin = null,
-            environment = TerminalEnvironment.ANDROID,
-        )
-        return ShellTextResult(
-            exitCode = result.exitCode,
-            output = result.output.decodeToString().trimEnd(),
-            stderr = result.stderr.decodeToString().trimEnd()
-        )
-    }
-
-    private fun runSuTextWithStdin(command: String, stdin: ByteArray, timeoutSeconds: Long): ShellTextResult {
-        val result = runProcess(
-            identity = "root",
-            command = command,
-            timeoutSeconds = timeoutSeconds,
-            stdin = stdin,
-            environment = TerminalEnvironment.ANDROID,
-        )
-        return ShellTextResult(
-            exitCode = result.exitCode,
-            output = result.output.decodeToString().trimEnd(),
-            stderr = result.stderr.decodeToString().trimEnd()
-        )
-    }
-
-    private fun runSuBytes(command: String, timeoutSeconds: Long): ShellBytesResult {
-        val result = runProcess(
-            identity = "root",
-            command = command,
-            timeoutSeconds = timeoutSeconds,
-            stdin = null,
-            environment = TerminalEnvironment.ANDROID,
-        )
-        return ShellBytesResult(result.exitCode, result.output, result.stderr.decodeToString().trimEnd())
     }
 
     private fun runProcess(
@@ -1019,6 +1025,7 @@ internal class RootShellTerminalController(
         timeoutSeconds: Long,
         stdin: ByteArray?,
         environment: TerminalEnvironment,
+        maxOutputBytes: Int = Int.MAX_VALUE,
     ): OneShotShellResult =
         runOneShotShell(
             processSupervisor = processSupervisor,
@@ -1029,6 +1036,7 @@ internal class RootShellTerminalController(
             environment = environment,
             linuxRootfsPath = rootfsPathFor(environment),
             linuxSharedMounts = sharedMountsFor(environment),
+            maxOutputBytes = maxOutputBytes,
         )
 
     private fun String.truncateForJson(): String =
@@ -1041,8 +1049,13 @@ internal class RootShellTerminalController(
             .put("message", message.take(300))
             .toString()
 
-    private data class ShellTextResult(val exitCode: Int, val output: String, val stderr: String)
-    private data class ShellBytesResult(val exitCode: Int, val output: ByteArray, val stderr: String)
+    private data class ShellTextResult(
+        val exitCode: Int,
+        val output: String,
+        val stderr: String,
+        val outputTruncated: Boolean = false,
+        val stderrTruncated: Boolean = false,
+    )
     private data class SessionCommandResult(
         val exitCode: Int,
         val stdout: String,
@@ -1064,6 +1077,8 @@ internal class RootShellTerminalController(
     ) {
         val lock = Any()
 
+        var runtime: JSONObject? = null
+
         @Volatile
         var closed: Boolean = false
 
@@ -1083,6 +1098,7 @@ internal class RootShellTerminalController(
         val environment: TerminalEnvironment,
         val mergeStderr: Boolean,
         val sessionId: String?,
+        val probeMarker: String,
         val startedAt: Long,
         val timeoutMs: Int
     ) {

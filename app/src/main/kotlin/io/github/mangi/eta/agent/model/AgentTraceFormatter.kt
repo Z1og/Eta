@@ -9,12 +9,19 @@ internal class AgentTraceFormatter {
     fun summarizeArguments(toolCall: AgentModelClient.ToolCall): String =
         when (toolCall.name) {
             BROWSER_TOOL_NAME -> summarizeBrowserArguments(toolCall.argumentsJson)
+            "web_search" -> "搜索网页"
+            "fetch_url" -> summarizeFetchArguments(toolCall.argumentsJson)
             "open_uri" -> summarizeOpenUriArguments(toolCall.argumentsJson)
             "terminal" -> summarizeTerminalArguments(toolCall.argumentsJson)
-            "run_command" -> "执行命令 · Android · root"
+            "run_command" -> "执行命令 · Android"
             "write_file" -> summarizeTextLength("写入文件", toolCall.argumentsJson, "content")
             "read_file" -> "读取文件"
             "list_directory" -> "列出目录"
+            "edit_file" -> "精确编辑文件"
+            "stat_file" -> "查看文件信息"
+            "glob_files" -> "按路径查找文件"
+            "grep_files" -> "搜索文件内容"
+            "inspect_app" -> "检查应用"
             "input_text" -> summarizeTextLength("输入文本", toolCall.argumentsJson, "text")
             "replace_text" -> summarizeTextLength("替换文本", toolCall.argumentsJson, "text")
             "paste_text", "set_clipboard" ->
@@ -51,6 +58,9 @@ internal class AgentTraceFormatter {
             "skills_install_from_github" -> "安装技能"
             else -> {
                 val label = DEVICE_ACTION_LABELS[toolCall.name]
+                    ?: AgentPhoneToolCatalog.entries.firstOrNull { it.name == toolCall.name }?.title
+                    ?: io.github.mangi.eta.agent.context.PersonalSearchTools.searches.firstOrNull { it.name == toolCall.name }?.title
+                    ?: when (toolCall.name) { "search_notes" -> "查询便签"; "search_system_memories" -> "查询系统记忆"; "read_personal_item" -> "读取检索详情"; "summarize_bills" -> "汇总账单"; else -> null }
                 when {
                     label == null -> "准备执行"
                     toolCall.name.startsWith("search_") ->
@@ -104,13 +114,19 @@ internal class AgentTraceFormatter {
             listOfNotNull(action, host).joinToString(" · ")
         }.getOrElse { "浏览器操作" }
 
+    private fun summarizeFetchArguments(argumentsJson: String): String = runCatching {
+        val arguments = JSONObject(argumentsJson)
+        val label = if (arguments.has("document_id")) "继续读取网页" else "读取网页"
+        listOfNotNull(label, safeHttpHost(arguments.optString("url"))?.removePrefix("www.")).joinToString(" · ")
+    }.getOrDefault("读取网页")
+
     private fun summarizeTerminalArguments(argumentsJson: String): String =
         runCatching {
             val arguments = JSONObject(argumentsJson)
             val action = arguments.optString("action").terminalActionLabel()
             val environment = arguments.optString("environment", "android")
                 .terminalEnvironmentLabel()
-            val identity = arguments.optString("identity", "root")
+            val identity = arguments.optString("identity")
                 .takeIf { it == "root" || it == "user" }
             buildList {
                 add("终端")
@@ -232,10 +248,12 @@ internal class AgentTraceFormatter {
         result: AgentModelClient.ToolResult,
     ): String {
         val json = parseResultJson(result)
+        if (toolName == "web_search" || toolName == "fetch_url") return summarizeWebResult(toolName, json)
         // 终端 exit_code != 0 时 ok=false 但没有 code 字段，必须走专用分支保留退出码与输出
         if (toolName == "terminal" || toolName == "run_command") {
             return summarizeTerminalResult(json)
         }
+        if (json?.optString("status") == "unconfirmed") return "操作已提交，效果未确认"
         if (!isSuccessResult(result)) return summarizeFailure(json)
         return when (toolName) {
             BROWSER_TOOL_NAME -> json?.let(::summarizeBrowserResult) ?: "浏览器操作完成"
@@ -250,6 +268,31 @@ internal class AgentTraceFormatter {
 
     private fun parseResultJson(result: AgentModelClient.ToolResult): JSONObject? =
         runCatching { JSONObject(result.content) }.getOrNull()
+
+    /**
+     * 网页错误正文、搜索词和页面标题可能回显私密 URL，只保留计数。动作与主机已在参数摘要中，
+     * 结果只给出结论，避免工作过程同一行重复。
+     */
+    private fun summarizeWebResult(toolName: String, json: JSONObject?): String {
+        val label = if (toolName == "web_search") "网页搜索" else "网页读取"
+        if (json == null) return "完成"
+        if (!json.optBoolean("ok", true)) {
+            val code = json.optString("code").takeIf { it.matches(Regex("[A-Z][A-Z0-9_]{0,79}")) }
+            return listOfNotNull("${label}失败", code?.let { "code=$it" }).joinToString(" · ")
+        }
+        if (toolName == "web_search") {
+            val count = json.optJSONArray("results")?.length() ?: json.firstNonNegativeInt("count")
+            return when (count) {
+                null -> "完成"
+                0 -> "没有找到结果"
+                else -> "$count 条结果"
+            }
+        }
+        val chars = (json.opt("text") as? String)?.length
+            ?: json.firstNonNegativeInt("returned_chars", "text_chars")
+            ?: return "完成"
+        return if (json.optBoolean("has_more")) "已读前 ${formatCharCount(chars)}" else formatCharCount(chars)
+    }
 
     /** 失败摘要保留 code= 标记，供运行日志提取稳定错误码；message 是工具侧给出的中文原因。 */
     private fun summarizeFailure(json: JSONObject?): String {
@@ -276,7 +319,13 @@ internal class AgentTraceFormatter {
         result: AgentModelClient.ToolResult,
     ): String =
         buildList {
-            add("完成")
+            add(if (json.has("verified") && !json.optBoolean("verified")) "已执行，效果未确认" else "完成")
+            json.optJSONArray("entries")?.let { add("${it.length()} 个条目") }
+            json.optJSONArray("matches")?.let { add("${it.length()} 个匹配") }
+            if (json.has("bytes_read")) add("已读 ${json.optLong("bytes_read")} 字节")
+            if (json.has("replacements")) add("替换 ${json.optInt("replacements")} 处")
+            if (json.optBoolean("truncated") || json.optBoolean("has_more")) add("可继续读取")
+            if (json.optBoolean("partial") || json.optBoolean("scan_limited")) add("采集范围有限")
             json.optJSONArray("apps")?.let { add("找到 ${it.length()} 个应用") }
             json.optJSONArray("candidates")?.let { add("${it.length()} 个候选") }
             if (result.images.isNotEmpty()) add("${result.images.size} 张图片")

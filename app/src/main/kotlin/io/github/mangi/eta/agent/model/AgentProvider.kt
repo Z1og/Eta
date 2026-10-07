@@ -33,7 +33,7 @@ internal enum class EndpointKind {
 }
 
 internal enum class ProviderRequestPurpose {
-    CHAT, COMPACTION, REPLY_REWRITE;
+    CHAT, COMPACTION, REPLY_REWRITE, TRANSCRIPT_REFINE;
 
     val allowsTools: Boolean get() = this == CHAT
 }
@@ -114,9 +114,7 @@ internal sealed interface ProviderEvent {
 
     data class Usage(
         val usage: AgentTokenUsage,
-        val contextInputTokens: Int? = usage.inputTokens ?: usage.contextTokens?.let {
-            (it - (usage.outputTokens ?: 0)).coerceAtLeast(0)
-        },
+        val contextInputTokens: Int? = usage.inputTokens,
     ) : ProviderEvent
 
     data class HostedToolStarted(

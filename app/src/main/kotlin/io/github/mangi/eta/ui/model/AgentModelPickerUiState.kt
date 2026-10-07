@@ -37,7 +37,6 @@ internal data class AgentModelOptionUi(
 internal data class AgentContextUsageUi(
     val contextTokens: Int?,
     val contextWindow: Int?,
-    val estimated: Boolean = false,
 ) {
     val progress: Float?
         get() = contextUsageProgress(contextTokens, contextWindow)
@@ -112,14 +111,18 @@ internal fun latestContextUsage(
     messages: List<AgentChatMessageUi>,
     selectedModel: AgentModelOptionUi?,
 ): AgentContextUsageUi {
-    val lastUsage = messages.asReversed().asSequence().mapNotNull { message ->
+    for (message in messages.asReversed()) {
         when (message) {
-            is AgentMessageUi -> message.usage?.contextTokens?.let { it to false }
-            is SystemNoticeMessageUi -> message.contextTokens?.let { it to true }
-            else -> null
+            is AgentMessageUi -> message.usage?.contextTokens?.let {
+                return AgentContextUsageUi(it, selectedModel?.contextWindow)
+            }
+            is SystemNoticeMessageUi -> if (message.code == SystemNoticeCode.ContextCompaction) {
+                return AgentContextUsageUi(null, selectedModel?.contextWindow)
+            }
+            else -> Unit
         }
-    }.firstOrNull()
-    return AgentContextUsageUi(lastUsage?.first, selectedModel?.contextWindow, lastUsage?.second ?: false)
+    }
+    return AgentContextUsageUi(null, selectedModel?.contextWindow)
 }
 
 internal fun contextUsageProgress(contextTokens: Int?, contextWindow: Int?): Float? {
@@ -132,12 +135,11 @@ internal fun contextUsageProgress(contextTokens: Int?, contextWindow: Int?): Flo
 internal fun formatContextUsage(
     usage: AgentContextUsageUi,
     noUsageText: String = "No usage data yet",
-    noLimitText: String = "This model has no context limit",
+    noLimitText: String = "Context window unknown, so automatic compaction is off",
     locale: Locale = Locale.getDefault(),
 ): String = when {
+    usage.contextWindow == null || usage.contextWindow <= 0 -> noLimitText
     usage.contextTokens == null -> noUsageText
-    usage.contextWindow == null || usage.contextWindow <= 0 ->
-        "${formatCompactTokenCount(usage.contextTokens, locale)} tokens\n$noLimitText"
     else -> {
         val percent = usage.contextTokens.toDouble() / usage.contextWindow.toDouble() * 100.0
         val percentFormat = NumberFormat.getNumberInstance(locale).apply {

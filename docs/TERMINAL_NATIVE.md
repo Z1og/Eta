@@ -21,7 +21,7 @@ PRoot 调用方必须设置 `PROOT_LOADER` 为当前 `nativeLibraryDir/libproot_
 构建需要与 `gradle/libs.versions.toml` 的 `ndk` 条目一致的 Android NDK、Python 3、GNU make、patch 与 tar，在 macOS 或 Linux 上运行：
 
 ```sh
-ANDROID_NDK_HOME=/path/to/android-ndk-r29 scripts/build-terminal-native.sh
+ANDROID_NDK_HOME=/path/to/android-ndk scripts/build-terminal-native.sh
 ```
 
 脚本先核对 NDK 的 `source.properties` 与版本目录，再使用 APK 同步附带的固定源码压缩包，并校验 SHA-256；缺少源码时才从上游固定版本地址下载。第三方源码版本、URL、摘要和编译参数以脚本为准。`ETA_NATIVE_SOURCES` 与 `ETA_NATIVE_BUILD` 可以分别指定源码缓存和临时构建目录。编译日志保存在构建目录中，不包含模型配置或用户文件。

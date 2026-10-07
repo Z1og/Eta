@@ -3,7 +3,6 @@ package io.github.mangi.eta.agent.roleplay
 import android.content.Context
 import io.github.mangi.eta.agent.memory.AgentMemoryContext
 import io.github.mangi.eta.agent.memory.AgentMemoryContextBuilder
-import io.github.mangi.eta.agent.model.AgentContextBudget
 import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.data.repository.CharacterMemoryRepository
 import io.github.mangi.eta.data.repository.CharacterRepository
@@ -17,7 +16,7 @@ internal data class RoleplayRunContext(
     val card: CharacterCard,
     val userName: String,
     val userDescription: String,
-    val contextWindow: Int? = null,
+    val contextWindow: Int?,
     val memory: AgentMemoryContext = AgentMemoryContext.DISABLED,
 ) {
     val characterName: String get() = card.name
@@ -26,20 +25,16 @@ internal data class RoleplayRunContext(
         .put(PERSONA_MARKER, true).put("content", personaPrompt("", ""))
 
     /** 世界书与深度提示只投影到当前请求，不写入 transcript 或覆盖历史。 */
-    fun projectMessages(source: JSONArray, tools: JSONArray = JSONArray()): JSONArray {
+    fun projectMessages(source: JSONArray): JSONArray {
         val conversationText = (0 until source.length()).mapNotNull { index ->
             source.optJSONObject(index)?.takeIf(::isDialogue)
                 ?.let(::dialogueText)
         }
-        val inputBudget = ((contextWindow ?: 128_000) * AgentContextBudget.TRIGGER_RATIO).toInt()
-        val extraInstructions = expand(card.depthPrompt?.prompt.orEmpty()) + expand(card.postHistoryInstructions)
-        val available = (inputBudget - AgentContextBudget.rawEstimate(source, tools) -
-            AgentContextBudget.textTokens(extraInstructions) - 16).coerceAtLeast(0)
         val worldbook = CharacterWorldbook.resolve(
             card = card,
             messages = conversationText,
-            inputTokenBudget = available,
-            estimateTokens = { AgentContextBudget.textTokens(expand(it)) },
+            inputTokenBudget = contextWindow ?: AgentMemoryContextBuilder.DEFAULT_CONTEXT_WINDOW,
+            estimateTokens = { CharacterWorldbook.estimateEntryTokens(expand(it)) },
         )
         val projected = (0 until source.length()).map { index ->
             JSONObject(source.getJSONObject(index).toString()).apply {

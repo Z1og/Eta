@@ -34,7 +34,7 @@ class ProviderComponentsTest {
 
     @Test
     fun validatesOptionalPositiveContextWindowOverride() {
-        assertEquals(null, contextWindowInputError(""))
+        assertEquals("Context window must be a positive integer", contextWindowInputError(""))
         assertEquals(null, contextWindowInputError(" 256000 "))
         assertEquals("Context window must be a positive integer", contextWindowInputError("0"))
         assertEquals("Context window must be a positive integer", contextWindowInputError("999999999999"))

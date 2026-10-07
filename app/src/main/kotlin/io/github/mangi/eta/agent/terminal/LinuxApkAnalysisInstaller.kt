@@ -372,7 +372,7 @@ internal class LinuxApkAnalysisInstaller(
                 val path = File(localBin, name).toPath()
                 java.nio.file.Files.deleteIfExists(path)
                 val relative = if (name == "jadx") "jadx/bin/jadx" else "bin/$name"
-                java.nio.file.Files.createSymbolicLink(path, java.nio.file.Path.of("../../../opt/eta/apk-analysis/current/$relative"))
+                java.nio.file.Files.createSymbolicLink(path, java.nio.file.Paths.get("../../../opt/eta/apk-analysis/current/$relative"))
             }
             File(rootfs, AlpineEnvironmentPaths.APK_ANALYSIS_MARKER).delete()
             return true

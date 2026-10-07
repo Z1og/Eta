@@ -10,7 +10,7 @@ internal object ResponsesRequestBuilder {
         tools: JSONArray,
     ): JSONObject {
         val input = buildInput(messages)
-        val responseTools = buildTools(tools, config.hostedWebSearchEnabled)
+        val responseTools = buildTools(tools, config.usesHostedWebSearch)
         val instructions = OpenAiRequestMessages.responsesInstructions(messages)
             .ifBlank { config.systemPrompt }
         val request = JSONObject()
@@ -112,6 +112,7 @@ internal object ResponsesRequestBuilder {
         JSONArray().also { result ->
             for (index in 0 until tools.length()) {
                 val function = tools.optJSONObject(index)?.optJSONObject("function") ?: continue
+                if (hostedWebSearchEnabled && function.optString("name") == "web_search") continue
                 result.put(
                     JSONObject()
                         .put("type", "function")

@@ -59,3 +59,8 @@
 # 不在 App 层重复保留整个类或包，避免阻断裁剪、内联和混淆。
 # 保留源码与行号属性，便于使用 release mapping 还原线上堆栈。
 -keepattributes SourceFile,LineNumberTable
+
+# app_process 通过固定类名启动受控的一方应用操作入口。
+-keep class io.github.mangi.eta.agent.phone.PhoneCommandMain {
+    public static void main(java.lang.String[]);
+}

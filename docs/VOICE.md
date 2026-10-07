@@ -5,11 +5,14 @@ Eta 的「设置 → 语音」分别配置语音识别（ASR）与语音播报�
 ## 使用方式
 
 - **聊天听写**：点击输入框麦克风开始，点击完成后把最终文字插入当前选区，可编辑后发送。预览文字不会覆盖已有草稿。系统服务提前返回时也等待用户确认。
-- **助手浮窗**：识别结果直接发起提问。千问实时与豆包流式识别支持停顿后自动提交；千问短音频与文件转写需点击完成。
+- **助手浮窗**：识别结果直接发起提问。千问实时、豆包流式与系统识别在停顿后自动发送，停顿时长可选 1、1.5、2（默认）或 3 秒，也可关闭；千问短音频与文件转写需点击完成。长按麦克风进入按住说话，期间停顿不会发送，松手发送，手指移出按钮取消。回答下方提供朗读按钮。
+- **智能纠错**：开启后，识别结果在交付前用当前对话模型做一次不带工具的保守校对，只修正同音字和被识别成中文谐音的英文术语，不改写正确内容。纠错最多等待 8 秒；未配置对话模型、请求失败、超时或输出长度异常时直接使用原始识别结果。聊天听写与浮窗都生效，会增加少量延迟和模型费用。
 - **回答播报**：聊天回答可手动朗读。开启「助手自动播报回答」后，仅播报浮窗中语音提问的成功最终回答，不读取思考、工具日志或代码块。
 - **取消与退出**：点击取消、开始新的录音、隐藏或关闭所属页面会终止音频任务；耳机断开、熄屏或播放失去音频焦点也会停止。因 GUI 操作隐藏浮窗后完成的任务只保留文字，不补播，不自动继续监听。
 
 助手浮窗在实际录音、播放期间分别声明麦克风、媒体播放前台服务，并显示可停止的通知；结束音频操作即撤下通知。它不延长浮窗隐藏后的音频任务，也不提供后台持续监听或播放。
+
+Android 13 可向系统识别服务提交语言包下载请求，但系统没有下载进度与完成回调，需稍后重试识别；Android 14+ 在服务支持时显示下载回调状态。关闭语音入口会释放相关识别器。
 
 单次云端录音最多 60 秒。实时接口可显示识别预览，短音频与文件转写在录音完成后返回文字。切换服务不会自动复制凭据或替换已保存的其他服务配置；失败不会自动回退到另一家供应商。
 
@@ -26,6 +29,8 @@ Eta 的「设置 → 语音」分别配置语音识别（ASR）与语音播报�
 | 豆包 TTS | 语音合成 2.0 | 独立播报 API Key、音色；默认 VV，资源 ID `seed-tts-2.0` |
 
 千问可选择北京或新加坡，API Key 必须匹配所选地域。高级设置可填写服务根地址，包括业务空间专属域名；不要附加 `/api/v1` 或 `/compatible-mode/v1`。模型与协议绑定，不使用聊天模型列表推断语音能力。千问识别语言留空表示自动识别；指定语言时使用服务支持的语言代码。
+
+播报页内置千问与豆包各 16 个音色，按名称选择，列表标注男女声或方言。千问预设适配当前播报模型，豆包预设适配语音合成 2.0；已保存的音色 ID 会自动匹配名称，未匹配的 ID 保留在「自定义音色」中。
 
 豆包高级设置可修改资源 ID、服务根地址，或启用旧版 App ID＋Access Token 鉴权。旧版配置的 Access Token 填在对应的凭据输入框。自定义音色应填写所选模型支持的音色 ID，不会在 Eta 内创建或复刻音色。
 
@@ -45,8 +50,9 @@ Eta 上传 WAV 后生成有效期 15 分钟的读取签名 URL，向百炼提交
 
 - `SpeechInputController` 统一管理 start、finish、cancel 和一次性结果交付。系统服务适配沿用 `EtaSpeechInput`；独立进程 `EtaRecognitionService` 仍只负责系统兼容桥接，不向其他应用开放云端凭据。
 - `SpeechRecorder` 采集 16 kHz、单声道 PCM16。录音只暂存在内存中，文件接口封装 WAV；实时发送队列和响应解析均有限额，背压失败明确返回，不静默丢帧。
-- 千问实时协议通过 `text + stash` 替换当前 item 预览，以 completed 为最终文字，等待 session.finished 后结束。豆包使用专用二进制 codec，支持 Gzip、头扩展和最终包标记，不能套用 JSON WebSocket。
-- `SpeechPlaybackController` 负责合成与播放，`SpeechAudioLease` 协调本进程录音、播放和音频焦点。TTS 正文使用 GFM AST 提取可读文字，按句分块，使用 24 kHz PCM16 顺序播放。仅成功收到终止事件才把音频视为完整。
+- 千问实时协议通过 `text + stash` 替换当前 item 预览，以 completed 为最终文字，等待 session.finished 后结束。自动发送的停顿时长同时作为千问 `silence_duration_ms` 与豆包 `end_window_size`，由服务端判定说完；系统识别通过 `RecognizerIntent` 静音时长提示传递，服务可以忽略。不自动发送时沿用 800 ms 断句，只影响预览分段。豆包使用专用二进制 codec，支持 Gzip、头扩展和最终包标记，不能套用 JSON WebSocket。
+- `SpeechPlaybackController` 负责合成与播放，`SpeechAudioLease` 协调本进程录音、播放和音频焦点。TTS 正文使用 GFM AST 提取可读文字，按句分块，使用 24 kHz PCM16 顺序播放；合成按网络速度下载并最多预取两段，各段无缝拼接，段首段尾各做 5 ms 淡入淡出，消除独立合成的段落在接缝处的波形阶跃。合成解码层识别裸 PCM 与流式 WAV，校验 WAV 格式并剥离容器头，不把头信息作为音频播放；文件头和采样可以跨响应片段。流式 WAV 长度字段可能是占位值，仅成功收到终止事件才把音频视为完整。`SpeechPcmOutput` 先填充播放缓冲区再启动音轨；不足一个缓冲区的短音频在合成结束后按实际帧数启动。
+- `SpeechTranscriptRefiner` 通过 `RuntimeConfigRepository` 读取当前对话模型，复用 Provider 层发出独立的 `TRANSCRIPT_REFINE` 请求：不带工具、托管搜索与自定义请求体，可关闭思考时关闭，否则使用最低档。识别文字只作为用户消息，取消或超时会取消底层 HTTP 调用。
 - `SpeechSettingsRepository` 隔离持久化；普通配置进入现有 DataStore，凭据用 Android Keystore 的 AES-GCM 加密后保存。凭据不进入 RemotePreferences、会话、日志或数据导出；语音配置目前也不纳入手动备份。不可解密的凭据会要求重新填写，不静默当作空配置。
 - 设置页、聊天与浮窗复用相同控制器；网络与音频循环不进入 Composable、Hook 或 Agent loop，Runtime IPC 与归档格式保持兼容。
 
@@ -56,5 +62,6 @@ Eta 上传 WAV 后生成有效期 15 分钟的读取签名 URL，向百炼提交
 - [千问实时 ASR 客户端事件](https://help.aliyun.com/zh/model-studio/qwen-asr-realtime-client-events)、[服务端事件](https://help.aliyun.com/zh/model-studio/qwen-asr-realtime-server-events)
 - [豆包流式 ASR 协议](https://www.volcengine.com/docs/6561/1354869)
 - [千问 TTS API](https://help.aliyun.com/zh/model-studio/qwen-tts-api)、[音频播放示例](https://help.aliyun.com/zh/model-studio/non-realtime-tts-user-guide)
+- [千问音色列表](https://help.aliyun.com/zh/model-studio/qwen-tts-voice-list)、[豆包音色列表](https://docs.volcengine.com/docs/DoubaoVoice/Tonelist-1?lang=zh)
 - [豆包单向流式 TTS HTTP](https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh)
 - [OSS V4 请求头签名](https://help.aliyun.com/zh/oss/developer-reference/recommend-to-use-signature-version-4)、[URL 签名](https://help.aliyun.com/zh/oss/developer-reference/add-signatures-to-urls)
