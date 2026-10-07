@@ -375,8 +375,13 @@ jobs:
           COMMIT_TS: ${{ github.event.head_commit.timestamp || 'manual trigger' }}
         run: |
           set -e
-          APK="${APK_PATH:-app/build/outputs/apk/release/app-release.apk}"
-          [ -f "$APK" ] || { echo "::error::APK not found: $APK"; exit 1; }
+          # 上游 gradle 会把产物改名（如 Eta-v<version>.apk），通配定位实际生成的 APK
+          APK="${APK_PATH:-}"
+          if [ -z "$APK" ] || [ ! -f "$APK" ]; then
+            APK=$(ls -1 app/build/outputs/apk/release/*.apk 2>/dev/null | head -n 1)
+          fi
+          [ -n "$APK" ] && [ -f "$APK" ] || { echo "::error::APK not found under app/build/outputs/apk/release/"; exit 1; }
+          echo "using APK: $APK"
 
           # 清理上次失败留下的无资产草稿（v58 事故的复现防护）
           if gh release view "$TAG" >/dev/null 2>&1; then

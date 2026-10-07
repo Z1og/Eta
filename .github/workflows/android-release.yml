@@ -74,8 +74,9 @@ jobs:
       - name: 验证并整理 APK
         id: apk
         run: |
-          debug_apk="app/build/outputs/apk/debug/app-debug.apk"
-          release_apk="app/build/outputs/apk/release/app-release.apk"
+          debug_apk="$(ls -1 app/build/outputs/apk/debug/*.apk 2>/dev/null | head -n 1)"
+          release_apk="$(ls -1 app/build/outputs/apk/release/*.apk 2>/dev/null | head -n 1)"
+          # 上游 gradle 会重命名产物（如 Eta-v<version>.apk），通配定位实际生成的 APK
           output_dir="$RUNNER_TEMP/apks"
           apksigner_path="$(find "$ANDROID_HOME/build-tools" \
             -type f -name apksigner | sort -V | tail -n 1)"
