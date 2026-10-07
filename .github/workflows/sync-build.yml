@@ -23,6 +23,14 @@ on:
         required: false
         default: false
         type: boolean
+      code_conflict_policy:
+        description: '上游代码文件冲突策略：skip=中止合并并开 issue（默认，最安全）；ours=保留 fork 版继续合并（上游同区域改动被跳过，会在 issue 中列明）'
+        required: false
+        default: 'skip'
+        type: choice
+        options:
+          - skip
+          - ours
   # 推送到 main 时也构建
   push:
     branches: [ main ]
@@ -44,7 +52,7 @@ jobs:
   # ──────────────────────────────────────────────
   sync-upstream:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     if: github.event_name != 'push'
     steps:
       - name: Checkout fork
@@ -56,29 +64,33 @@ jobs:
       - name: Merge upstream changes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CODE_CONFLICT_POLICY: ${{ inputs.code_conflict_policy || 'skip' }}
         run: |
           git remote add upstream https://github.com/Mangi-11/Eta.git 2>/dev/null || true
           git fetch upstream main
           git config user.name "Z1og"
           git config user.email "59019705+Z1og@users.noreply.github.com"
 
+          echo "PRE_MERGE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           BEHIND=$(git rev-list --count HEAD..upstream/main)
           echo "behind=$BEHIND"
           if [[ "$BEHIND" -eq 0 ]]; then
+            echo "MERGED=false" >> "$GITHUB_ENV"
             echo "Upstream already merged"
             exit 0
           fi
 
           if git merge upstream/main --no-edit; then
-            git push origin main
+            echo "MERGED=true" >> "$GITHUB_ENV"
             exit 0
           fi
 
           # 冲突处理：
           # - manifest.json → 并集合并（不丢上游新技能，也不丢 fork 技能）
           # - 技能生成物 / fork 自维护 CI → 取 fork 版（ours，由适配器/本仓库重建）
-          # - 其余代码文件冲突 → 中止合并并开 issue（列明冲突文件，等手动处理）
+          # - 其余代码文件 → 按 code_conflict_policy：skip=中止并开 issue；ours=保留 fork 版继续
           RESOLVABLE=true
+          SKIPPED_UPSTREAM=""
           CONFLICT_LIST=""
           for f in $(git diff --name-only --diff-filter=U); do
             case "$f" in
@@ -96,26 +108,100 @@ jobs:
                 echo "auto-resolved (ours): $f"
                 ;;
               *)
-                RESOLVABLE=false
-                CONFLICT_LIST="${CONFLICT_LIST}- $f"$'\n'
+                if [[ "$CODE_CONFLICT_POLICY" == "ours" ]]; then
+                  git checkout --ours "$f" && git add "$f"
+                  SKIPPED_UPSTREAM="${SKIPPED_UPSTREAM}- $f"$'\n'
+                  echo "auto-resolved (ours by policy): $f"
+                else
+                  RESOLVABLE=false
+                  CONFLICT_LIST="${CONFLICT_LIST}- $f"$'\n'
+                fi
                 ;;
             esac
           done
 
-          if [[ "$RESOLVABLE" == "true" ]]; then
-            GIT_EDITOR=true git merge --continue
-            git push origin main
-          else
+          if [[ "$RESOLVABLE" != "true" ]]; then
             git merge --abort
             gh issue create -R Z1og/Eta \
               --title "上游合并冲突：需要手动解决" \
               --body "上游 Mangi-11/Eta 更新与 fork 代码冲突，本次跳过上游合并；技能适配与构建照常进行。
 
-          冲突文件（手动解决后可用 workflow_dispatch 重跑本管线）：
+          冲突文件（手动解决后可用 workflow_dispatch 重跑本管线；或用 code_conflict_policy=ours 保留 fork 版）：
           ${CONFLICT_LIST:-（详见 workflow 日志）}" \
               || echo "::warning::issue create failed"
             echo "::error::代码冲突，已跳过上游合并（技能适配与构建照常）"
+            exit 1
           fi
+
+          GIT_EDITOR=true git merge --continue
+          echo "MERGED=true" >> "$GITHUB_ENV"
+          if [ -n "$SKIPPED_UPSTREAM" ]; then
+            {
+              echo "SKIPPED_UPSTREAM<<GITHUB_ENV_EOF"
+              printf '%s\n' "$SKIPPED_UPSTREAM"
+              echo "GITHUB_ENV_EOF"
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up JDK 25 (compile gate)
+        if: env.MERGED == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle (compile gate)
+        if: env.MERGED == 'true'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-provider: basic
+
+      - name: Set up Android SDK (compile gate)
+        if: env.MERGED == 'true'
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android SDK 37 (compile gate)
+        if: env.MERGED == 'true'
+        run: sdkmanager --channel=3 "platforms;android-37.0"
+
+      - name: Compile gate (merged tree must build)
+        if: env.MERGED == 'true'
+        run: |
+          set -o pipefail
+          if ./gradlew --no-daemon --no-configuration-cache :app:compileDebugKotlin 2>&1 | tee compile-gate.log; then
+            echo "COMPILE_FAILED=false" >> "$GITHUB_ENV"
+          else
+            echo "COMPILE_FAILED=true" >> "$GITHUB_ENV"
+            echo "::error::合并结果编译失败：将回滚本次上游合并"
+            exit 1
+          fi
+
+      - name: Push merged result / rollback on failure
+        if: always() && env.MERGED == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${COMPILE_FAILED:-false}" = "true" ]; then
+            git reset --hard "$PRE_MERGE_SHA"
+            gh issue create -R Z1og/Eta \
+              --title "上游合并后编译失败：已自动回滚本次合并" \
+              --body "上游更新与 fork 合并后 :app:compileDebugKotlin 失败，已回滚到合并前（${PRE_MERGE_SHA}）。技能适配与构建照常进行（基于合并前代码）。人工核对后可用 workflow_dispatch 重跑本管线；编译错误摘要见 workflow 日志。" \
+              || echo "::warning::issue create failed"
+            head -n 200 compile-gate.log || true
+            exit 1
+          fi
+          if [ -n "${SKIPPED_UPSTREAM:-}" ]; then
+            gh issue create -R Z1og/Eta \
+              --title "上游合并采用 ours 策略：以下文件的上游改动被跳过" \
+              --body "code_conflict_policy=ours，以下上游文件改动未合入（保留 fork 版），请人工核对是否需要回补：
+
+          ${SKIPPED_UPSTREAM}" \
+              || echo "::warning::issue create failed"
+          fi
+          git push origin main
 
   # ──────────────────────────────────────────────
   # Job 1: 同步 + 适配技能源（上游 merge 完成后再跑，保证基于最新 main）
