@@ -596,15 +596,34 @@ def refresh_manifest_flags(manifest: dict, output_dir: Path) -> None:
 # ============================================================
 
 def fetch_repo(target_path: Path, url: str = REPO_URL, branch: str = REPO_BRANCH):
+    """拉取源仓库。
+
+    源仓库不可达（已删除/转私/网络故障）时降级用本地缓存继续：
+    缓存内容是最后一次成功抓取的快照，技能适配照常进行，不再拖垮整条管线。
+    """
     if (target_path / ".git").exists():
         print(f"[git] 更新已有仓库: {target_path}")
-        subprocess.run(["git", "-C", str(target_path), "pull", "--ff-only"], check=True)
+        result = subprocess.run(
+            ["git", "-C", str(target_path), "pull", "--ff-only"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            tail = (result.stderr.strip().splitlines() or ["?"])[-1]
+            print(f"[警告] git pull 失败，使用本地缓存继续：{tail}")
+        else:
+            print("[git] pull 成功")
     else:
         print(f"[git] 克隆仓库: {url}")
-        subprocess.run(
+        result = subprocess.run(
             ["git", "clone", "--depth", "1", "--branch", branch, url, str(target_path)],
-            check=True
+            capture_output=True, text=True,
         )
+        if result.returncode != 0:
+            print(f"[警告] 克隆失败：{result.stderr.strip()[:300]}")
+            if (target_path / ".git").exists():
+                print("[警告] 使用残留缓存继续")
+                return
+            raise RuntimeError(f"无法获取源仓库且无本地缓存：{url}")
 
 
 def find_skill_dirs(repo_path: Path) -> list[Path]:

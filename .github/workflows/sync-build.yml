@@ -103,7 +103,7 @@ jobs:
                   CONFLICT_LIST="${CONFLICT_LIST}- $f（并集合并失败）"$'\n'
                 fi
                 ;;
-              hanshuang-eta-skills/*|app/src/main/assets/builtin_skills/*|.github/workflows/*)
+              hanshuang-eta-skills/*|app/src/main/assets/builtin_skills/*|.github/workflows/*|README.md|README_EN.md)
                 git checkout --ours "$f" && git add "$f"
                 echo "auto-resolved (ours): $f"
                 ;;
@@ -122,13 +122,21 @@ jobs:
 
           if [[ "$RESOLVABLE" != "true" ]]; then
             git merge --abort
+            # 仓库 issue 已禁用：冲突详情写入 run summary，保证有人能看到
+            {
+              echo "## 上游合并冲突：本次跳过上游合并（技能适配与构建照常）"
+              echo ""
+              echo "冲突文件（手动解决后用 workflow_dispatch 重跑；或用 code_conflict_policy=ours 保留 fork 版）："
+              echo ""
+              echo "${CONFLICT_LIST:-（详见 workflow 日志）}"
+            } >> "$GITHUB_STEP_SUMMARY"
             gh issue create -R Z1og/Eta \
               --title "上游合并冲突：需要手动解决" \
               --body "上游 Mangi-11/Eta 更新与 fork 代码冲突，本次跳过上游合并；技能适配与构建照常进行。
 
           冲突文件（手动解决后可用 workflow_dispatch 重跑本管线；或用 code_conflict_policy=ours 保留 fork 版）：
           ${CONFLICT_LIST:-（详见 workflow 日志）}" \
-              || echo "::warning::issue create failed"
+              || echo "::warning::issue create failed（仓库已禁用 issue，冲突详情见本 run 的 Summary）"
             echo "::error::代码冲突，已跳过上游合并（技能适配与构建照常）"
             exit 1
           fi
