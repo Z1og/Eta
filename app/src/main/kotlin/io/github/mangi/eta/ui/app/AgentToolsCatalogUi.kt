@@ -25,10 +25,7 @@ internal fun buildToolsState(context: Context): AgentToolsUiState =
                 id = "text",
                 title = context.getString(R.string.state_text_and_clipboard_3a7340),
                 tools = listOf(
-                    ToolItemUi("input_text", context.getString(R.string.tool_ui_enter_text_ae47ab), context.getString(R.string.tool_ui_append_or_paste_text_to_the_current_focus_1efdcc)),
-                    ToolItemUi("replace_text", context.getString(R.string.tool_ui_replacement_text_1a5c8d), context.getString(R.string.tool_ui_replace_text_in_focus_or_node_30d332)),
-                    ToolItemUi("clear_text", context.getString(R.string.tool_ui_clear_text_d4cb57), context.getString(R.string.tool_ui_clear_focus_or_node_text_3e754a)),
-                    ToolItemUi("paste_text", context.getString(R.string.tool_ui_paste_text_791b85), context.getString(R.string.tool_ui_reliably_enter_long_text_with_the_clipboard_b6041e)),
+                    ToolItemUi("type_text", context.getString(R.string.tool_ui_enter_text_ae47ab), context.getString(R.string.tool_ui_type_text_summary)),
                     ToolItemUi("wait_for_text", context.getString(R.string.tool_ui_wait_for_text_9e9a54), context.getString(R.string.tool_ui_wait_for_the_specified_text_to_appear_on_the_scr_43f9b0)),
                 ),
             ),

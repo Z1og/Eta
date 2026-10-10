@@ -105,6 +105,8 @@ import top.yukonga.miuix.kmp.window.WindowDialog
 @Composable
 fun AgentAppRoot(
     assistantConversationKey: String? = null,
+    requestedConversationId: String? = null,
+    onRequestedConversationOpened: () -> Unit = {},
     openSpeechSettings: Boolean = false,
     onSpeechSettingsOpened: () -> Unit = {},
     onAssistantConversationOpened: (Boolean) -> Unit = {},
@@ -191,6 +193,14 @@ fun AgentAppRoot(
 
     LaunchedEffect(Unit) {
         RuntimeConfigRepository.ensureDefaults(EtaApp.serviceInstance)
+    }
+
+    LaunchedEffect(requestedConversationId) {
+        val conversationId = requestedConversationId ?: return@LaunchedEffect
+        agentState.selectConversation(conversationId)
+        conversationPaneOpen = false
+        navigator.popToHome()
+        onRequestedConversationOpened()
     }
 
     LaunchedEffect(assistantConversationKey) {
