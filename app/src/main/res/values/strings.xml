@@ -308,6 +308,13 @@
   <string name="ui_search_in_one_turn_179584">Circle to Search</string>
   <string name="ui_contextual_usage_d12810">Context usage</string>
   <string name="ui_context_length_tokens_227860">Context window (tokens)</string>
+  <string name="ui_probe_capability_3f9c21">Probe capabilities</string>
+  <string name="ui_probe_capability_running_7b04de">Probing…</string>
+  <string name="ui_probe_capability_unreachable_5d2f18">Endpoint unreachable</string>
+  <string name="ui_probe_capability_window_filled_1b7c53">Context window filled: %1$d</string>
+  <string name="ui_probe_capability_reasoning_off_9a4e60">Reasoning parameter rejected — marked unsupported</string>
+  <string name="ui_probe_capability_reasoning_on_6c8b41">Endpoint accepts the reasoning parameter</string>
+  <string name="ui_probe_capability_failed_2e9d70">Probe failed</string>
   <string name="ui_bright_screen_evokes_automatic_voice_input_4358fe">Bright screen evokes automatic voice input</string>
   <string name="ui_only_take_over_with_agent_prefix_d17556">Only take over with /agent prefix</string>
   <string name="ui_only_check_the_ranges_actually_supported_by_the_mode_2c343d">Only check the ranges actually supported by the model or gateway; unsupported combinations will clearly report an error before requesting.</string>

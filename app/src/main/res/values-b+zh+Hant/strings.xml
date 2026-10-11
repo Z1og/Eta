@@ -286,6 +286,13 @@
   <string name="ui_search_in_one_turn_179584">圈選搜尋</string>
   <string name="ui_contextual_usage_d12810">內容用量</string>
   <string name="ui_context_length_tokens_227860">內容長度上限（tokens）</string>
+  <string name="ui_probe_capability_3f9c21">探測能力</string>
+  <string name="ui_probe_capability_running_7b04de">正在探測…</string>
+  <string name="ui_probe_capability_unreachable_5d2f18">端點不可用</string>
+  <string name="ui_probe_capability_window_filled_1b7c53">已填入上下文視窗：%1$d</string>
+  <string name="ui_probe_capability_reasoning_off_9a4e60">端點拒絕思考參數，已按不支援處理</string>
+  <string name="ui_probe_capability_reasoning_on_6c8b41">端點接受思考參數</string>
+  <string name="ui_probe_capability_failed_2e9d70">探測失敗</string>
   <string name="ui_bright_screen_evokes_automatic_voice_input_4358fe">亮屏喚起自動語音輸入</string>
   <string name="ui_only_take_over_with_agent_prefix_d17556">僅以 /agent 前綴接管</string>
   <string name="ui_only_check_the_ranges_actually_supported_by_the_mode_2c343d">僅勾選模型或網關實際支援的檔位；不支援的組合會在請求前明確報錯。</string>

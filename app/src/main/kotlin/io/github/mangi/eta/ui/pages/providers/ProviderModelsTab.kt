@@ -60,6 +60,7 @@ import io.github.mangi.eta.EtaApp
 import io.github.mangi.eta.R
 import io.github.mangi.eta.data.model.Model
 import io.github.mangi.eta.data.model.ModelReasoningCapabilities
+import io.github.mangi.eta.agent.model.AgentModelCapabilityProbe
 import io.github.mangi.eta.data.model.ProviderSetting
 import io.github.mangi.eta.data.model.ReasoningEffort
 import io.github.mangi.eta.data.repository.ModelRepository
@@ -84,6 +85,7 @@ import io.github.mangi.eta.ui.model.formatCompactTokenCount
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
@@ -449,6 +451,7 @@ internal fun ProviderModelsTab(
     editingModel?.let { model ->
         ModelEditDialog(
             model = model,
+            provider = provider,
             isNew = isCreatingModel,
             isSaving = isMutatingModel,
             error = editorError,
@@ -720,6 +723,7 @@ private fun ModelListItem(
 @Composable
 private fun ModelEditDialog(
     model: Model,
+    provider: ProviderSetting,
     isNew: Boolean,
     isSaving: Boolean,
     error: String?,
@@ -785,6 +789,51 @@ private fun ModelEditDialog(
         },
     )
 
+    val probeScope = rememberCoroutineScope()
+    var probing by remember(model.id, isNew) { mutableStateOf(false) }
+    var probeNote by remember(model.id, isNew) { mutableStateOf<String?>(null) }
+
+    // 能力探测：只认确定结论——报错里解析出的窗口上限直接填入，思考参数被明确拒绝即按不支持处理。
+    fun runProbe() {
+        if (probing || modelId.isBlank()) return
+        probing = true
+        probeNote = null
+        probeScope.launch {
+            try {
+                val outcome = AgentModelCapabilityProbe().probe(
+                    RuntimeConfigRepository.buildRuntimeConfig(provider, updated()),
+                )
+                val notes = mutableListOf<String>()
+                if (!outcome.reachable) {
+                    notes += context.getString(R.string.ui_probe_capability_unreachable_5d2f18)
+                }
+                outcome.contextLimitFromError?.let { limit ->
+                    contextWindowOverrideText = limit.toString()
+                    notes += context.getString(R.string.ui_probe_capability_window_filled_1b7c53, limit)
+                }
+                when (outcome.reasoning) {
+                    false -> {
+                        reasoningOverrideActive = true
+                        reasoningEnabled = false
+                        notes += context.getString(R.string.ui_probe_capability_reasoning_off_9a4e60)
+                    }
+                    true -> notes += context.getString(R.string.ui_probe_capability_reasoning_on_6c8b41)
+                    null -> Unit
+                }
+                if (notes.isEmpty()) notes += outcome.detail.take(160)
+                probeNote = notes.joinToString("；")
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (throwable: Throwable) {
+                probeNote = throwable.message.orEmpty().ifBlank {
+                    context.getString(R.string.ui_probe_capability_failed_2e9d70)
+                }
+            } finally {
+                probing = false
+            }
+        }
+    }
+
     EtaOverlayDialog(
         show = true,
         title = if (isNew) context.getString(R.string.page_add_model_532a64) else context.getString(R.string.page_edit_model_29e31e),
@@ -830,6 +879,27 @@ private fun ModelEditDialog(
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    EtaTextButton(
+                        text = stringResource(
+                            if (probing) {
+                                R.string.ui_probe_capability_running_7b04de
+                            } else {
+                                R.string.ui_probe_capability_3f9c21
+                            },
+                        ),
+                        enabled = !isSaving && !probing && modelId.isNotBlank(),
+                        onClick = { runProbe() },
+                    )
+                    probeNote?.let { note ->
+                        Text(text = note, modifier = Modifier.weight(1f, fill = false))
+                    }
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 EtaPreferenceGroup(modifier = Modifier.fillMaxWidth()) {
                     EtaSwitchPreference(

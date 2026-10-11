@@ -298,6 +298,13 @@
   <string name="ui_search_in_one_turn_179584">一圈即搜</string>
   <string name="ui_contextual_usage_d12810">上下文用量</string>
   <string name="ui_context_length_tokens_227860">上下文窗口（tokens）</string>
+  <string name="ui_probe_capability_3f9c21">探测能力</string>
+  <string name="ui_probe_capability_running_7b04de">正在探测…</string>
+  <string name="ui_probe_capability_unreachable_5d2f18">端点不可用</string>
+  <string name="ui_probe_capability_window_filled_1b7c53">已填入上下文窗口：%1$d</string>
+  <string name="ui_probe_capability_reasoning_off_9a4e60">端点拒绝思考参数，已按不支持处理</string>
+  <string name="ui_probe_capability_reasoning_on_6c8b41">端点接受思考参数</string>
+  <string name="ui_probe_capability_failed_2e9d70">探测失败</string>
   <string name="ui_bright_screen_evokes_automatic_voice_input_4358fe">亮屏唤起自动语音输入</string>
   <string name="ui_only_take_over_with_agent_prefix_d17556">仅以 /agent 前缀接管</string>
   <string name="ui_only_check_the_ranges_actually_supported_by_the_mode_2c343d">仅勾选模型或网关实际支持的档位；不支持的组合会在请求前明确报错。</string>
