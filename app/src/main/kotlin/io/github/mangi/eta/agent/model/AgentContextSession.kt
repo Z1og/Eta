@@ -60,16 +60,16 @@ internal class AgentContextSession(
     }
 
     fun compact(force: Boolean = false, final: Boolean = false) {
-        val before = inputTokens
-        if (AnthropicEphemeralState.hasPendingToolResponse(messages)) {
+        val before = effectiveInputTokens()
+        if (config.bindsAnthropicSignatures() &&
+            AnthropicEphemeralState.hasPendingToolResponse(messages)
+        ) {
             if (force) {
                 throw AgentContextCompactor.signedAnthropicToolRoundFailure()
             }
             return
         }
-        if (!force && (!config.autoCompactionEnabled || contextWindow == null || before == null ||
-                before < contextWindow * TRIGGER_RATIO)
-        ) {
+        if (!force && (!config.autoCompactionEnabled || before == null || before < triggerThreshold())) {
             try {
                 publishSnapshot()
             } catch (failure: Exception) {
@@ -119,7 +119,27 @@ internal class AgentContextSession(
         return AgentConversationCodec.transcript(durable, 0, sensitiveIds())
     }
 
+    /**
+     * 触发判定用的输入量：provider 回报优先。
+     *
+     * **窗口未知**时（中转 / 自定义端点常常没有窗口元数据）退化为按消息体积估算，
+     * 否则换到这类模型后自动压缩会被整体关闭、只能撞服务端上限。
+     * 窗口已知但 provider 不回报 usage 时维持旧语义（不主动压缩），避免无依据地改写用户上下文。
+     */
+    private fun effectiveInputTokens(): Int? {
+        inputTokens?.let { return it }
+        if (contextWindow != null) return null
+        return messages.toString().length / CHARS_PER_TOKEN_ESTIMATE
+    }
+
+    private fun triggerThreshold(): Int =
+        ((contextWindow ?: FALLBACK_CONTEXT_WINDOW) * TRIGGER_RATIO).toInt()
+
     private companion object {
         const val TRIGGER_RATIO = 0.85
+
+        /** 窗口未知时的保守假定窗口：宁可提前压缩，也不要撞服务端硬上限。 */
+        const val FALLBACK_CONTEXT_WINDOW = 32_000
+        const val CHARS_PER_TOKEN_ESTIMATE = 4
     }
 }

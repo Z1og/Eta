@@ -30,7 +30,8 @@ internal class AgentModelFailure(
                 null
             }
             if (isContextOverflow(error)) return AgentModelFailure(
-                "CONTEXT_OVERFLOW", false, "模型上下文超过容量限制。",
+                "CONTEXT_OVERFLOW", false,
+                "模型上下文超过容量限制。可先执行「压缩上下文」再重试；若该模型未填写上下文窗口，请在模型设置中补上，以便自动压缩生效。",
             )
             val permanent = isPermanent(error, body)
             return AgentModelFailure(
@@ -50,7 +51,8 @@ internal class AgentModelFailure(
 
         fun stream(error: JSONObject, message: String): AgentModelFailure {
             if (isContextOverflow(error)) return AgentModelFailure(
-                "CONTEXT_OVERFLOW", false, "模型上下文超过容量限制。",
+                "CONTEXT_OVERFLOW", false,
+                "模型上下文超过容量限制。可先执行「压缩上下文」再重试；若该模型未填写上下文窗口，请在模型设置中补上，以便自动压缩生效。",
             )
             val codes = listOf(
                 error.optString("code"),

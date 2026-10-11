@@ -1,6 +1,7 @@
 package io.github.mangi.eta.agent.model
 
 import io.github.mangi.eta.agent.runtime.AgentRunController
+import io.github.mangi.eta.data.model.ProviderTypes
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -17,7 +18,9 @@ internal class AgentContextCompactor(
         sensitiveIds: Set<String>,
     ): JSONArray {
         controller.throwIfCancelled()
-        if (AnthropicEphemeralState.hasPendingToolResponse(messages)) {
+        if (config.bindsAnthropicSignatures() &&
+            AnthropicEphemeralState.hasPendingToolResponse(messages)
+        ) {
             throw signedAnthropicToolRoundFailure()
         }
         val history = (systemCount until messages.length()).map { messages.getJSONObject(it) }
@@ -89,3 +92,10 @@ internal class AgentContextCompactor(
         fun failure(code: String, message: String) = AgentModelFailure(code, false, message)
     }
 }
+
+/**
+ * 思考签名只绑定**原生 Anthropic 请求**：换到其他 provider 后这些 content block 不再随请求发送，
+ * 因此不应再以"签名锁"为由跳过压缩（那会让换模型后的自动压缩永久静默失效）。
+ */
+internal fun AgentModelClient.ModelConfig.bindsAnthropicSignatures(): Boolean =
+    providerType == ProviderTypes.ANTHROPIC
