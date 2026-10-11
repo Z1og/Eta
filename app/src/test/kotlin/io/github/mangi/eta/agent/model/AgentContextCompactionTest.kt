@@ -378,6 +378,32 @@ class AgentContextCompactionTest {
         assertEquals(finalText, result.transcript.last().content)
     }
 
+    @Test
+    fun declaredWindowTriggersCompactionEarlierThanFallback() {
+        // 目录声明值（8k）比兜底假定（32k）小：应按声明值×0.6 提前触发压缩，
+        // 说明"声明数字不可信但可用来提前触发"这条通道真的生效。
+        var summaries = 0
+        val history = listOf(
+            AgentModelClient.ConversationMessage("user", "问题"),
+            AgentModelClient.ConversationMessage("assistant", "事实 ".repeat(10_000)),
+        )
+        val result = AgentModelClient.complete(
+            config.copy(contextWindow = null, declaredContextWindow = 8_000), "最新请求必须保留",
+            AgentModelClient.ToolExecutor { error("不应执行工具") },
+            history = history,
+            provider = provider { request, _ ->
+                if (request.purpose == ProviderRequestPurpose.COMPACTION) {
+                    summaries++
+                    response("此前任务已完成。")
+                } else {
+                    response("完成最新请求")
+                }
+            },
+        )
+        assertTrue("声明窗口未触发提前压缩", summaries > 0)
+        assertTrue(checkNotNull(result.contextSnapshot).messages.any { it.contextSummary })
+    }
+
     private fun history() = (1..6).flatMap { turn -> listOf(
         AgentModelClient.ConversationMessage("user", "问题 $turn"),
         AgentModelClient.ConversationMessage("assistant", "事实 ".repeat(1000)),

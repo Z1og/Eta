@@ -19,6 +19,9 @@ internal class AgentContextSession(
     private val roleplay: Boolean = false,
 ) {
     private val contextWindow = config.knownContextWindow
+
+    /** 目录/服务商声明值：只用于提前触发，不作为硬上限（见 ModelConfig.declaredContextWindow）。 */
+    private val declaredWindow = config.declaredContextWindow?.takeIf { it > 0 }
     private var inputTokens: Int? = null
     private var compacted = false
     private var consumedSupplementCount = 0
@@ -122,9 +125,9 @@ internal class AgentContextSession(
     /**
      * 触发判定用的输入量：provider 回报优先。
      *
-     * **窗口未知**时（中转 / 自定义端点常常没有窗口元数据）退化为按消息体积估算，
+     * **没有硬上限**时（人工覆盖缺失，目录声明值也不可靠）退化为按消息体积估算，
      * 否则换到这类模型后自动压缩会被整体关闭、只能撞服务端上限。
-     * 窗口已知但 provider 不回报 usage 时维持旧语义（不主动压缩），避免无依据地改写用户上下文。
+     * 有硬上限但 provider 不回报 usage 时维持旧语义（不主动压缩），避免无依据地改写用户上下文。
      */
     private fun effectiveInputTokens(): Int? {
         inputTokens?.let { return it }
@@ -132,11 +135,21 @@ internal class AgentContextSession(
         return messages.toString().length / CHARS_PER_TOKEN_ESTIMATE
     }
 
-    private fun triggerThreshold(): Int =
-        ((contextWindow ?: FALLBACK_CONTEXT_WINDOW) * TRIGGER_RATIO).toInt()
+    /**
+     * 触发阈值。人工覆盖的窗口是硬上限（85%）；只有目录声明值时按更大的余量提前压缩——
+     * 声明数字不可信，宁可早压也不撞服务端上限；两者都没有才退回保守假定窗口。
+     */
+    private fun triggerThreshold(): Int = when {
+        contextWindow != null -> (contextWindow * TRIGGER_RATIO).toInt()
+        declaredWindow != null -> (declaredWindow * ADVISORY_TRIGGER_RATIO).toInt()
+        else -> (FALLBACK_CONTEXT_WINDOW * TRIGGER_RATIO).toInt()
+    }
 
     private companion object {
         const val TRIGGER_RATIO = 0.85
+
+        /** 目录声明值可信度低于人工覆盖，留足 40% 余量。 */
+        const val ADVISORY_TRIGGER_RATIO = 0.6
 
         /** 窗口未知时的保守假定窗口：宁可提前压缩，也不要撞服务端硬上限。 */
         const val FALLBACK_CONTEXT_WINDOW = 32_000

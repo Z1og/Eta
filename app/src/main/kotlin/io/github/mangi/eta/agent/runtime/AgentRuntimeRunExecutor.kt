@@ -6,6 +6,7 @@ import io.github.mangi.eta.agent.model.AgentConversationCodec
 import io.github.mangi.eta.agent.model.AgentConversationToolCatalog
 import io.github.mangi.eta.agent.tool.ConversationHistoryTool
 import io.github.mangi.eta.data.db.EtaDatabase
+import io.github.mangi.eta.agent.model.AgentModelCapabilityProbe
 import io.github.mangi.eta.agent.model.AgentModelClient
 import io.github.mangi.eta.agent.model.AgentModelExecutionException
 import io.github.mangi.eta.agent.model.AgentModelFailure
@@ -39,6 +40,13 @@ import io.github.mangi.eta.agent.voice.EtaAssistantOverlayService
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.safeLogType
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
+import io.github.mangi.eta.data.repository.ModelRepository
+import io.github.mangi.eta.data.repository.ProviderRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 
@@ -417,6 +425,9 @@ internal class AgentRuntimeRunExecutor(
                 AndroidAgentLogger.info("Agent runtime stopped")
             } else {
                 val requestFailure = modelFailure?.cause as? AgentModelFailure
+                if (requestFailure?.code == "CONTEXT_OVERFLOW") {
+                    learnContextWindowFromOverflow(request.config, requestFailure)
+                }
                 AndroidAgentLogger.error(
                     "Agent runtime failed: type=${throwable.safeLogType()}, " +
                         "model_code=${requestFailure?.code.orEmpty()}, " +
@@ -523,4 +534,39 @@ internal class AgentRuntimeRunExecutor(
                 }
             }
     }
+
+    /**
+     * 超限报错里常带服务商写明的上下文上限——这是**权威**数字，直接学下来写进模型覆盖值，
+     * 下次换回该模型时自动压缩就能按真实上限触发（不必等用户手填或探测）。
+     * 失败静默：学习只是锦上添花，绝不影响本次失败的呈现。
+     */
+    private fun learnContextWindowFromOverflow(
+        config: AgentModelClient.ModelConfig,
+        failure: AgentModelFailure?,
+    ) {
+        val learned = AgentModelCapabilityProbe.parseContextLimit(failure?.message.orEmpty()) ?: return
+        if (config.providerId.isBlank()) return
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            runCatching {
+                withTimeout(LEARN_WINDOW_TIMEOUT_MS) {
+                    val provider = ProviderRepository.providerById(config.providerId) ?: return@withTimeout
+                    val target = provider.models.firstOrNull { it.modelId == config.model }
+                        ?: return@withTimeout
+                    if (target.effectiveContextWindow == learned) return@withTimeout
+                    ModelRepository.saveModel(provider.id, target.copy(contextWindowOverride = learned))
+                    AndroidAgentLogger.info(
+                        "Agent learned context window from provider error: provider=${provider.id} " +
+                            "model=${config.model} window=$learned",
+                    )
+                }
+            }.onFailure { throwable ->
+                AndroidAgentLogger.warn(
+                    "Agent context window learning failed: type=${throwable.safeLogType()}",
+                )
+            }
+        }
+    }
 }
+
+/** 学习窗口的落库超时：宁可不学，也不要拖住失败呈现。 */
+private const val LEARN_WINDOW_TIMEOUT_MS = 10_000L

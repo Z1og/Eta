@@ -100,6 +100,7 @@ internal object AgentRuntimeWire {
     private const val KEY_MODEL = "model"
     private const val KEY_MODEL_DISPLAY_NAME = "model_display_name"
     private const val KEY_CONTEXT_WINDOW = "context_window"
+    private const val KEY_DECLARED_CONTEXT_WINDOW = "declared_context_window"
     private const val KEY_AUTO_COMPACTION_ENABLED = "auto_compaction_enabled"
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
     private const val KEY_ANTHROPIC_VERSION = "anthropic_version"
@@ -301,6 +302,7 @@ internal object AgentRuntimeWire {
         putString("operation", request.operation)
         request.rewriteTargetMessageId?.let { putString("rewrite_target_message_id", it) }
         request.config.contextWindow?.let { putInt(KEY_CONTEXT_WINDOW, it) }
+        request.config.declaredContextWindow?.let { putInt(KEY_DECLARED_CONTEXT_WINDOW, it) }
         putBoolean(KEY_AUTO_COMPACTION_ENABLED, request.config.autoCompactionEnabled)
         AgentWireText.put(this, KEY_SYSTEM_PROMPT, request.config.systemPrompt, payloadDirectory)
         putString(KEY_ANTHROPIC_VERSION, request.config.anthropicVersion)
@@ -433,6 +435,7 @@ internal object AgentRuntimeWire {
                 model = bundle.getString(KEY_MODEL).orEmpty(),
                 modelDisplayName = bundle.getString(KEY_MODEL_DISPLAY_NAME).orEmpty(),
                 contextWindow = bundle.optionalInt(KEY_CONTEXT_WINDOW),
+                declaredContextWindow = bundle.optionalInt(KEY_DECLARED_CONTEXT_WINDOW),
                 autoCompactionEnabled = bundle.getBoolean(
                     KEY_AUTO_COMPACTION_ENABLED,
                     Prefs.Keys.BOOLEAN_DEFAULTS.getValue(Prefs.Keys.AGENT_AUTO_COMPACTION_ENABLED),

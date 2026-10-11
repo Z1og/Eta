@@ -7,6 +7,7 @@ import io.github.mangi.eta.data.datastore.SettingsDataStore
 import io.github.mangi.eta.data.model.AnthropicProviderSetting
 import io.github.mangi.eta.data.model.CustomProviderSetting
 import io.github.mangi.eta.data.model.Model
+import io.github.mangi.eta.data.model.ModelContextInference
 import io.github.mangi.eta.data.model.ModelReasoningCapabilities
 import io.github.mangi.eta.data.model.OpenAiCompatibleProviderSetting
 import io.github.mangi.eta.data.model.OpenAiEndpointMode
@@ -117,6 +118,9 @@ internal object RuntimeConfigRepository {
             model = model.modelId.trim(),
             modelDisplayName = model.displayName.trim(),
             contextWindow = model.effectiveContextWindow,
+            // 声明值（目录/服务商元数据）只用于提前触发压缩；仍缺省时按同族兄弟继承，取最小值保守。
+            declaredContextWindow = model.contextWindow?.takeIf { it > 0 }
+                ?: ModelContextInference.infer(provider.models, model),
             autoCompactionEnabled = Prefs.isEnabled(Prefs.Keys.AGENT_AUTO_COMPACTION_ENABLED),
             systemPrompt = systemPrompt,
             anthropicVersion = (provider as? AnthropicProviderSetting)?.anthropicVersion

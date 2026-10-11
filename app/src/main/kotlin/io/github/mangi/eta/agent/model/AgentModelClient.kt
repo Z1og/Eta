@@ -295,6 +295,12 @@ internal object AgentModelClient {
         val model: String,
         val modelDisplayName: String = "",
         val contextWindow: Int? = null,
+        /**
+         * 目录/服务商**声明**的窗口（官方目录、社区目录、OpenRouter、provider /models 的
+         * max_input_tokens）。它不作为硬上限——`contextWindow` 仍是唯一可信上限（只认人工覆盖），
+         * 但可以拿来做「提前触发压缩」的参考，避免自动压缩对所有模型都等于关闭。
+         */
+        val declaredContextWindow: Int? = null,
         val systemPrompt: String,
         val anthropicVersion: String = AnthropicProviderSetting.DEFAULT_ANTHROPIC_VERSION,
         val openAiEndpointMode: String = OpenAiEndpointMode.CHAT_COMPLETIONS,
