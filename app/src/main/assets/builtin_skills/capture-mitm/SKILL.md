@@ -4,7 +4,7 @@ description: |
   移动端抓包与中间人链路：tcpdump 落 PCAP、mitmproxy 透明代理、系统证书安装、
   SSL Pinning 绕过（objection/Frida 脚本）、双向认证处理、抓包结果解析与会话重组。
   当需要抓 App 的 HTTPS 流量、分析接口、绕过证书绑定或导出会话时使用。
-triggers: 抓包, 中间人, mitm, mitmproxy, tcpdump, ssl pinning, 证书绑定, 双向认证, 解包, 流量分析, 代理抓包, pcap, https
+triggers: 抓包, 中间人, mitm, mitmproxy, tcpdump, ssl pinning, 证书绑定, 双向认证, 解包, 流量分析, 代理抓包, pcap
 ---
 
 # 抓包与中间人链路（capture-mitm）
