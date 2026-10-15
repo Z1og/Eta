@@ -1,6 +1,7 @@
 package io.github.mangi.eta.agent.terminal
 
 import android.content.Context
+import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.agent.device.RootAccess
 import io.github.mangi.eta.agent.runtime.AgentExecutionService
 import java.io.File
@@ -12,7 +13,25 @@ internal enum class LinuxExecutionBackend(val wireName: String) {
 
 /** App 进程的终端运行条件；读取能力不会触发 su 授权。 */
 internal object TerminalRuntime {
+    const val ROOT_WORKSPACE_PATH = "/data/local/tmp/eta"
+    const val LINUX_WORKSPACE_PATH = "/workspace"
+
     @Volatile private var appContext: Context? = null
+    private var backgroundJobs: BackgroundTerminalJobs? = null
+
+    @Synchronized
+    fun backgroundJobs(context: Context): BackgroundTerminalJobs {
+        val app = context.applicationContext
+        return backgroundJobs ?: BackgroundTerminalJobs(
+            supervisor = DetachedTaskSupervisor(AndroidAgentLogger, DetachedTaskSupervisor.defaultRecordsFile(app)),
+            logger = AndroidAgentLogger,
+            acquireLease = { onStop -> AgentExecutionService.acquire(app, "terminal-background-commands", onStop = onStop) },
+            releaseLease = { AgentExecutionService.release("terminal-background-commands") },
+            onCompleted = { BackgroundCommandNotification.show(app, it) },
+            completionNotificationsEnabled = { app.getSystemService(android.app.NotificationManager::class.java).areNotificationsEnabled() },
+        ).also { backgroundJobs = it }
+    }
+
     fun acquireUserTask(id: String, onStop: () -> Unit): Boolean =
         appContext?.let { AgentExecutionService.acquire(it, id, onStop = onStop) } ?: true
 
@@ -41,7 +60,7 @@ internal object TerminalRuntime {
     }
 
     fun workspace(identity: String): String =
-        if (identity == "root") "/data/local/tmp/eta" else userWorkspacePath
+        if (identity == "root") ROOT_WORKSPACE_PATH else userWorkspacePath
 
     fun nativeExecutable(name: String): File? = nativeLibraryDir?.let { File(it, name) }
         ?.takeIf { it.isFile && it.canExecute() }

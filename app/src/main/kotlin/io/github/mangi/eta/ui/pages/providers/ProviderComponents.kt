@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.data.model.CustomProviderSetting
 import io.github.mangi.eta.data.model.ProviderSetting
 import io.github.mangi.eta.ui.components.EtaPreferenceColors
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
 import io.github.mangi.eta.ui.components.EtaPreferenceIcon
@@ -41,7 +42,12 @@ internal fun ProviderSection(
         if (title != null) {
             EtaPreferenceGroupTitle(title)
         }
-        EtaPreferenceGroup(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        EtaPreferenceGroup(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = EtaPreferenceDefaults.SidePadding)
+                .padding(bottom = EtaPreferenceDefaults.GroupSpacing),
+        ) {
             content()
         }
     }

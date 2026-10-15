@@ -1,6 +1,7 @@
 package io.github.mangi.eta.ui.components
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -10,15 +11,21 @@ import androidx.compose.ui.text.style.TextDecoration
 import io.github.mangi.eta.agent.terminal.AnsiSgr
 import io.github.mangi.eta.agent.terminal.SgrStyle
 
-/** 中性样式到 Compose 的映射；dim 以透明度衰减表达。 */
+/** 中性样式到 Compose 的映射；dim 以透明度衰减表达，反显互换显式指定的前景与背景。 */
 internal fun SgrStyle.toSpanStyle(): SpanStyle {
-    val fgColor = fg?.let { Color(it) }?.let { if (dim) it.copy(alpha = it.alpha * 0.6f) else it }
+    val foreground = fg?.let { Color(it) } ?: Color.Unspecified
+    val background = bg?.let { Color(it) } ?: Color.Unspecified
+    val (text, fill) = if (inverse) background to foreground else foreground to background
+    val decorations = listOfNotNull(
+        TextDecoration.Underline.takeIf { underline },
+        TextDecoration.LineThrough.takeIf { strikethrough },
+    )
     return SpanStyle(
-        color = fgColor ?: Color.Unspecified,
-        background = bg?.let { Color(it) } ?: Color.Unspecified,
+        color = if (dim && text.isSpecified) text.copy(alpha = text.alpha * 0.6f) else text,
+        background = fill,
         fontWeight = if (bold) FontWeight.Bold else null,
         fontStyle = if (italic) FontStyle.Italic else null,
-        textDecoration = if (underline) TextDecoration.Underline else null,
+        textDecoration = decorations.takeIf { it.isNotEmpty() }?.let { TextDecoration.combine(it) },
     )
 }
 

@@ -35,10 +35,6 @@ internal class NativeSystemOperations(
     @SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")
     private fun mobileData(tool: String, args: JSONObject): JSONObject {
-        PhoneOperation.allowed(
-            args,
-            if (tool == "set_mobile_data") setOf("enabled") else emptySet(),
-        )
         val subscription = android.telephony.SubscriptionManager.getDefaultDataSubscriptionId()
         if (!android.telephony.SubscriptionManager.isValidSubscriptionId(subscription))
             PhoneOperation.error("MOBILE_DATA_UNAVAILABLE", "没有可用的默认数据 SIM 卡")
@@ -70,10 +66,6 @@ internal class NativeSystemOperations(
     }
 
     private fun nightLight(tool: String, args: JSONObject): JSONObject {
-        PhoneOperation.allowed(
-            args,
-            if (tool == "set_night_light") setOf("enabled") else emptySet(),
-        )
         val type = Class.forName("android.hardware.display.ColorDisplayManager")
         val available =
             type.getMethod("isNightDisplayAvailable", Context::class.java).invoke(null, context)
@@ -107,7 +99,6 @@ internal class NativeSystemOperations(
     }
 
     private fun sound(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, setOf("mode"))
         val mode = PhoneOperation.text(args, "mode", true, 20)
         val expected =
             when (mode) {
@@ -137,7 +128,6 @@ internal class NativeSystemOperations(
     }
 
     private fun hotspot(tool: String, args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, if (tool == "set_hotspot") setOf("enabled") else emptySet())
         if (Build.VERSION.SDK_INT < 36)
             PhoneOperation.error("DEVICE_UNSUPPORTED", "当前系统未提供兼容的热点控制接口")
         val expected = if (tool == "set_hotspot") PhoneOperation.boolean(args, "enabled") else null

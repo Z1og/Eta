@@ -2,7 +2,6 @@ package io.github.mangi.eta.agent.tool
 
 import io.github.mangi.eta.agent.device.BoundedRootCommandExecutor
 import io.github.mangi.eta.agent.terminal.RootShellTerminalController
-import io.github.mangi.eta.agent.terminal.TerminalEnvironment
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -122,7 +121,14 @@ internal class AgentReverseTools(
         val limit = args.optInt("limit", 50).coerceIn(1, 200)
 
         val scriptPath = "$WORK_DIR/rev/mem_search.sh"
-        terminal.writeFile(scriptPath, buildMemSearchScript(), append = false)
+        terminal.fileTool(
+            "write_file",
+            JSONObject()
+                .put("path", scriptPath)
+                .put("content", buildMemSearchScript())
+                .put("append", false)
+                .put("identity", "root"),
+        )
         val cmd = buildString {
             append("sh ").append(scriptPath).append(' ')
             append(pid).append(' ').append(pattern).append(' ').append(limit)
@@ -164,21 +170,15 @@ internal class AgentReverseTools(
 
     fun fridaPs(args: JSONObject): String {
         val timeoutSec = args.optInt("timeout_seconds", 15).coerceIn(3, 60)
-        return terminal.terminalAction(
-            action = "open_and_exec",
-            command = "frida-ps",
-            cwd = null,
-            timeoutMs = timeoutSec * 1_000,
-            identity = "root",
-            mergeStderr = true,
-            sessionId = null,
-            jobId = null,
-            async = false,
-            offsetChars = 0,
-            maxChars = 16_000,
-            closeIfDone = true,
-            environment = TerminalEnvironment.ALPINE.wireName,
-            taskId = null,
+        return terminal.executeTool(
+            "terminal",
+            JSONObject()
+                .put("action", "exec")
+                .put("command", "frida-ps")
+                .put("timeout_ms", timeoutSec * 1_000)
+                .put("identity", "root")
+                .put("environment", "alpine")
+                .put("merge_stderr", true),
         )
     }
 
@@ -189,7 +189,16 @@ internal class AgentReverseTools(
         val timeoutSec = args.optInt("timeout_seconds", 30).coerceIn(5, 300)
         val stamp = System.currentTimeMillis()
         val scriptPath = "$WORK_DIR/rev/frida_$stamp.js"
-        val writeResult = JSONObject(terminal.writeFile(scriptPath, script, append = false))
+        val writeResult = JSONObject(
+            terminal.fileTool(
+                "write_file",
+                JSONObject()
+                    .put("path", scriptPath)
+                    .put("content", script)
+                    .put("append", false)
+                    .put("identity", "root"),
+            ),
+        )
         if (!writeResult.optBoolean("ok", false)) return writeResult.toString()
         val alpinePath = scriptPath.replace(WORK_DIR, ALPINE_WORK_DIR)
         val fridaArgs = if (target.all { it.isDigit() }) {
@@ -197,21 +206,15 @@ internal class AgentReverseTools(
         } else {
             "-n ${shellQuote(target)}"
         }
-        return terminal.terminalAction(
-            action = "open_and_exec",
-            command = "frida $fridaArgs -l ${shellQuote(alpinePath)} -q",
-            cwd = null,
-            timeoutMs = timeoutSec * 1_000,
-            identity = "root",
-            mergeStderr = true,
-            sessionId = null,
-            jobId = null,
-            async = false,
-            offsetChars = 0,
-            maxChars = 32_000,
-            closeIfDone = true,
-            environment = TerminalEnvironment.ALPINE.wireName,
-            taskId = null,
+        return terminal.executeTool(
+            "terminal",
+            JSONObject()
+                .put("action", "exec")
+                .put("command", "frida $fridaArgs -l ${shellQuote(alpinePath)} -q")
+                .put("timeout_ms", timeoutSec * 1_000)
+                .put("identity", "root")
+                .put("environment", "alpine")
+                .put("merge_stderr", true),
         )
     }
 

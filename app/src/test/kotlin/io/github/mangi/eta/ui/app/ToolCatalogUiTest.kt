@@ -67,6 +67,14 @@ class ToolCatalogUiTest {
     }
 
     @Test
+    fun terminalToolsExposeSeparateLifecyclesInTheSameGroup() {
+        val terminal = buildToolsState(RuntimeEnvironment.getApplication()).groups.first { it.id == "terminal" }
+        assertTrue(terminal.tools.map { it.id }.containsAll(listOf("terminal", "terminal_job", "terminal_daemon")))
+        assertEquals(R.string.tool_terminal_job, toolDisplayNameResource("terminal_job"))
+        assertEquals(R.string.tool_terminal_daemon, toolDisplayNameResource("terminal_daemon"))
+    }
+
+    @Test
     fun personalQueriesAndNativeOperationsHaveSeparateGroups() {
         val group = buildToolsState(RuntimeEnvironment.getApplication()).groups.first { it.id == "personal_data" }
         assertTrue(group.tools.any { it.id == "search_bills" })

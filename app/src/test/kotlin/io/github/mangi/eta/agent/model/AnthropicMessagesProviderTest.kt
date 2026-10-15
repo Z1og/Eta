@@ -261,6 +261,53 @@ class AnthropicMessagesProviderTest {
     }
 
     @Test
+    fun currentTurnKeepsEveryToolRoundSignatureSoThePrefixStaysCacheable() {
+        fun toolAssistant(id: String, signature: String) = JSONObject()
+            .put("role", "assistant")
+            .put("content", "")
+            .put("tool_calls", JSONArray().put(JSONObject().put("id", id).put("type", "function")
+                .put("function", JSONObject().put("name", "device_info").put("arguments", "{}"))))
+            .also { message ->
+                AnthropicEphemeralState.attachContentBlocks(message, JSONArray()
+                    .put(JSONObject().put("type", "thinking").put("thinking", "").put("signature", signature))
+                    .put(JSONObject().put("type", "tool_use").put("id", id)
+                        .put("name", "device_info").put("input", JSONObject())))
+            }
+        val messages = JSONArray()
+            .put(JSONObject().put("role", "system").put("content", "系统"))
+            .put(AgentConversationCodec.userTextMessage("问题"))
+            .put(toolAssistant("toolu_1", "FIRST_SIGNATURE"))
+            .put(JSONObject().put("role", "tool").put("tool_call_id", "toolu_1").put("content", "结果一"))
+            .put(toolAssistant("toolu_2", "SECOND_SIGNATURE"))
+            .put(JSONObject().put("role", "tool").put("tool_call_id", "toolu_2").put("content", "结果二"))
+            .put(AgentConversationCodec.userMessage("观察", listOf(AgentModelClient.ModelImage(reference = "data:image/png;base64,AA==", mimeType = "image/png", bytes = 1)))
+                .put("_eta_observation", true))
+        val tools = JSONArray()
+            .put(JSONObject().put("type", "function").put("function", JSONObject().put("name", "a").put("parameters", JSONObject().put("type", "object"))))
+            .put(JSONObject().put("type", "function").put("function", JSONObject().put("name", "b").put("parameters", JSONObject().put("type", "object"))))
+        val requestBody = AtomicReference<String>()
+        withAnthropicServer(event("message_stop", JSONObject()), onRequest = requestBody::set) { baseUrl ->
+            AnthropicMessagesProvider.complete(
+                providerRequest(baseUrl).copy(messages = messages, tools = tools),
+                AgentRunController(),
+            )
+        }
+
+        val body = JSONObject(requestBody.get())
+        assertTrue(requestBody.get().contains("FIRST_SIGNATURE"))
+        assertTrue(requestBody.get().contains("SECOND_SIGNATURE"))
+        assertFalse(requestBody.get().contains("_eta_transient"))
+        val sentTools = body.getJSONArray("tools")
+        assertFalse(sentTools.getJSONObject(0).has("cache_control"))
+        assertTrue(sentTools.getJSONObject(1).has("cache_control"))
+        assertTrue(body.getJSONArray("system").getJSONObject(0).has("cache_control"))
+        // 观察截图下一轮就会移除，断点落在它前面的工具结果上。
+        val lastTurn = body.getJSONArray("messages").let { it.getJSONObject(it.length() - 1) }.getJSONArray("content")
+        val marked = (0 until lastTurn.length()).map(lastTurn::getJSONObject).filter { it.has("cache_control") }
+        assertEquals(listOf("tool_result"), marked.map { it.getString("type") })
+    }
+
+    @Test
     fun thinkingStreamsThroughToolBoundariesAndCompletesBeforeConnectionCloses() {
         val firstDelta = CountDownLatch(1)
         val completed = CountDownLatch(1)

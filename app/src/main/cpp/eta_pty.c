@@ -14,11 +14,9 @@
 #include <unistd.h>
 
 static volatile sig_atomic_t stop_signal;
-static volatile sig_atomic_t window_changed;
 
 static void signal_received(int signal_number) {
-    if (signal_number == SIGWINCH) window_changed = 1;
-    else if (signal_number != SIGCHLD) stop_signal = signal_number;
+    if (signal_number != SIGCHLD) stop_signal = signal_number;
 }
 
 static int write_all(int descriptor, const void *data, size_t size) {
@@ -36,12 +34,74 @@ static int write_all(int descriptor, const void *data, size_t size) {
     return size ? -1 : 0;
 }
 
+static int dimension_value(unsigned long value) {
+    return value >= 1 && value <= 1000 ? (int)value : -1;
+}
+
 static int dimension(const char *value) {
     char *end;
     errno = 0;
     long parsed = strtol(value, &end, 10);
-    if (errno || *end || end == value || parsed < 1 || parsed > 1000) return -1;
-    return (int)parsed;
+    if (errno || *end || end == value || parsed < 0) return -1;
+    return dimension_value((unsigned long)parsed);
+}
+
+/*
+ * 标准输入是调用方唯一的写入通道，按帧区分终端字节与控制消息：
+ * 帧头为 1 字节类型 + 2 字节大端长度。数据帧原样写入 master；
+ * 尺寸帧载荷为大端 rows、cols 各 2 字节，由内核向前台进程组发送 SIGWINCH。
+ * 未知类型按长度跳过，保持协议可扩展。
+ */
+enum { FRAME_DATA = 0, FRAME_RESIZE = 1, FRAME_HEADER_SIZE = 3, RESIZE_PAYLOAD_SIZE = 4 };
+
+struct frame_reader {
+    unsigned char header[FRAME_HEADER_SIZE];
+    size_t header_size;
+    unsigned char type;
+    size_t remaining;
+    unsigned char control[RESIZE_PAYLOAD_SIZE];
+    size_t control_size;
+};
+
+static void apply_resize(int master, const unsigned char *payload) {
+    int rows = dimension_value(((unsigned)payload[0] << 8) | payload[1]);
+    int columns = dimension_value(((unsigned)payload[2] << 8) | payload[3]);
+    if (rows < 0 || columns < 0) return;
+    struct winsize size = {.ws_row = (unsigned short)rows, .ws_col = (unsigned short)columns};
+    ioctl(master, TIOCSWINSZ, &size);
+}
+
+static int consume_input(struct frame_reader *reader, int master, const unsigned char *bytes, size_t size) {
+    while (size) {
+        if (reader->header_size < FRAME_HEADER_SIZE) {
+            reader->header[reader->header_size++] = *bytes++;
+            size--;
+            if (reader->header_size == FRAME_HEADER_SIZE) {
+                reader->type = reader->header[0];
+                reader->remaining = ((size_t)reader->header[1] << 8) | reader->header[2];
+                reader->control_size = 0;
+            }
+        } else {
+            size_t chunk = reader->remaining < size ? reader->remaining : size;
+            if (reader->type == FRAME_DATA) {
+                if (write_all(master, bytes, chunk)) return -1;
+            } else if (reader->type == FRAME_RESIZE) {
+                for (size_t index = 0; index < chunk; ++index) {
+                    if (reader->control_size < RESIZE_PAYLOAD_SIZE)
+                        reader->control[reader->control_size++] = bytes[index];
+                }
+            }
+            bytes += chunk;
+            size -= chunk;
+            reader->remaining -= chunk;
+        }
+        if (reader->header_size == FRAME_HEADER_SIZE && !reader->remaining) {
+            if (reader->type == FRAME_RESIZE && reader->control_size == RESIZE_PAYLOAD_SIZE)
+                apply_resize(master, reader->control);
+            reader->header_size = 0;
+        }
+    }
+    return 0;
 }
 
 static void terminate_group(pid_t child) {
@@ -71,7 +131,6 @@ int main(int argc, char **argv) {
     sigaction(SIGHUP, &action, NULL);
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGCHLD, &action, NULL);
-    sigaction(SIGWINCH, &action, NULL);
     signal(SIGPIPE, SIG_IGN);
 
     /* 父进程可能在注册死亡信号前退出，注册后再核对一次以封闭竞态。 */
@@ -104,7 +163,6 @@ int main(int argc, char **argv) {
         signal(SIGHUP, SIG_DFL);
         signal(SIGINT, SIG_DFL);
         signal(SIGCHLD, SIG_DFL);
-        signal(SIGWINCH, SIG_DFL);
         signal(SIGPIPE, SIG_DFL);
         if (prctl(PR_SET_PDEATHSIG, SIGHUP) < 0 || wrapper == 1 || getppid() != wrapper) _exit(71);
         if (setsid() < 0) _exit(71);
@@ -123,14 +181,9 @@ int main(int argc, char **argv) {
     int reaped = 0;
     int child_exited = 0;
     int input_open = 1;
+    struct frame_reader reader = {0};
     unsigned char buffer[8192];
     while (!stop_signal) {
-        if (window_changed) {
-            window_changed = 0;
-            struct winsize current;
-            if (!ioctl(STDIN_FILENO, TIOCGWINSZ, &current) && current.ws_row && current.ws_col)
-                ioctl(master, TIOCSWINSZ, &current);
-        }
         /* 先观察退出、最后再回收，清理进程组期间不会复用会话首进程的 PID。 */
         siginfo_t child_info = {0};
         if (!child_exited && !waitid(P_PID, child, &child_info, WEXITED | WNOHANG | WNOWAIT)
@@ -158,7 +211,7 @@ int main(int argc, char **argv) {
                 const unsigned char eof = 4;
                 write_all(master, &eof, 1);
                 input_open = 0;
-            } else if (write_all(master, buffer, (size_t)read_size)) break;
+            } else if (consume_input(&reader, master, buffer, (size_t)read_size)) break;
         }
     }
     close(master);

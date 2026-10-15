@@ -18,7 +18,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.terminal.AlpineEnvironmentInstaller
 import io.github.mangi.eta.agent.terminal.AlpineEnvironmentState
@@ -58,6 +57,7 @@ import io.github.mangi.eta.ui.components.EtaArrowPreference
 import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaPreference
 import io.github.mangi.eta.ui.components.EtaPreferenceColors
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
@@ -370,7 +370,7 @@ internal fun LinuxEnvironmentScreen(
         }
         item(key = "files-title") { EtaPreferenceGroupTitle(stringResource(R.string.linux_environment_files)) }
         item(key = "files-card") {
-            EtaPreferenceGroup(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            EtaPreferenceGroup {
                 EtaArrowPreference(
                     title = stringResource(R.string.capability_workspace),
                     summary = stringResource(R.string.capability_workspace_summary),
@@ -397,12 +397,15 @@ internal fun LinuxEnvironmentScreen(
         }
 
         if (selectedToolsReady) {
-            item(key = "optional-tools-title") { EtaPreferenceGroupTitle(stringResource(R.string.ui_optional_tools_3097d6)) }
+            item(key = "optional-tools-title") {
+                EtaPreferenceGroupTitle(stringResource(R.string.ui_optional_tools_3097d6), modifier = Modifier.animateItem())
+            }
             item(key = "optional-tools-card") {
                 EtaPreferenceGroup(
                     modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 16.dp),
+                        .animateItem()
+                        .padding(horizontal = EtaPreferenceDefaults.SidePadding)
+                        .padding(bottom = EtaPreferenceDefaults.GroupSpacing),
                 ) {
                     packageProfileUis.forEachIndexed { index, profileUi ->
                         val ready = profileReady[profileUi.target] == true

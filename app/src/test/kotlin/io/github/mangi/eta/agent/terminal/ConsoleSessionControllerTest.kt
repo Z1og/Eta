@@ -10,13 +10,10 @@ class ConsoleSessionControllerTest {
 
     @Test
     fun openFailureLeavesNoSessionBehind() {
-        // 缺失 setsid 的 supervisor 保证进程启动失败，不依赖宿主机是否装有 BusyBox。
+        // 缺失原生 PTY 组件的 supervisor 保证进程启动失败，不依赖宿主机环境。
         val controller = ConsoleSessionController(
             logger = NoopLogger,
-            processSupervisor = ShellProcessSupervisor(
-                allowTreeFallback = false,
-                setsidCommand = "eta-test-missing-setsid",
-            ),
+            processSupervisor = ShellProcessSupervisor(ptyExecutable = { null }),
         )
         try {
             val result = controller.open(
@@ -42,10 +39,7 @@ class ConsoleSessionControllerTest {
     fun failedOpenDoesNotConsumeSessionLimit() {
         val controller = ConsoleSessionController(
             logger = NoopLogger,
-            processSupervisor = ShellProcessSupervisor(
-                allowTreeFallback = false,
-                setsidCommand = "eta-test-missing-setsid",
-            ),
+            processSupervisor = ShellProcessSupervisor(ptyExecutable = { null }),
         )
         try {
             repeat(8) {
@@ -69,10 +63,7 @@ class ConsoleSessionControllerTest {
 
     @Test
     fun closeIsIdempotentAndRejectsFurtherSessions() {
-        val supervisor = ShellProcessSupervisor(
-            allowTreeFallback = false,
-            setsidCommand = "eta-test-missing-setsid",
-        )
+        val supervisor = ShellProcessSupervisor(ptyExecutable = { null })
         val controller = ConsoleSessionController(logger = NoopLogger, processSupervisor = supervisor)
 
         controller.close()

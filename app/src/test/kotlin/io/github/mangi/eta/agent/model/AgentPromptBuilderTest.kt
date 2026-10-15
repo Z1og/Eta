@@ -1,8 +1,12 @@
 package io.github.mangi.eta.agent.model
 
+import io.github.mangi.eta.agent.terminal.TerminalEnvironment
+import io.github.mangi.eta.agent.terminal.TerminalExecutionContext
 import io.github.mangi.eta.agent.memory.AgentMemoryContext
 import io.github.mangi.eta.agent.skill.SkillContext
 import io.github.mangi.eta.agent.skill.SkillIndexEntry
+import io.github.mangi.eta.agent.device.RootAccessState
+import io.github.mangi.eta.agent.device.RootAccessStatus
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,6 +15,50 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AgentPromptBuilderTest {
+    @Test
+    fun rootPromptOnlyDependsOnGrantSoTransientProbeStatesKeepThePrefixStable() {
+        fun prompt(state: RootAccessState) = AgentPromptBuilder.buildSystemMessages(
+            config = modelConfig("", terminalTools = true, browserTools = false),
+            skillContext = SkillContext.EMPTY, memoryContext = AgentMemoryContext.DISABLED,
+            rootAvailable = state.isGranted,
+        ).toString()
+        val ungranted = listOf(
+            RootAccessState(isChecking = true),
+            RootAccessState(RootAccessStatus.UNKNOWN),
+            RootAccessState(RootAccessStatus.TIMED_OUT),
+            RootAccessState(RootAccessStatus.DENIED),
+            RootAccessState(RootAccessStatus.UNAVAILABLE),
+        ).map(::prompt)
+        assertEquals(1, ungranted.distinct().size)
+        val granted = prompt(RootAccessState(RootAccessStatus.GRANTED, suPresent = true))
+        assertEquals(granted, prompt(RootAccessState(RootAccessStatus.GRANTED, suPresent = true, isChecking = true)))
+        assertTrue(granted.contains("Root 授权已确认"))
+        assertTrue(ungranted.first().contains("这不代表设备不支持 Root"))
+        for (contents in ungranted + granted) {
+            assertTrue(contents.contains("identity=user 是显式选择"))
+            assertTrue(contents.contains("terminal(action=check_root)"))
+        }
+    }
+
+    @Test
+    fun terminalPromptDescribesTheActualRunWorkspaceAndSeparateLifecycles() {
+        val messages = AgentPromptBuilder.buildSystemMessages(
+            config = modelConfig("", terminalTools = true, browserTools = false),
+            skillContext = SkillContext.EMPTY,
+            memoryContext = AgentMemoryContext.DISABLED,
+            rootAvailable = false,
+            executionContext = TerminalExecutionContext(TerminalEnvironment.DEBIAN, null, "/eta/custom workspace"),
+        )
+        val terminal = messages.systemContents().single { it.contains("Eta 内置文件与终端工具") }
+        assertTrue(terminal.contains("/eta/custom workspace"))
+        assertTrue(terminal.contains("debian"))
+        assertTrue(terminal.contains("identity=user"))
+        assertTrue(terminal.contains("terminal_job"))
+        assertTrue(terminal.contains("terminal_daemon"))
+        assertFalse(terminal.contains("async=true"))
+        assertFalse(terminal.contains("read_async_result"))
+    }
+
     @Test
     fun currentModelIdentityFollowsConfigWithCustomOrEmptyProviderPrompt() {
         for (providerPrompt in listOf("自定义回答风格", "")) {
@@ -91,9 +139,9 @@ class AgentPromptBuilderTest {
         assertTrue(messages.systemContents().any { it.contains("合法且克制的 GitHub Flavored Markdown") })
         assertTrue(messages.systemContents().any { it.contains("不用整句粗体冒充标题") })
         assertTrue(messages.systemContents().any { it.contains("表格前后留空行") })
-        assertTrue(messages.getJSONObject(2).getString("content").contains("action=exec"))
-        assertTrue(messages.getJSONObject(2).getString("content").contains("同一轮模型回复最多调用一次 read_image"))
-        assertTrue(messages.getJSONObject(2).getString("content").contains("再在下一轮调用下一张"))
+        assertTrue(messages.getJSONObject(2).getString("content").contains("只需 command"))
+        assertTrue(messages.getJSONObject(2).getString("content").contains("同一轮最多读取一张"))
+        assertTrue(messages.getJSONObject(2).getString("content").contains("观察返回内容后再读下一张"))
         assertFalse(messages.systemContents().any { it.contains("网页浏览、读取") })
         assertEquals("旧问题", messages.getJSONObject(3).getString("content"))
         assertEquals("旧回答", messages.getJSONObject(4).getString("content"))
@@ -134,7 +182,7 @@ class AgentPromptBuilderTest {
         assertEquals(listOf("system", "system", "system", "user"), messages.roles())
         val systemContents = messages.systemContents()
         assertTrue(systemContents.any { it.contains("browser_use") })
-        assertFalse(systemContents.any { it.contains("action=exec") })
+        assertFalse(systemContents.any { it.contains("只需 command") })
         val skillMessage = systemContents.single { it.contains("id=screen-audit") }
         assertTrue(skillMessage.contains("path=/skills/screen-audit/SKILL.md"))
         assertTrue(skillMessage.contains("capabilities=scripts, assets"))

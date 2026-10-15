@@ -59,6 +59,14 @@
   <string name="terminal_reconnect">重新連線</string>
   <string name="terminal_console_mode">控制台模式</string>
   <string name="terminal_block_mode">簡潔模式</string>
+  <string name="terminal_key_paste">貼上</string>
+  <string name="terminal_keyboard_show">顯示鍵盤</string>
+  <string name="terminal_keyboard_hide">收起鍵盤</string>
+  <string name="terminal_key_left">左</string>
+  <string name="terminal_key_up">上</string>
+  <string name="terminal_key_down">下</string>
+  <string name="terminal_key_right">右</string>
+  <string name="terminal_key_enter">Enter 鍵</string>
   <string name="terminal_interrupted">已停止</string>
   <string name="terminal_env_switched">已切換到 %1$s 環境</string>
   <string name="terminal_exit_code">結束代碼 %1$d</string>
@@ -222,6 +230,10 @@
   <string name="tool_open_uri">使用應用程式開啟</string>
   <string name="tool_browser_use">瀏覽網頁</string>
   <string name="tool_terminal">終端機</string>
+  <string name="tool_terminal_job">异步命令</string>
+  <string name="tool_terminal_job_description">启动、查看和停止后台命令；回复结束后继续运行，完成时通知</string>
+  <string name="tool_terminal_daemon">后台服务</string>
+  <string name="tool_terminal_daemon_description">启动、查看和停止可跨 Agent 任务运行的后台服务</string>
   <string name="tool_run_command">執行指令</string>
   <string name="tool_read_file">讀取檔案</string>
   <string name="tool_write_file">寫入檔案</string>
@@ -295,7 +307,7 @@
   <string name="ui_probe_capability_failed_2e9d70">探測失敗</string>
   <string name="ui_bright_screen_evokes_automatic_voice_input_4358fe">亮屏喚起自動語音輸入</string>
   <string name="ui_only_take_over_with_agent_prefix_d17556">僅以 /agent 前綴接管</string>
-  <string name="ui_only_check_the_ranges_actually_supported_by_the_mode_2c343d">僅勾選模型或網關實際支援的檔位；不支援的組合會在請求前明確報錯。</string>
+  <string name="ui_only_check_the_ranges_actually_supported_by_the_mode_2c343d">只選模型或閘道實際支援的檔位</string>
   <string name="ui_preferences_and_strategies_2abd3c">偏好與策略</string>
   <string name="ui_stop_a17f70">停止</string>
   <string name="ui_allow_sensitive_device_operation_3d42ea">允許敏感裝置操作</string>
@@ -371,7 +383,6 @@
   <string name="ui_browse_the_web_da7afb">瀏覽網頁</string>
   <string name="ui_add_custom_model_a5ddc0">新增自訂模型</string>
   <string name="ui_add_attachment_dba9e8">新增附件</string>
-  <string name="ui_clear_84fcd7">清空</string>
   <string name="ui_clear_all_memory_a43bd3">清空全部記憶？</string>
   <string name="ui_about_github_star_title">原始碼</string>
   <string name="ui_about_github_star_hint">如果 Eta 幫到了你，請在 GitHub 點個 Star，這對我們意義重大</string>
@@ -387,7 +398,6 @@
   <string name="ui_click_to_reinstall_dc60de">點選重新安裝</string>
   <string name="ui_environmental_status_5b32a1">環境狀態</string>
   <string name="ui_user_skills_748e7f">使用者安裝</string>
-  <string name="ui_determined_by_model_or_provider_06c326">由模型或 Provider 決定</string>
   <string name="ui_long_press_the_power_button_1958d0">電源鍵長按</string>
   <string name="ui_leave_blank_to_use_the_default_mobile_agent_prompt_w_21e7c8">留空使用預設手機 Agent 提示詞</string>
   <string name="ui_knew_cb63c6">知道了</string>
@@ -554,7 +564,6 @@
   <string name="page_save_failed_40525a">儲存失敗</string>
   <string name="page_repair_590253">修復</string>
   <string name="page_stop_loading_c62fbc">停止載入</string>
-  <string name="page_allow_thinking_to_be_turned_off_during_conversations_5a32a9">允許在對話中關閉思考</string>
   <string name="page_select_none_ba20eb">全不選</string>
   <string name="page_select_all_3e44b2">全選</string>
   <string name="page_delete_3755f5">刪除</string>
@@ -704,7 +713,7 @@
   <string name="tool_ui_coloros_system_memory_eff961">ColorOS 系統記憶</string>
   <string name="tool_ui_qq_chat_pictures_e21bf9">QQ 聊天圖片</string>
   <string name="tool_ui_wi_fi_password_80e9a4">Wi‑Fi 密碼</string>
-  <string name="tool_ui_user_root_shell_conversational_execution_and_asy_13c2ab">user/root shell、互動式執行與非同步讀取</string>
+  <string name="tool_ui_user_root_shell_conversational_execution_and_asy_13c2ab">执行命令或复用持久 Shell 会话</string>
   <string name="tool_ui_download_history_8494d7">下載記錄</string>
   <string name="tool_ui_personal_order_25e4c9">個人訂單</string>
   <string name="tool_ui_retrieve_recording_files_from_system_media_libra_314c4d">從系統媒體庫搜尋錄音檔案</string>
@@ -912,7 +921,18 @@
     <item quantity="other">已取得 %d 個模型</item>
   </plurals>
   <string name="provider_models_endpoint_summary">讀取 %1$s 的 /models 清單</string>
-  <string name="provider_models_fetched_filtered">已取得 %1$d 個模型，略過 %2$d 個非對話模型</string>
+  <string name="provider_models_up_to_date">已是最新，沒有新模型</string>
+  <string name="provider_context_window_hint">選擇常用大小或手動填寫，用於判斷何時自動壓縮</string>
+  <string name="provider_context_window_invalid">請輸入正整數</string>
+  <string name="provider_context_window_value">約 %1$s tokens</string>
+  <string name="provider_context_window_usage">對話接近這個長度時會自動壓縮</string>
+  <plurals name="provider_models_added">
+    <item quantity="other">已新增 %d 個模型</item>
+  </plurals>
+  <string name="remote_model_import_title">新增模型</string>
+  <string name="remote_model_import_summary">遠端有 %1$d 個尚未新增的模型</string>
+  <string name="remote_model_import_pick_hint">選擇要新增的模型</string>
+  <string name="remote_model_import_confirm">新增 %1$d 個</string>
   <string name="provider_model_list_count">模型清單（共 %1$d 個）</string>
   <string name="provider_model_list_matches">模型清單（符合 %1$d / %2$d 個）</string>
   <string name="provider_model_saved">已儲存：%1$s</string>
@@ -927,7 +947,11 @@
   <plurals name="provider_models_selected">
     <item quantity="other">已選取 %d 個</item>
   </plurals>
-  <string name="provider_auto_reasoning_supported">自動：支援思考</string>
+  <plurals name="provider_delete_models_action">
+    <item quantity="other">刪除 %d 個模型</item>
+  </plurals>
+  <string name="provider_delete_models_pick_hint">選擇要刪除的模型</string>
+  <string name="provider_auto_reasoning_detected">已自動識別</string>
   <string name="provider_auto_reasoning_unknown">自動：不支援或未知</string>
   <string name="provider_context_tag">%1$s 內容脈絡</string>
   <string name="provider_sync_failed">同步失敗</string>
@@ -1074,14 +1098,14 @@
   <string name="browser_title">Agent 瀏覽器</string>
   <string name="browser_open_external">使用其他應用程式開啟</string>
   <string name="browser_reset_session">重設工作階段</string>
-  <string name="browser_user_controlling">你正在接管目前的工作階段，Agent 的網頁操作已暫停；返回後可讓 Agent 繼續。</string>
+  <string name="browser_user_controlling">你正在操作網頁，Agent 已暫停，返回後繼續</string>
   <string name="browser_opening">正在開啟網頁</string>
   <string name="browser_opening_host">正在開啟 %1$s</string>
   <string name="model_not_selected">未選擇</string>
   <string name="conversation_model_unavailable">此對話原用的模型無法使用，已改用 %1$s</string>
   <string name="model_switch_current">切換模型，目前為 %1$s</string>
-  <string name="model_collapse_provider">收合 %1$s</string>
-  <string name="model_expand_provider">展開 %1$s</string>
+  <string name="model_picker_title">選擇模型</string>
+  <string name="model_picker_filter_all">全部</string>
   <string name="context_no_previous_usage">暫無上輪用量</string>
   <string name="context_no_model_limit">未知上下文視窗，自動壓縮已關閉。仍可手動壓縮，也可在設定 → 模型提供商中填寫視窗。</string>
   <string name="context_usage_after_response">完成首次回覆後顯示實測用量</string>
@@ -1285,7 +1309,6 @@
   <string name="speech_saved">已儲存</string>
   <string name="speech_saved_with_pending">已儲存，仍有未儲存的修改</string>
   <string name="speech_save_failed">儲存失敗：%1$s</string>
-  <string name="speech_loading">正在讀取設定</string>
   <string name="speech_load_failed">無法讀取語音設定，請返回後重試</string>
   <string name="speech_oss_note">錄音以私有物件上傳，轉寫結束後刪除。請為此目錄授予上傳、讀取和刪除權限，並配置一天過期的生命週期規則作為異常清理保障。</string>
   <string name="speech_oss_region">地域</string>
@@ -1295,10 +1318,30 @@
   <string name="speech_dictation_finish">完成聽寫</string>
   <string name="speech_read_aloud">朗讀回答</string>
   <string name="speech_read_stop">停止朗讀</string>
+  <string name="speech_auto_read_on">自動朗讀已開啟，點按關閉</string>
+  <string name="speech_auto_read_off">自動朗讀已關閉，點按開啟</string>
+  <string name="read_aloud_channel">朗讀</string>
+  <string name="read_aloud_notification_title">Eta 正在朗讀</string>
   <string name="speech_mic_permission">請允許 Eta 使用麥克風</string>
   <string name="speech_open_settings">語音設定</string>
   <string name="speech_test_result">識別結果：%1$s</string>
   <string name="speech_credentials_lost">語音憑據無法解密，請重新填寫並儲存</string>
   <string name="speech_save_retry">請重試</string>
   <string name="system_notice_model_retry">模型請求重試</string>
+  <string name="chat_edit_character_reply">編輯角色回覆</string>
+  <string name="chat_previous_candidate">上一則候選回覆</string>
+  <string name="chat_next_candidate">下一則候選回覆</string>
+  <string name="chat_image_attachment">圖片附件</string>
+  <string name="chat_edit_preserve_following">儲存後原位更新這則訊息，並保留後續對話</string>
+  <string name="chat_save_message">儲存訊息</string>
+  <string name="chat_character_story_start">故事從這裡開始</string>
+  <string name="tool_details_expand">展開工具詳情</string>
+  <string name="tool_details_collapse">收合工具詳情</string>
+  <string name="shared_folders_picker_no_subfolders">此處沒有子資料夾</string>
+  <string name="memory_empty_title">還沒有記憶</string>
+  <string name="memory_mode_preview">預覽</string>
+  <string name="memory_mode_edit">編輯</string>
+  <string name="memory_discard">放棄</string>
+  <string name="chat_character_input_hint">對%1$s說點什麼…</string>
+  <string name="chat_character_typing">%1$s 正在回覆…</string>
 </resources>

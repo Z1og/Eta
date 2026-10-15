@@ -28,6 +28,9 @@ import io.github.mangi.eta.ui.components.EtaPreferenceIcon
 import io.github.mangi.eta.ui.components.EtaSwitchPreference
 import io.github.mangi.eta.ui.components.EtaTextButton
 import io.github.mangi.eta.ui.components.MiuixScaffoldPage
+import io.github.mangi.eta.ui.components.StatusError
+import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun SpeechRecognitionScreen(onBack: () -> Unit, onOpenOss: () -> Unit) {
@@ -43,9 +46,7 @@ internal fun SpeechRecognitionScreen(onBack: () -> Unit, onOpenOss: () -> Unit) 
         modifier = Modifier.imePadding(),
     ) {
         if (!store.loaded) {
-            item(key = "loading") {
-                SpeechNote(store.message ?: stringResource(R.string.speech_loading))
-            }
+            item(key = "loading") { SpeechLoadingState(store.message) }
             return@MiuixScaffoldPage
         }
         item(key = "service_title") {
@@ -177,6 +178,9 @@ private fun SpeechRecognitionTestSection(store: SpeechSettingsStore) {
                     if (state.active) R.string.speech_test_finish else R.string.speech_test_recognition,
                 ),
                 summary = summary,
+                summaryColor = BasicComponentDefaults.summaryColor(
+                    color = if (state.error != null) StatusError else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                ),
                 enabled = !store.saving,
                 onClick = { if (state.active) store.recognition.finish() else request() },
                 endActions = {

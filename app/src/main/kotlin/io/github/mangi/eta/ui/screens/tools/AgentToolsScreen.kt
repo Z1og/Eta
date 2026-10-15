@@ -26,6 +26,7 @@ import io.github.mangi.eta.agent.tool.AgentToolCapabilities
 import io.github.mangi.eta.ui.app.rememberDeviceCapabilities
 import io.github.mangi.eta.ui.components.EtaArrowPreference
 import io.github.mangi.eta.ui.components.EtaCard
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
 import io.github.mangi.eta.ui.components.MiuixScaffoldPage
@@ -62,7 +63,7 @@ fun AgentToolsScreen(
                 tabs = listOf(stringResource(R.string.capability_current_device), stringResource(R.string.capability_all)),
                 selectedTabIndex = if (showAll) 1 else 0,
                 onTabSelected = { showAll = it == 1 },
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = EtaPreferenceDefaults.SidePadding, vertical = 8.dp),
             )
         }
         item(key = "capability-discovery") {

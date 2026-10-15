@@ -29,6 +29,7 @@ class SpeechPlaybackTest {
     private val outputs = mutableListOf<FakeOutput>()
     private var canceled = 0
     private val playback = SpeechPlaybackController(context, scope,
+        streamSynthesize = null,
         synthesize = { _, _, _, audio ->
             try { audio(byteArrayOf(1, 2)); awaitCancellation() }
             finally { canceled++ }
@@ -107,6 +108,7 @@ class SpeechPlaybackTest {
     @Test fun successfulSynthesisFinishesInputBeforeWaitingForPlayback() {
         val output = FakeOutput()
         val controller = SpeechPlaybackController(context, scope,
+            streamSynthesize = null,
             synthesize = { _, _, _, audio -> audio(byteArrayOf(1, 2)) },
             createOutput = { output },
         )
@@ -136,6 +138,7 @@ class SpeechPlaybackTest {
             override fun close() { closed = true }
         }
         val controller = SpeechPlaybackController(context, scope,
+            streamSynthesize = null,
             synthesize = { _, _, _, audio -> synthesized.incrementAndGet(); audio(byteArrayOf(1, 2)) },
             createOutput = { output },
         )
@@ -159,6 +162,69 @@ class SpeechPlaybackTest {
             assertTrue(output.finished)
             assertNull(controller.state.value.error)
         } finally { release.countDown(); controller.stop() }
+    }
+
+    private fun speakUntilClosed(controller: SpeechPlaybackController, output: FakeOutput, text: String) {
+        controller.speak("stream", text, SpeechSettings(tts = TtsProvider.QWEN), SpeechCredentials(qwenTts = "test-key"))
+        val deadline = System.nanoTime() + 3_000_000_000
+        while (!output.closed && System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(1)
+        }
+    }
+
+    @Test fun streamingSessionReceivesWholeAnswerOnce() {
+        val output = FakeOutput()
+        val sessions = java.util.concurrent.CopyOnWriteArrayList<List<String>>()
+        val segments = java.util.concurrent.atomic.AtomicInteger()
+        val controller = SpeechPlaybackController(context, scope,
+            streamSynthesize = { _, _, chunks, audio -> sessions += chunks; audio(byteArrayOf(1, 2)) },
+            synthesize = { _, _, _, _ -> segments.incrementAndGet() },
+            createOutput = { output },
+        )
+        try {
+            val text = "很长的回答。".repeat(250)
+            speakUntilClosed(controller, output, text)
+            assertEquals(1, sessions.size)
+            assertEquals(SpeechText.chunks(SpeechText.readable(text)), sessions.single())
+            assertEquals(0, segments.get())
+            assertTrue(output.finished)
+            assertNull(controller.state.value.error)
+        } finally { controller.stop() }
+    }
+
+    @Test fun streamingFailureBeforeAudioFallsBackToSegments() {
+        val output = FakeOutput()
+        val segments = java.util.concurrent.atomic.AtomicInteger()
+        val controller = SpeechPlaybackController(context, scope,
+            streamSynthesize = { _, _, _, _ -> throw SpeechFailure(SpeechErrorCode.NETWORK, "unavailable") },
+            synthesize = { _, _, _, audio -> segments.incrementAndGet(); audio(byteArrayOf(1, 2)) },
+            createOutput = { output },
+        )
+        try {
+            speakUntilClosed(controller, output, "第一句。第二句。")
+            assertEquals(1, segments.get())
+            assertTrue(output.finished)
+            assertNull(controller.state.value.error)
+        } finally { controller.stop() }
+    }
+
+    @Test fun streamingFailureAfterAudioReportsErrorWithoutRestarting() {
+        val output = FakeOutput()
+        val segments = java.util.concurrent.atomic.AtomicInteger()
+        val controller = SpeechPlaybackController(context, scope,
+            streamSynthesize = { _, _, _, audio ->
+                audio(byteArrayOf(1, 2))
+                throw SpeechFailure(SpeechErrorCode.NETWORK, "dropped")
+            },
+            synthesize = { _, _, _, audio -> segments.incrementAndGet(); audio(byteArrayOf(1, 2)) },
+            createOutput = { output },
+        )
+        try {
+            speakUntilClosed(controller, output, "第一句。第二句。")
+            assertEquals(0, segments.get())
+            assertEquals("dropped", controller.state.value.error)
+        } finally { controller.stop() }
     }
 
     private class FakeOutput : SpeechAudioOutput {

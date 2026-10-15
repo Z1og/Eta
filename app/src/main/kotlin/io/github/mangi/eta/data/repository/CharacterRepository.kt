@@ -9,8 +9,8 @@ import android.graphics.Paint
 import android.util.AtomicFile
 import io.github.mangi.eta.agent.roleplay.CharacterCard
 import io.github.mangi.eta.agent.roleplay.CharacterCardCodec
-import io.github.mangi.eta.agent.roleplay.CharacterCardFormat
 import io.github.mangi.eta.agent.roleplay.CharacterCardException
+import io.github.mangi.eta.agent.roleplay.CharacterCardFormat
 import io.github.mangi.eta.agent.roleplay.CharacterCardPng
 import io.github.mangi.eta.agent.roleplay.CharacterProfile
 import io.github.mangi.eta.agent.roleplay.RoleplayBinding
@@ -18,13 +18,13 @@ import io.github.mangi.eta.agent.roleplay.UserPersona
 import io.github.mangi.eta.data.db.CharacterEntity
 import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.data.db.UserPersonaEntity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 internal object CharacterRepository {
     const val MAX_FILE_BYTES = CharacterCardPng.MAX_FILE_BYTES
@@ -76,6 +76,11 @@ internal object CharacterRepository {
             throw failure
         }
         saved
+    }
+
+    suspend fun replaceAvatar(id: String, input: InputStream): CharacterProfile = withContext(Dispatchers.IO) {
+        val profile = get(id) ?: throw IllegalArgumentException("角色已不存在")
+        save(profile, avatarBytes = input.readRoleplayBytes())
     }
 
     suspend fun duplicate(id: String): CharacterProfile = withContext(Dispatchers.IO) {

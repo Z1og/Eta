@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -25,7 +26,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.EtaApp
 import io.github.mangi.eta.R
-import io.github.mangi.eta.ui.components.EtaPreferenceRow
 import io.github.mangi.eta.data.model.ProviderSetting
 import io.github.mangi.eta.data.model.ProviderSourceTypes
 import io.github.mangi.eta.data.model.typeLabel
@@ -33,6 +33,11 @@ import io.github.mangi.eta.data.repository.ProviderRepository
 import io.github.mangi.eta.data.repository.RuntimeConfigRepository
 import io.github.mangi.eta.ui.components.EtaArrowPreference
 import io.github.mangi.eta.ui.components.EtaOverlayDialog
+import io.github.mangi.eta.ui.components.EtaPreferenceColors
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
+import io.github.mangi.eta.ui.components.EtaPreferenceDivider
+import io.github.mangi.eta.ui.components.EtaPreferenceIcon
+import io.github.mangi.eta.ui.components.EtaPreferenceRow
 import io.github.mangi.eta.ui.components.MiuixDialogActions
 import io.github.mangi.eta.ui.components.MiuixScaffoldPage
 import io.github.mangi.eta.ui.navigation.AppRoute
@@ -80,7 +85,7 @@ internal fun ModelProviderListScreen(
                 label = stringResource(R.string.ui_search_provider_74e049),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
+                    .padding(horizontal = EtaPreferenceDefaults.SidePadding)
                     .padding(top = 12.dp, bottom = 8.dp),
             )
         }
@@ -90,9 +95,10 @@ internal fun ModelProviderListScreen(
                 EtaArrowPreference(
                     title = "从目录添加",
                     summary = "浏览可用提供商并选择模型",
+                    startAction = { EtaPreferenceIcon(Icons.Rounded.Storefront, tint = EtaPreferenceColors.Blue) },
                     onClick = { onNavigate(AppRoute.CommunityCatalog) },
                 )
-
+                EtaPreferenceDivider()
                 EtaArrowPreference(
                     title = stringResource(R.string.ui_added_openai_compatible_6bd471),
                     summary = stringResource(R.string.ui_support_chatgpt_deepseek_kimi_glm_qwen_etc_b31d02),
@@ -101,7 +107,7 @@ internal fun ModelProviderListScreen(
                     },
                     onClick = { onNavigate(AppRoute.ModelProviderNew(NewProviderType.OpenAiCompatible)) },
                 )
-
+                EtaPreferenceDivider()
                 EtaArrowPreference(
                     title = stringResource(R.string.ui_new_anthropic_db6098),
                     summary = stringResource(R.string.ui_support_anthropic_claude_official_or_compatible_api_de3f80),
@@ -131,7 +137,8 @@ internal fun ModelProviderListScreen(
                         )
                     }
                 } else {
-                    filteredProviders.forEach { provider ->
+                    filteredProviders.forEachIndexed { index, provider ->
+                        if (index > 0) EtaPreferenceDivider()
                         ProviderListItem(
                             provider = provider,
                             isSelected = provider.id == selectedProviderId,

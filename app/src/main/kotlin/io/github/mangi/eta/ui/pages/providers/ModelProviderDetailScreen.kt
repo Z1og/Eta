@@ -50,6 +50,7 @@ import io.github.mangi.eta.data.repository.RuntimeConfigRepository
 import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaOverlayDialog
 import io.github.mangi.eta.ui.components.EtaPreference
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaSwitchPreference
 import io.github.mangi.eta.ui.components.EtaTextButton
@@ -156,7 +157,7 @@ internal fun ModelProviderDetailScreen(
                     selectedTabIndex = currentTab,
                     onTabSelected = { currentTab = it },
                     modifier = Modifier.padding(
-                        horizontal = sidePadding + 12.dp,
+                        horizontal = sidePadding + EtaPreferenceDefaults.SidePadding,
                         vertical = 8.dp,
                     ),
                 )
@@ -387,7 +388,7 @@ private fun ProviderConfigTab(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
+                    .padding(horizontal = EtaPreferenceDefaults.SidePadding)
                     .padding(top = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -560,6 +561,8 @@ private fun ProviderConfigTab(
                 confirmText = if (isWorking) context.getString(R.string.page_resetting_616090) else context.getString(R.string.page_reset_3d8134),
                 cancelEnabled = !isWorking,
                 confirmEnabled = !isWorking,
+                // 重置会覆盖用户改过的连接与模型配置，与删除同属破坏性确认。
+                destructive = true,
                 onCancel = { showResetDialog = false },
                 onConfirm = {
                     scope.launch {

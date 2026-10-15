@@ -1,32 +1,29 @@
 package io.github.mangi.eta.ui.screens.terminal
 
+import android.content.ClipData
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowUpward
-import androidx.compose.material.icons.rounded.Insights
-import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -36,18 +33,21 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.ClipboardManager
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -56,14 +56,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.mangi.eta.R
-import io.github.mangi.eta.agent.terminal.TerminalEnvironment
 import io.github.mangi.eta.agent.terminal.isLinux
 import io.github.mangi.eta.ui.app.TerminalBlockUi
 import io.github.mangi.eta.ui.app.UserTerminalStore
-import io.github.mangi.eta.ui.app.UserTerminalUiState
+import io.github.mangi.eta.ui.components.EtaMonospace
 import io.github.mangi.eta.ui.components.EtaTextButton
 import io.github.mangi.eta.ui.components.ansiPlainText
 import io.github.mangi.eta.ui.components.ansiToAnnotatedString
+import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -72,6 +73,7 @@ import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.squircle.squircleBackground
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowListPopup
 
@@ -124,6 +126,20 @@ internal fun UserTerminalScreen(
             .imePadding()
             .navigationBarsPadding(),
     ) {
+        TerminalToolbar(
+            environment = state.environment,
+            linuxEnvironment = state.linuxEnvironment,
+            onSwitchEnvironment = store::switchEnvironment,
+            sessionCount = state.sessions.size,
+            daemonRunning = state.daemonTasks.any { it.running },
+            onOpenSessions = { showSessions = true },
+            onOpenTasks = {
+                store.refreshDaemonTasks()
+                showTasks = true
+            },
+            modeTarget = if (onOpenConsole != null) TerminalModeTarget.CONSOLE else null,
+            onSwitchMode = { onOpenConsole?.invoke() },
+        )
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -138,23 +154,14 @@ internal fun UserTerminalScreen(
                 )
             }
         }
-        StatusBar(
-            state = state,
-            onSwitchEnvironment = store::switchEnvironment,
-            onStop = store::stop,
-            onOpenTasks = {
-                store.refreshDaemonTasks()
-                showTasks = true
-            },
-            onOpenSessions = { showSessions = true },
-            onOpenConsole = onOpenConsole,
-        )
         if (!showLinuxGuide) {
-            InputRow(
+            InputPanel(
                 input = input,
+                cwd = state.cwd,
                 running = state.running,
                 onInputChange = { input = it },
                 onSubmit = ::submit,
+                onStop = store::stop,
             )
         }
     }
@@ -211,7 +218,8 @@ private fun BlockList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         items(items = blocks, key = { it.id }) { block ->
             if (block.isSystem) {
@@ -230,108 +238,108 @@ private fun CommandBlock(
     onReinput: (String) -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val colors = MiuixTheme.colorScheme
     val exitCode = block.exitCode
     val failed = exitCode != null && exitCode != 0
     Box {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .combinedClickable(onClick = {}, onLongClick = { showMenu = true })
-                .padding(vertical = 6.dp),
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                    onLongClick = { showMenu = true },
+                ),
         ) {
-            if (failed) {
-                Box(
-                    modifier = Modifier
-                        .width(3.dp)
-                        .fillMaxHeight()
-                        .background(MiuixTheme.colorScheme.error),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-            Column(modifier = Modifier.weight(1f)) {
+            if (block.cwdAtStart.isNotEmpty()) {
                 Text(
-                    text = blockHeader(block),
-                    style = MiuixTheme.textStyles.body2.copy(fontFamily = FontFamily.Monospace),
+                    text = block.cwdAtStart,
+                    style = MiuixTheme.textStyles.footnote2.copy(fontFamily = EtaMonospace),
+                    color = colors.onSurfaceVariantSummary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                if (block.output.isNotEmpty()) {
-                    // 原始输出含 ANSI 序列；整段重解析保证流式截断的序列在下一次到达后恢复。
-                    val parsedOutput = remember(block.output) { ansiToAnnotatedString(block.output) }
-                    Text(
-                        text = parsedOutput,
-                        style = MiuixTheme.textStyles.footnote1.copy(fontFamily = FontFamily.Monospace),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-                if (block.running) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 4.dp),
-                    ) {
-                        InfiniteProgressIndicator(size = 14.dp)
-                        Text(
-                            text = stringResource(R.string.terminal_running),
-                            style = MiuixTheme.textStyles.footnote1,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            modifier = Modifier.padding(start = 6.dp),
-                        )
-                    }
-                }
-                if (failed) {
-                    Text(
-                        text = stringResource(R.string.terminal_exit_code, exitCode),
-                        style = MiuixTheme.textStyles.footnote1,
-                        color = MiuixTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-                if (block.truncated) {
-                    Text(
-                        text = stringResource(R.string.terminal_output_truncated),
-                        style = MiuixTheme.textStyles.footnote1,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
             }
+            Text(
+                text = blockHeader(block.command, promptColor = if (failed) colors.error else colors.primary),
+                style = MiuixTheme.textStyles.body2.copy(fontFamily = EtaMonospace),
+                color = colors.onSurface,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            if (block.output.isNotEmpty()) {
+                // 原始输出含 ANSI 序列；整段重解析保证流式截断的序列在下一次到达后恢复。
+                val parsedOutput = remember(block.output) { ansiToAnnotatedString(block.output) }
+                Text(
+                    text = parsedOutput,
+                    style = MiuixTheme.textStyles.footnote1.copy(fontFamily = EtaMonospace),
+                    color = colors.onSurface.copy(alpha = 0.86f),
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            BlockFooter(block = block, failed = failed)
         }
         BlockMenu(
             show = showMenu,
-            block = block,
-            clipboard = clipboard,
+            hasOutput = block.output.isNotEmpty(),
             onDismiss = { showMenu = false },
-            onReinput = onReinput,
+            onCopyCommand = { scope.launch { clipboard.setPlainText(block.command) } },
+            onCopyOutput = { scope.launch { clipboard.setPlainText(ansiPlainText(block.output)) } },
+            onReinput = { onReinput(block.command) },
         )
     }
 }
 
 @Composable
-private fun blockHeader(block: TerminalBlockUi): AnnotatedString {
-    val dim = MiuixTheme.colorScheme.onSurfaceVariantSummary
-    val accent = MiuixTheme.colorScheme.primary
-    val body = MiuixTheme.colorScheme.onSurface
-    return remember(block.cwdAtStart, block.command, dim, accent, body) {
-        buildAnnotatedString {
-            if (block.cwdAtStart.isNotEmpty()) {
-                withStyle(SpanStyle(color = dim)) { append(block.cwdAtStart) }
-                append("  ")
-            }
-            withStyle(SpanStyle(color = accent)) { append("❯") }
-            append(" ")
-            withStyle(SpanStyle(color = body, fontWeight = FontWeight.Medium)) { append(block.command) }
+private fun BlockFooter(block: TerminalBlockUi, failed: Boolean) {
+    val colors = MiuixTheme.colorScheme
+    val labels = buildList {
+        if (failed) add(stringResource(R.string.terminal_exit_code, block.exitCode ?: 0) to colors.error)
+        if (block.truncated) add(stringResource(R.string.terminal_output_truncated) to colors.onSurfaceVariantSummary)
+    }
+    if (!block.running && labels.isEmpty()) return
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.padding(top = 6.dp),
+    ) {
+        if (block.running) {
+            InfiniteProgressIndicator(size = 12.dp)
+            Text(
+                text = stringResource(R.string.terminal_running),
+                style = MiuixTheme.textStyles.footnote2,
+                color = colors.onSurfaceVariantSummary,
+            )
+        }
+        labels.forEach { (text, color) ->
+            Text(text = text, style = MiuixTheme.textStyles.footnote2, color = color)
         }
     }
 }
 
 @Composable
+private fun blockHeader(command: String, promptColor: Color): AnnotatedString =
+    remember(command, promptColor) {
+        buildAnnotatedString {
+            withStyle(SpanStyle(color = promptColor, fontWeight = FontWeight.Bold)) { append("❯ ") }
+            append(command)
+        }
+    }
+
+private suspend fun Clipboard.setPlainText(text: String) {
+    setClipEntry(ClipEntry(ClipData.newPlainText(null, text)))
+}
+
+@Composable
 private fun BlockMenu(
     show: Boolean,
-    block: TerminalBlockUi,
-    clipboard: ClipboardManager,
+    hasOutput: Boolean,
     onDismiss: () -> Unit,
-    onReinput: (String) -> Unit,
+    onCopyCommand: () -> Unit,
+    onCopyOutput: () -> Unit,
+    onReinput: () -> Unit,
 ) {
     WindowListPopup(
         show = show,
@@ -346,7 +354,7 @@ private fun BlockMenu(
                 index = 0,
                 onSelectedIndexChange = {
                     onDismiss()
-                    clipboard.setText(AnnotatedString(block.command))
+                    onCopyCommand()
                 },
             )
             DropdownImpl(
@@ -354,10 +362,10 @@ private fun BlockMenu(
                 optionSize = 3,
                 isSelected = false,
                 index = 1,
-                enabled = block.output.isNotEmpty(),
+                enabled = hasOutput,
                 onSelectedIndexChange = {
                     onDismiss()
-                    clipboard.setText(AnnotatedString(ansiPlainText(block.output)))
+                    onCopyOutput()
                 },
             )
             DropdownImpl(
@@ -367,7 +375,7 @@ private fun BlockMenu(
                 index = 2,
                 onSelectedIndexChange = {
                     onDismiss()
-                    onReinput(block.command)
+                    onReinput()
                 },
             )
         }
@@ -378,183 +386,162 @@ private fun BlockMenu(
 private fun SystemBlock(block: TerminalBlockUi) {
     Text(
         text = block.output,
-        style = MiuixTheme.textStyles.footnote1,
+        style = MiuixTheme.textStyles.footnote2,
         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         textAlign = TextAlign.Center,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
+/**
+ * 底部输入区：当前目录在上、命令输入在下。回车直接执行；
+ * 运行中输入框为空时尾部按钮变为停止，有内容时发送到前台进程的 stdin。
+ */
 @Composable
-private fun StatusBar(
-    state: UserTerminalUiState,
-    onSwitchEnvironment: (TerminalEnvironment) -> Unit,
-    onStop: () -> Unit,
-    onOpenTasks: () -> Unit,
-    onOpenSessions: () -> Unit,
-    onOpenConsole: (() -> Unit)? = null,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        EnvironmentTab(
-            label = "Android",
-            selected = state.environment == TerminalEnvironment.ANDROID,
-            onClick = { onSwitchEnvironment(TerminalEnvironment.ANDROID) },
-        )
-        EnvironmentTab(
-            label = if (state.linuxEnvironment == TerminalEnvironment.ALPINE) "Alpine" else "Debian",
-            selected = state.environment == state.linuxEnvironment,
-            onClick = { onSwitchEnvironment(state.linuxEnvironment) },
-        )
-        Text(
-            text = state.cwd,
-            style = MiuixTheme.textStyles.footnote2.copy(fontFamily = FontFamily.Monospace),
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.End,
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 8.dp),
-        )
-        IconButton(onClick = onOpenSessions) {
-            Icon(
-                imageVector = Icons.Rounded.Layers,
-                contentDescription = stringResource(R.string.terminal_sessions),
-                modifier = Modifier.size(18.dp),
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-        }
-        IconButton(onClick = onOpenTasks) {
-            Icon(
-                imageVector = Icons.Rounded.Insights,
-                contentDescription = stringResource(R.string.terminal_daemon_tasks),
-                modifier = Modifier.size(18.dp),
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-        }
-        if (onOpenConsole != null) {
-            IconButton(onClick = onOpenConsole) {
-                Icon(
-                    imageVector = Icons.Rounded.Terminal,
-                    contentDescription = stringResource(R.string.terminal_console_mode),
-                    modifier = Modifier.size(18.dp),
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                )
-            }
-        }
-        if (state.running) {
-            EtaTextButton(
-                text = stringResource(R.string.terminal_stop),
-                onClick = onStop,
-            )
-        }
-    }
-}
-
-@Composable
-private fun EnvironmentTab(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Text(
-        text = label,
-        style = MiuixTheme.textStyles.footnote1,
-        color = if (selected) {
-            MiuixTheme.colorScheme.primary
-        } else {
-            MiuixTheme.colorScheme.onSurfaceVariantSummary
-        },
-        fontWeight = if (selected) FontWeight.SemiBold else null,
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-    )
-}
-
-@Composable
-private fun InputRow(
+private fun InputPanel(
     input: String,
+    cwd: String,
     running: Boolean,
     onInputChange: (String) -> Unit,
     onSubmit: () -> Unit,
+    onStop: () -> Unit,
 ) {
+    val colors = MiuixTheme.colorScheme
     val canSend = input.isNotBlank()
-    TextField(
-        value = input,
-        onValueChange = onInputChange,
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .padding(bottom = 10.dp),
-        label = stringResource(
-            if (running) R.string.terminal_input_running_hint else R.string.terminal_input_hint,
-        ),
-        useLabelAsPlaceholder = true,
-        maxLines = 4,
-        textStyle = MiuixTheme.textStyles.body2.copy(fontFamily = FontFamily.Monospace),
-        trailingIcon = {
-            IconButton(
-                onClick = onSubmit,
-                enabled = canSend,
-                modifier = Modifier
-                    .padding(end = 6.dp)
-                    .alpha(if (canSend) 1f else 0.34f),
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.ArrowUpward,
-                    contentDescription = stringResource(R.string.terminal_send),
-                    modifier = Modifier.size(19.dp),
-                    tint = MiuixTheme.colorScheme.onSurface,
-                )
-            }
-        },
-    )
+            .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp),
+    ) {
+        if (cwd.isNotEmpty()) {
+            Text(
+                text = cwd,
+                style = MiuixTheme.textStyles.footnote2.copy(fontFamily = EtaMonospace),
+                color = colors.onSurfaceVariantSummary,
+                maxLines = 1,
+                overflow = TextOverflow.StartEllipsis,
+                modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 6.dp),
+            )
+        }
+        TextField(
+            value = input,
+            onValueChange = onInputChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = stringResource(
+                if (running) R.string.terminal_input_running_hint else R.string.terminal_input_hint,
+            ),
+            useLabelAsPlaceholder = true,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Send,
+                autoCorrectEnabled = false,
+            ),
+            keyboardActions = KeyboardActions(onSend = { onSubmit() }),
+            textStyle = MiuixTheme.textStyles.body2.copy(fontFamily = EtaMonospace),
+            trailingIcon = {
+                val stopMode = running && !canSend
+                IconButton(
+                    onClick = if (stopMode) onStop else onSubmit,
+                    enabled = stopMode || canSend,
+                    minWidth = 36.dp,
+                    minHeight = 36.dp,
+                    backgroundColor = when {
+                        stopMode -> colors.error.copy(alpha = 0.12f)
+                        canSend -> colors.primary
+                        else -> Color.Transparent
+                    },
+                    cornerRadius = 18.dp,
+                    modifier = Modifier.padding(end = 8.dp),
+                ) {
+                    Icon(
+                        imageVector = if (stopMode) Icons.Rounded.Stop else Icons.Rounded.ArrowUpward,
+                        contentDescription = stringResource(
+                            if (stopMode) R.string.terminal_stop else R.string.terminal_send,
+                        ),
+                        modifier = Modifier.size(18.dp),
+                        tint = when {
+                            stopMode -> colors.error
+                            canSend -> colors.onPrimary
+                            else -> colors.onSurfaceVariantSummary.copy(alpha = 0.5f)
+                        },
+                    )
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun LinuxGuide(onOpenEnvironment: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = stringResource(R.string.terminal_linux_not_ready),
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            textAlign = TextAlign.Center,
-        )
-        EtaTextButton(
-            text = stringResource(R.string.terminal_open_environment),
-            onClick = onOpenEnvironment,
-            modifier = Modifier.padding(top = 12.dp),
-        )
-    }
+    TerminalPlaceholder(
+        icon = Icons.Rounded.Terminal,
+        message = stringResource(R.string.terminal_linux_not_ready),
+        actionText = stringResource(R.string.terminal_open_environment),
+        onAction = onOpenEnvironment,
+    )
 }
 
 @Composable
 private fun EmptyHint(message: String? = null) {
-    Box(
-        modifier = Modifier
+    TerminalPlaceholder(
+        icon = Icons.Rounded.Terminal,
+        message = message ?: stringResource(R.string.terminal_empty_hint),
+    )
+}
+
+/** 终端区域的居中占位：空态、环境未就绪与会话断开共用同一种层级与留白。 */
+@Composable
+internal fun TerminalPlaceholder(
+    icon: ImageVector,
+    message: String,
+    modifier: Modifier = Modifier,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
+    secondaryActionText: String? = null,
+    onSecondaryAction: (() -> Unit)? = null,
+) {
+    val colors = MiuixTheme.colorScheme
+    Column(
+        modifier = modifier
             .fillMaxSize()
-            .padding(32.dp),
-        contentAlignment = Alignment.Center,
+            .padding(horizontal = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .squircleBackground(colors.surfaceContainer, 16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(26.dp),
+                tint = colors.onSurfaceVariantSummary,
+            )
+        }
         Text(
-            text = message ?: stringResource(R.string.terminal_empty_hint),
+            text = message,
             style = MiuixTheme.textStyles.footnote1,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            color = colors.onSurfaceVariantSummary,
             textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 14.dp),
         )
+        if (actionText != null && onAction != null) {
+            EtaTextButton(
+                text = actionText,
+                onClick = onAction,
+                colors = ButtonDefaults.textButtonColorsPrimary(),
+                modifier = Modifier.padding(top = 18.dp),
+            )
+        }
+        if (secondaryActionText != null && onSecondaryAction != null) {
+            EtaTextButton(
+                text = secondaryActionText,
+                onClick = onSecondaryAction,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }

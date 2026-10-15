@@ -4,26 +4,29 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.SearchOff
+import androidx.compose.material.icons.rounded.TheaterComedy
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import io.github.mangi.eta.agent.roleplay.CharacterProfile
 import io.github.mangi.eta.ui.app.CharacterLibraryStore
 import io.github.mangi.eta.ui.components.EtaArrowPreference
-import io.github.mangi.eta.ui.components.EtaCard
+import io.github.mangi.eta.ui.components.EtaPreferenceColors
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
+import io.github.mangi.eta.ui.components.EtaPreferenceIcon
 import io.github.mangi.eta.ui.components.EtaTextButton
 import io.github.mangi.eta.ui.components.ListEmptyState
 import io.github.mangi.eta.ui.components.MiuixScaffoldPage
@@ -36,9 +39,9 @@ import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.SearchBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 internal val CharacterCardPadding = 16.dp
+private val CharacterGridSpacing = 12.dp
 
 @Composable
 internal fun CharacterLibraryScreen(
@@ -72,7 +75,10 @@ internal fun CharacterLibraryScreen(
             SearchBar(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = CharacterCardPadding, vertical = 4.dp),
+                    .padding(horizontal = CharacterCardPadding)
+                    .padding(top = 4.dp, bottom = 12.dp),
+                // 去掉组件自带的横向内边距，让搜索框与下方卡片左右对齐。
+                insideMargin = DpSize(0.dp, 0.dp),
                 expanded = false,
                 onExpandedChange = {},
                 inputField = {
@@ -104,6 +110,7 @@ internal fun CharacterLibraryScreen(
                     ListEmptyState(
                         title = "还没有角色",
                         summary = "创建一个角色，或导入 PNG、JSON 角色卡开始对话",
+                        icon = Icons.Rounded.TheaterComedy,
                         action = {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 EtaTextButton(
@@ -126,49 +133,51 @@ internal fun CharacterLibraryScreen(
                     ListEmptyState(
                         title = "没有找到匹配的角色",
                         summary = "换个关键词试试，搜索会匹配名称与标签",
+                        icon = Icons.Rounded.SearchOff,
                     )
                 }
             }
         }
-        items(store.filteredCharacters, key = { it.id }) { profile ->
-            EtaCard(
+        // 两列竖版卡片：每行一个 Lazy 项，长列表仍按行组合。未搜索时末尾追加一张新建卡，
+        // 既补齐单数时的空位，也让创建与导入在网格中就近可达。
+        val showAddTile = store.query.isBlank() && store.characters.isNotEmpty()
+        val tiles: List<CharacterProfile?> = store.filteredCharacters + if (showAddTile) listOf(null) else emptyList()
+        val rows = tiles.chunked(2)
+        items(rows, key = { row -> row.joinToString("|") { it?.id ?: "add" } }) { row ->
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = CharacterCardPadding, vertical = 8.dp),
-                insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                pressFeedbackType = PressFeedbackType.Sink,
-                onClick = { if (!store.busy) onNavigate(AppRoute.CharacterDetail(profile.id)) },
+                    .padding(horizontal = CharacterCardPadding)
+                    .padding(bottom = CharacterGridSpacing),
+                horizontalArrangement = Arrangement.spacedBy(CharacterGridSpacing),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(
-                        text = profile.card.name,
-                        style = MiuixTheme.textStyles.body1,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = profile.card.description.ifBlank {
-                            profile.card.tags.joinToString(" · ")
-                        },
-                        style = MiuixTheme.textStyles.body2,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    )
+                row.forEach { profile ->
+                    if (profile == null) {
+                        CharacterAddTile(
+                            enabled = !store.busy,
+                            onCreate = createCharacter,
+                            onImport = importCard,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        CharacterPortraitCard(
+                            profile = profile,
+                            onClick = { if (!store.busy) onNavigate(AppRoute.CharacterDetail(profile.id)) },
+                            onToggleFavorite = { store.toggleFavorite(profile.id) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
         item(key = "persona-title") { EtaPreferenceGroupTitle("我的") }
         item(key = "persona") {
-            EtaPreferenceGroup(
-                modifier = Modifier
-                    .padding(horizontal = CharacterCardPadding)
-                    .padding(bottom = 16.dp),
-            ) {
+            EtaPreferenceGroup {
                 EtaArrowPreference(
                     title = "我的人设",
-                    summary = "设置角色如何称呼你，以及你在故事中的身份",
+                    startAction = { EtaPreferenceIcon(Icons.Rounded.Face, tint = EtaPreferenceColors.Blue) },
+                    summary = "角色对你的称呼与你在故事中的身份",
                     onClick = { onNavigate(AppRoute.CharacterPersona) },
                 )
             }

@@ -28,9 +28,7 @@ internal fun SpeechOssScreen(onBack: () -> Unit) {
         modifier = Modifier.imePadding(),
     ) {
         if (!store.loaded) {
-            item(key = "loading") {
-                SpeechNote(store.message ?: stringResource(R.string.speech_loading))
-            }
+            item(key = "loading") { SpeechLoadingState(store.message) }
             return@MiuixScaffoldPage
         }
         item(key = "note") {

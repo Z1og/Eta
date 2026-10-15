@@ -8,6 +8,7 @@ import io.github.mangi.eta.EtaApp
 import io.github.mangi.eta.agent.accessibility.AgentAccessibilityService
 import io.github.mangi.eta.agent.accessibility.AccessibilityProtectionClient
 import io.github.mangi.eta.agent.device.AgentNotificationHistoryService
+import io.github.mangi.eta.agent.device.RootAccessState
 import io.github.mangi.eta.agent.device.RootAccess
 import java.util.Locale
 import org.json.JSONArray
@@ -15,6 +16,7 @@ import org.json.JSONArray
 /** 每轮冻结的运行条件；不包含用户开关，也不触发授权请求。 */
 internal data class AgentToolCapabilities(
     val rootAvailable: Boolean,
+    val rootState: RootAccessState? = null,
     val lsposedAvailable: Boolean = false,
     val accessibilityAvailable: Boolean = true,
     val accessibilityRecoveryAvailable: Boolean = false,
@@ -73,25 +75,29 @@ internal data class AgentToolCapabilities(
         fun isColorOsDevice(): Boolean = Build.MANUFACTURER.lowercase(Locale.ROOT) in
             setOf("oppo", "oneplus", "realme")
 
-        fun capture(context: Context): AgentToolCapabilities = AgentToolCapabilities(
-            rootAvailable = RootAccess.isGranted,
-            lsposedAvailable = EtaApp.serviceInstance != null,
-            accessibilityAvailable = AgentAccessibilityService.isAvailable(),
-            accessibilityRecoveryAvailable = EtaApp.serviceInstance != null &&
-                AccessibilityProtectionClient.isEnabled(context),
-            notificationsAllowed = AgentNotificationHistoryService.isEnabled(context),
-            usageAllowed = AgentPersonalContextTools.hasUsageAccess(context),
-            locationAllowed = context.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED &&
-                (context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                    context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED),
-            colorOs = isColorOsDevice(),
-            calendarReadable = io.github.mangi.eta.agent.device.CalendarPermissions.granted(context, false),
-            calendarWritable = io.github.mangi.eta.agent.device.CalendarPermissions.granted(context, true),
-            flashlightAvailable = context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH),
-            hotspotAvailable = Build.VERSION.SDK_INT >= 36,
-            nfcAvailable = context.packageManager.hasSystemFeature(PackageManager.FEATURE_NFC),
-            nightLightAvailable = context.resources.getIdentifier("config_nightDisplayAvailable", "bool", "android").let { it != 0 && context.resources.getBoolean(it) },
-        )
+        fun capture(context: Context): AgentToolCapabilities {
+            val root = RootAccess.state.value
+            return AgentToolCapabilities(
+                rootAvailable = root.isGranted,
+                rootState = root,
+                lsposedAvailable = EtaApp.serviceInstance != null,
+                accessibilityAvailable = AgentAccessibilityService.isAvailable(),
+                accessibilityRecoveryAvailable = EtaApp.serviceInstance != null &&
+                    AccessibilityProtectionClient.isEnabled(context),
+                notificationsAllowed = AgentNotificationHistoryService.isEnabled(context),
+                usageAllowed = AgentPersonalContextTools.hasUsageAccess(context),
+                locationAllowed = context.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
+                    PackageManager.PERMISSION_GRANTED &&
+                    (context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                        context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED),
+                colorOs = isColorOsDevice(),
+                calendarReadable = io.github.mangi.eta.agent.device.CalendarPermissions.granted(context, false),
+                calendarWritable = io.github.mangi.eta.agent.device.CalendarPermissions.granted(context, true),
+                flashlightAvailable = context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH),
+                hotspotAvailable = Build.VERSION.SDK_INT >= 36,
+                nfcAvailable = context.packageManager.hasSystemFeature(PackageManager.FEATURE_NFC),
+                nightLightAvailable = context.resources.getIdentifier("config_nightDisplayAvailable", "bool", "android").let { it != 0 && context.resources.getBoolean(it) },
+            )
+        }
     }
 }

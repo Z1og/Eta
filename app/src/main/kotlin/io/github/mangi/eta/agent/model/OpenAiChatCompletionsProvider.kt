@@ -395,10 +395,12 @@ internal object OpenAiChatCompletionsProvider : AgentProviderClient {
                 "output_tokens_details",
                 childKey = "reasoning_tokens"
             ),
+            // 兼容端点各用各的字段：OpenAI 嵌套在 prompt_tokens_details，DeepSeek 为 prompt_cache_hit_tokens，
+            // 部分端点直接放在顶层 cached_tokens。
             cachedTokens = usage.firstNestedInt(
                 "prompt_tokens_details",
                 childKey = "cached_tokens"
-            ) ?: usage.firstInt("cache_read_input_tokens")
+            ) ?: usage.firstInt("cache_read_input_tokens", "prompt_cache_hit_tokens", "cached_tokens")
         ).takeUnless { it.isEmpty }
     }
 

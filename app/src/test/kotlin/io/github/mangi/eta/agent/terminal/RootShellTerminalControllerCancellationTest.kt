@@ -9,9 +9,17 @@ import kotlin.concurrent.thread
 import org.json.JSONObject
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Test
 
 class RootShellTerminalControllerCancellationTest {
+    private val hosts = mutableListOf<BackgroundTerminalJobs>()
+    private val taskDirectories = mutableListOf<File>()
+    @After fun closeBackgroundHosts() {
+        hosts.forEach { it.close() }
+        taskDirectories.forEach { it.deleteRecursively() }
+    }
+
     @Test
     fun interruptAllStopsSynchronousCommandWithoutWaitingForTimeout() {
         val controller = RootShellTerminalController(NoOpLogger)
@@ -21,12 +29,12 @@ class RootShellTerminalControllerCancellationTest {
         val worker = thread(name = "terminal-cancel-test", isDaemon = true) {
             entered.countDown()
             result.set(
-                controller.terminalOpenAndExec(
-                    command = "sleep 30",
-                    cwd = System.getProperty("java.io.tmpdir"),
-                    timeoutMs = 30_000,
-                    identity = "user",
-                    mergeStderr = false,
+                controller.executeTool("terminal", JSONObject().put("action", "exec")
+                    .put("command", "sleep 30")
+                    .put("cwd", System.getProperty("java.io.tmpdir"))
+                    .put("timeout_ms", 30_000)
+                    .put("identity", "user")
+                    .put("merge_stderr", false)
                 )
             )
             finished.countDown()
@@ -52,12 +60,12 @@ class RootShellTerminalControllerCancellationTest {
         val result = AtomicReference<String>()
         val worker = thread(name = "terminal-child-cancel-test", isDaemon = true) {
             result.set(
-                controller.terminalOpenAndExec(
-                    command = "sleep 30 & echo ${'$'}! > ${shellQuote(childPidFile.absolutePath)}; wait",
-                    cwd = System.getProperty("java.io.tmpdir"),
-                    timeoutMs = 30_000,
-                    identity = "user",
-                    mergeStderr = false,
+                controller.executeTool("terminal", JSONObject().put("action", "exec")
+                    .put("command", "sleep 30 & echo ${'$'}! > ${shellQuote(childPidFile.absolutePath)}; wait")
+                    .put("cwd", System.getProperty("java.io.tmpdir"))
+                    .put("timeout_ms", 30_000)
+                    .put("identity", "user")
+                    .put("merge_stderr", false)
                 )
             )
             finished.countDown()
@@ -80,30 +88,23 @@ class RootShellTerminalControllerCancellationTest {
     }
 
     @Test
-    fun completedAsyncJobCleansGrandchildProcess() {
+    fun completedBackgroundJobCleansGrandchildProcess() {
         val controller = newIsolatedGroupController()
         try {
             val started = JSONObject(
-                controller.terminalAction(
-                    action = "open_and_exec",
-                    command = "sh -c 'sleep 30 & echo CHILD_PID=${'$'}!' &",
-                    cwd = System.getProperty("java.io.tmpdir"),
-                    timeoutMs = 30_000,
-                    identity = "user",
-                    mergeStderr = false,
-                    sessionId = null,
-                    jobId = null,
-                    async = true,
-                    offsetChars = 0,
-                    maxChars = 16_000,
-                    closeIfDone = false,
+                controller.executeTool("terminal_job", JSONObject().put("action", "start")
+                    .put("command", "sh -c 'sleep 30 & echo CHILD_PID=${'$'}!' &")
+                    .put("cwd", System.getProperty("java.io.tmpdir"))
+                    .put("timeout_ms", 30_000)
+                    .put("identity", "user")
+                    .put("merge_stderr", false)
                 )
             )
-            assertTrue(started.getBoolean("ok"))
+            assertTrue(started.toString(), started.getBoolean("ok"))
 
             val completed = waitForAsyncResult(controller, started.getString("job_id"))
             val childPid = Regex("CHILD_PID=(\\d+)")
-                .find(completed.getString("stdout"))
+                .find(completed.getString("output"))
                 ?.groupValues
                 ?.get(1)
                 ?.toLong()
@@ -154,19 +155,11 @@ class RootShellTerminalControllerCancellationTest {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
         do {
             val result = JSONObject(
-                controller.terminalAction(
-                    action = "read_async_result",
-                    command = "",
-                    cwd = null,
-                    timeoutMs = 1_000,
-                    identity = "user",
-                    mergeStderr = false,
-                    sessionId = null,
-                    jobId = jobId,
-                    async = false,
-                    offsetChars = 0,
-                    maxChars = 16_000,
-                    closeIfDone = false,
+                controller.executeTool("terminal_job", JSONObject().put("action", "read")
+                    .put("job_id", jobId)
+                    .put("offset_chars", 0)
+                    .put("max_chars", 16_000)
+                    .put("close_if_done", false)
                 )
             )
             if (!result.getBoolean("running")) return result
@@ -203,8 +196,15 @@ class RootShellTerminalControllerCancellationTest {
             check(setExecutable(true))
             deleteOnExit()
         }
+        val directory = java.nio.file.Files.createTempDirectory("eta-background-test").toFile().also { taskDirectories += it }
+        val supervisor = DetachedTaskSupervisor(NoOpLogger, File(directory, "tasks.json"),
+            daemonDir = File(directory, "logs").path,
+            oneShotSupervisor = ShellProcessSupervisor(allowTreeFallback = false, setsidCommand = setsid.absolutePath))
+        val jobs = BackgroundTerminalJobs(supervisor, NoOpLogger).also { hosts += it }
         return RootShellTerminalController(
             logger = NoOpLogger,
+            detachedSupervisor = supervisor,
+            backgroundJobs = jobs,
             processSupervisor = ShellProcessSupervisor(
                 allowTreeFallback = false,
                 setsidCommand = setsid.absolutePath,

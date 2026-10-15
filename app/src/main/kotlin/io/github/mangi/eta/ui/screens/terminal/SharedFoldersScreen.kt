@@ -8,15 +8,24 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -27,9 +36,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.terminal.AlpineEnvironmentPaths
@@ -43,16 +53,23 @@ import io.github.mangi.eta.agent.terminal.TerminalRuntime
 import io.github.mangi.eta.agent.terminal.runOneShotShell
 import io.github.mangi.eta.agent.terminal.shellQuote
 import io.github.mangi.eta.ui.components.EtaCard
+import io.github.mangi.eta.ui.components.EtaMonospace
 import io.github.mangi.eta.ui.components.EtaPreference
+import io.github.mangi.eta.ui.components.EtaPreferenceColors
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
-import io.github.mangi.eta.ui.components.EtaTextButton
+import io.github.mangi.eta.ui.components.EtaPreferenceIcon
 import io.github.mangi.eta.ui.components.EtaWindowDialog
 import io.github.mangi.eta.ui.components.MiuixDialogActions
 import io.github.mangi.eta.ui.components.MiuixScaffoldPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -108,20 +125,16 @@ internal fun SharedFoldersScreen(
         onBack = onBack,
     ) {
         item(key = "mounts-card") {
-            EtaPreferenceGroup(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 16.dp),
-            ) {
+            EtaPreferenceGroup {
                 if (mounts.isEmpty()) {
                     EtaPreference(
                         title = stringResource(R.string.shared_folders_empty),
                         summary = stringResource(R.string.shared_folders_entry_summary),
                     )
                 }
-                mounts.forEach { mount ->
+                mounts.forEachIndexed { index, mount ->
                     val missing = sourceExists[mount.sourcePath] == false
-                    EtaPreferenceDivider(hasLeading = false)
+                    if (index > 0) EtaPreferenceDivider(hasLeading = false)
                     EtaPreference(
                         title = mount.name,
                         summary = buildString {
@@ -138,17 +151,28 @@ internal fun SharedFoldersScreen(
                                 append(context.getString(R.string.shared_folders_source_missing))
                             }
                         },
+                        summaryColor = BasicComponentDefaults.summaryColor(
+                            color = if (missing) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        ),
                         endActions = {
-                            EtaTextButton(
-                                text = stringResource(R.string.action_delete),
-                                onClick = { removeTarget = mount },
-                            )
+                            IconButton(onClick = { removeTarget = mount }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.DeleteOutline,
+                                    contentDescription = stringResource(R.string.action_delete),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                                )
+                            }
                         },
                     )
                 }
                 EtaPreferenceDivider(hasLeading = false)
                 EtaPreference(
                     title = stringResource(R.string.shared_folders_add),
+                    titleColor = BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.primary),
+                    startAction = {
+                        EtaPreferenceIcon(Icons.Rounded.Add, tint = MiuixTheme.colorScheme.primary)
+                    },
                     onClick = {
                         if (TerminalRuntime.rootAvailable || Environment.isExternalStorageManager()) {
                             showPicker = true
@@ -166,24 +190,34 @@ internal fun SharedFoldersScreen(
                 )
             }
         }
+        // 失败提示紧贴列表出现，比页脚说明更靠前，进出带动画避免列表跳动。
+        notice?.let { message ->
+            item(key = "notice-card") {
+                EtaPreferenceGroup(modifier = Modifier.animateItem().padding(horizontal = EtaPreferenceDefaults.SidePadding).padding(bottom = EtaPreferenceDefaults.GroupSpacing)) {
+                    EtaPreference(
+                        title = message,
+                        titleColor = BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.error),
+                        endActions = {
+                            IconButton(onClick = { notice = null }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = stringResource(R.string.action_close),
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+        }
         item(key = "footer-note") {
             Text(
                 text = stringResource(R.string.shared_folders_footer),
                 style = MiuixTheme.textStyles.footnote1,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.padding(horizontal = 24.dp),
+                modifier = Modifier.animateItem().padding(horizontal = 32.dp),
             )
-        }
-        notice?.let { message ->
-            item(key = "notice-card") {
-                EtaPreferenceGroup(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 12.dp),
-                ) {
-                    EtaPreference(title = message)
-                }
-            }
         }
     }
 
@@ -293,6 +327,7 @@ private fun SharedFolderPickerDialog(
         path = normalized
         pathInput = normalized
         browseError = null
+        formError = null
         if (!nameTouched) nameInput = SharedFolderMounts.defaultName(normalized)
     }
 
@@ -358,16 +393,34 @@ private fun SharedFolderPickerDialog(
                         )
                     }
                 }
-                items(entries.orEmpty(), key = { it }) { entry ->
-                    PickerRow(
-                        label = entry,
-                        onClick = { navigateTo(path.trimEnd('/') + "/" + entry) },
-                    )
+                when {
+                    entries == null -> item(key = "loading") {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            InfiniteProgressIndicator(size = 20.dp)
+                        }
+                    }
+                    entries.orEmpty().isEmpty() && browseError == null -> item(key = "empty") {
+                        Text(
+                            text = stringResource(R.string.shared_folders_picker_no_subfolders),
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
+                        )
+                    }
+                    else -> items(entries.orEmpty(), key = { it }) { entry ->
+                        PickerRow(
+                            label = entry,
+                            onClick = { navigateTo(path.trimEnd('/') + "/" + entry) },
+                        )
+                    }
                 }
             }
             Text(
                 text = stringResource(R.string.shared_folders_selected_source, path),
-                style = MiuixTheme.textStyles.footnote1.copy(fontFamily = FontFamily.Monospace),
+                style = MiuixTheme.textStyles.footnote1.copy(fontFamily = EtaMonospace),
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -376,6 +429,7 @@ private fun SharedFolderPickerDialog(
                 onValueChange = {
                     nameInput = it
                     nameTouched = true
+                    formError = null
                 },
                 label = stringResource(R.string.shared_folders_name_label),
                 singleLine = true,
@@ -434,14 +488,24 @@ private fun SharedFolderPickerDialog(
 private fun PickerRow(label: String, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 4.dp),
+            .padding(vertical = 10.dp, horizontal = 6.dp),
     ) {
+        Icon(
+            imageVector = Icons.Rounded.Folder,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = EtaPreferenceColors.Orange,
+        )
         Text(
             text = label,
-            style = MiuixTheme.textStyles.body2.copy(fontFamily = FontFamily.Monospace),
+            style = MiuixTheme.textStyles.body2.copy(fontFamily = EtaMonospace),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

@@ -2,13 +2,19 @@ package io.github.mangi.eta.ui.screens.terminal
 
 import android.content.Context
 import android.text.format.Formatter
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -16,9 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -28,11 +35,18 @@ import io.github.mangi.eta.agent.terminal.LinuxDistribution
 import io.github.mangi.eta.agent.terminal.LinuxEnvironmentPaths
 import io.github.mangi.eta.agent.terminal.LinuxFileExplorer
 import io.github.mangi.eta.agent.terminal.ShellProcessSupervisor
+import io.github.mangi.eta.ui.components.EtaCard
+import io.github.mangi.eta.ui.components.EtaMonospace
 import io.github.mangi.eta.ui.components.EtaPreference
+import io.github.mangi.eta.ui.components.EtaPreferenceColors
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
+import io.github.mangi.eta.ui.components.EtaPreferenceGroupItem
+import io.github.mangi.eta.ui.components.EtaPreferenceIcon
+import io.github.mangi.eta.ui.components.ListEmptyState
 import io.github.mangi.eta.ui.components.MiuixScaffoldPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -114,12 +128,12 @@ internal fun LinuxFilesScreen(
         when {
             linuxDistribution == null -> {
                 item(key = "invalid-distribution") {
-                    StateMessage(stringResource(R.string.linux_files_invalid_distribution))
+                    StateMessage(stringResource(R.string.linux_files_invalid_distribution), Icons.Rounded.ErrorOutline)
                 }
             }
             !installed -> {
                 item(key = "not-installed") {
-                    StateMessage(stringResource(R.string.linux_files_not_installed))
+                    StateMessage(stringResource(R.string.linux_files_not_installed), Icons.Rounded.Terminal)
                 }
             }
             openFilePath != null -> {
@@ -134,46 +148,56 @@ internal fun LinuxFilesScreen(
                             }
                         }
                         item(key = "viewer-content") {
-                            SelectionContainer {
-                                Text(
-                                    text = result.content,
-                                    style = MiuixTheme.textStyles.footnote1
-                                        .copy(fontFamily = FontFamily.Monospace),
-                                    modifier = Modifier.padding(horizontal = 24.dp),
-                                )
+                            EtaCard(
+                                modifier = Modifier
+                                    .padding(horizontal = EtaPreferenceDefaults.SidePadding)
+                                    .padding(bottom = EtaPreferenceDefaults.GroupSpacing),
+                                insideMargin = PaddingValues(16.dp),
+                            ) {
+                                SelectionContainer {
+                                    Text(
+                                        text = result.content,
+                                        style = MiuixTheme.textStyles.footnote1
+                                            .copy(fontFamily = EtaMonospace),
+                                    )
+                                }
                             }
                         }
                     }
                     LinuxFileExplorer.ReadResult.Binary -> {
                         item(key = "viewer-binary") {
-                            StateMessage(stringResource(R.string.linux_files_binary_hint))
+                            StateMessage(stringResource(R.string.linux_files_binary_hint), Icons.AutoMirrored.Rounded.InsertDriveFile)
                         }
                     }
                     LinuxFileExplorer.ReadResult.NotFile -> {
                         item(key = "viewer-not-file") {
-                            StateMessage(stringResource(R.string.linux_files_error_not_file))
+                            StateMessage(stringResource(R.string.linux_files_error_not_file), Icons.Rounded.ErrorOutline)
                         }
                     }
                     LinuxFileExplorer.ReadResult.Unreadable,
                     LinuxFileExplorer.ReadResult.CommandFailed,
                     LinuxFileExplorer.ReadResult.NotInstalled -> {
                         item(key = "viewer-error") {
-                            StateMessage(stringResource(R.string.linux_files_error_unreadable))
+                            StateMessage(stringResource(R.string.linux_files_error_unreadable), Icons.Rounded.ErrorOutline)
                         }
                     }
-                    null -> Unit
+                    null -> item(key = "viewer-loading") { LoadingRow() }
                 }
             }
             else -> {
                 item(key = "path-bar") {
                     PathBar(currentPath)
                 }
-                if (currentPath != "/") {
+                val currentEntries = entries
+                val hasParent = currentPath != "/"
+                if (hasParent) {
                     item(key = "..") {
                         FileRow(
                             name = "../",
                             isDir = true,
                             summary = null,
+                            isFirst = true,
+                            isLast = currentEntries.isNullOrEmpty() || listError != null,
                             onClick = {
                                 currentPath = currentPath.trimEnd('/')
                                     .substringBeforeLast('/')
@@ -182,23 +206,27 @@ internal fun LinuxFilesScreen(
                         )
                     }
                 }
-                val currentEntries = entries
                 when {
                     listError != null -> {
                         item(key = "list-error") {
-                            StateMessage(stringResource(listError ?: R.string.linux_files_error_unreadable))
+                            StateMessage(stringResource(listError ?: R.string.linux_files_error_unreadable), Icons.Rounded.ErrorOutline)
                         }
                     }
-                    currentEntries != null && currentEntries.isEmpty() -> {
+                    currentEntries == null -> {
+                        item(key = "list-loading") { LoadingRow() }
+                    }
+                    currentEntries.isEmpty() -> {
                         item(key = "list-empty") {
-                            StateMessage(stringResource(R.string.linux_files_empty))
+                            StateMessage(stringResource(R.string.linux_files_empty), Icons.Rounded.FolderOpen)
                         }
                     }
-                    currentEntries != null -> {
-                        items(currentEntries, key = { it.name }) { entry ->
+                    else -> {
+                        itemsIndexed(currentEntries, key = { _, entry -> entry.name }) { index, entry ->
                             FileRow(
                                 name = entry.name,
                                 isDir = entry.isDir,
+                                isFirst = index == 0 && !hasParent,
+                                isLast = index == currentEntries.lastIndex,
                                 summary = if (entry.isDir) {
                                     null
                                 } else {
@@ -221,26 +249,32 @@ internal fun LinuxFilesScreen(
     }
 }
 
+/** 路径与提示文字和分组标题同一起点。 */
 @Composable
 private fun PathBar(path: String) {
     Text(
         text = path,
-        style = MiuixTheme.textStyles.body2.copy(fontFamily = FontFamily.Monospace),
+        style = MiuixTheme.textStyles.body2.copy(fontFamily = EtaMonospace),
         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         modifier = Modifier
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 8.dp),
+            .padding(horizontal = 32.dp)
+            .padding(top = 4.dp, bottom = 8.dp),
     )
 }
 
 @Composable
-private fun StateMessage(message: String) {
-    Text(
-        text = message,
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        modifier = Modifier.padding(horizontal = 24.dp),
-    )
+private fun StateMessage(message: String, icon: ImageVector) {
+    ListEmptyState(title = message, icon = icon)
+}
+
+@Composable
+private fun LoadingRow() {
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        InfiniteProgressIndicator(size = 24.dp)
+    }
 }
 
 @Composable
@@ -250,7 +284,7 @@ private fun HintText(message: String) {
         style = MiuixTheme.textStyles.footnote1,
         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         modifier = Modifier
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 32.dp)
             .padding(bottom = 8.dp),
     )
 }
@@ -260,21 +294,21 @@ private fun FileRow(
     name: String,
     isDir: Boolean,
     summary: String?,
+    isFirst: Boolean,
+    isLast: Boolean,
     onClick: () -> Unit,
 ) {
-    EtaPreference(
-        title = name,
-        summary = summary,
-        startAction = {
-            Icon(
-                imageVector = if (isDir) Icons.Rounded.Folder else Icons.AutoMirrored.Rounded.InsertDriveFile,
-                contentDescription = null,
-                modifier = Modifier
-                    .padding(end = 12.dp)
-                    .size(20.dp),
-                tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
-            )
-        },
-        onClick = onClick,
-    )
+    EtaPreferenceGroupItem(isFirst = isFirst, isLast = isLast, hasLeading = true) {
+        EtaPreference(
+            title = name,
+            summary = summary,
+            startAction = {
+                EtaPreferenceIcon(
+                    icon = if (isDir) Icons.Rounded.Folder else Icons.AutoMirrored.Rounded.InsertDriveFile,
+                    tint = if (isDir) EtaPreferenceColors.Orange else MiuixTheme.colorScheme.onSurfaceVariantActions,
+                )
+            },
+            onClick = onClick,
+        )
+    }
 }

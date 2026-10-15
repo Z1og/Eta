@@ -8,9 +8,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,12 +35,13 @@ import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaCheckboxPreference
 import io.github.mangi.eta.ui.components.EtaPreference
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
+import io.github.mangi.eta.ui.components.EtaPreferenceGroupItem
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
 import io.github.mangi.eta.ui.components.EtaTextButton
 import io.github.mangi.eta.ui.components.ListEmptyState
 import io.github.mangi.eta.ui.components.MiuixScaffoldPage
-import io.github.mangi.eta.ui.navigation.AppRoute
 import io.github.mangi.eta.ui.model.formatCompactTokenCount
+import io.github.mangi.eta.ui.navigation.AppRoute
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.CancellationException
@@ -140,6 +144,7 @@ internal fun CommunityCatalogScreen(
                 ListEmptyState(
                     title = if (catalog == null) "没有可用的目录" else "没有找到匹配的提供商",
                     summary = if (catalog == null) "点击右上角刷新后重试" else "试试其他名称或地址",
+                    icon = if (catalog == null) Icons.Rounded.CloudOff else Icons.Rounded.SearchOff,
                 )
             }
         } else {
@@ -147,8 +152,8 @@ internal fun CommunityCatalogScreen(
                 EtaCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 5.dp),
-                    insideMargin = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     pressFeedbackType = PressFeedbackType.Sink,
                     onClick = { onNavigate(AppRoute.CommunityCatalogProvider(provider.id)) },
                 ) {
@@ -332,12 +337,11 @@ internal fun CommunityCatalogProviderScreen(
                 ListEmptyState(title = "没有找到匹配的模型")
             }
         } else {
-            items(filteredModels, key = { "model:${it.modelId}" }, contentType = { "model" }) { model ->
-                EtaCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    insideMargin = PaddingValues(0.dp),
+            // 与提供商自己的模型页一致：逐项组合，画成一个连续分组。
+            itemsIndexed(filteredModels, key = { _, model -> "model:${model.modelId}" }, contentType = { _, _ -> "model" }) { index, model ->
+                EtaPreferenceGroupItem(
+                    isFirst = index == 0,
+                    isLast = index == filteredModels.lastIndex,
                 ) {
                     EtaCheckboxPreference(
                         title = model.displayName,

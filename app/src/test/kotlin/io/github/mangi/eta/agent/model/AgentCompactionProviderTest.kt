@@ -52,7 +52,7 @@ class AgentCompactionProviderTest {
                 }
                 val body = captured.get()
                 assertFalse(body.toString().contains("_eta_message_id"))
-                if (role == "system") assertTrue(body.getString("system").contains("深度设定")) else {
+                if (role == "system") assertTrue(body.getJSONArray("system").getJSONObject(0).getString("text").contains("深度设定")) else {
                     val text = body.getJSONArray("messages").toString()
                     assertTrue(text.indexOf("第一句") < text.indexOf("深度设定"))
                     assertTrue(text.indexOf("深度设定") < text.indexOf("第二句"))

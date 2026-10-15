@@ -19,20 +19,22 @@ class PersonalContextRequestTest {
         assertEquals(PersonalContextSort.NEWEST, search.sort)
     }
 
-    @Test fun actionSpecificFieldsAndUnknownSourcesAreRejected() {
+    @Test fun missingAndUnsupportedSourcesAreRejected() {
         val invalid = listOf(
-            """{"action":"sources","query":"内容"}""",
             """{"action":"search"}""",
             """{"action":"search","source":"flash_notes"}""",
             """{"action":"search","source":"localApp"}""",
-            """{"action":"search","source":"notes","id":"1"}""",
-            """{"action":"read","source":"notes","id":"1","limit":1}""",
-            """{"action":"count","source":"notes","sort":"oldest"}""",
             """{"action":"bill_summary","source":"notes"}""",
-            """{"action":"bill_summary","source":"bills","offset":0}""",
         )
         invalid.forEach { expectInvalid { parse(it) } }
         assertEquals(PersonalContextAction.BILL_SUMMARY, parse("""{"action":"bill_summary","source":"bills"}""").action)
+    }
+
+    @Test fun extraFieldsDoNotChangeTheSelectedOperation() {
+        val request = parse("""{"action":"read","source":"notes","id":"1","limit":1,"extra":true}""")
+        assertEquals(PersonalContextAction.READ, request.action)
+        assertEquals("notes", request.source?.id)
+        assertEquals("1", request.id)
     }
 
     @Test fun stableIdsAreNonnegativeIntegerTextWithinLongRange() {

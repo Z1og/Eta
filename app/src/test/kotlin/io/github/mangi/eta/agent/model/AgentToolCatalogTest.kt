@@ -158,8 +158,8 @@ class AgentToolCatalogTest {
             .getJSONObject("environment")
 
         assertEquals(listOf("android", "linux"), environment.getJSONArray("enum").stringValues())
-        assertTrue(terminal.getString("description").contains("environment=android"))
-        assertTrue(terminal.getString("description").contains("environment=linux"))
+        assertTrue(environment.getString("description").contains("android"))
+        assertTrue(environment.getString("description").contains("linux"))
     }
 
     @Test
@@ -222,6 +222,8 @@ class AgentToolCatalogTest {
         val TERMINAL_TOOLS = setOf(
             "read_image",
             "terminal",
+            "terminal_job",
+            "terminal_daemon",
             "read_file",
             "edit_file",
             "stat_file",

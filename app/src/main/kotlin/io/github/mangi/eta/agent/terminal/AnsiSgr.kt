@@ -11,9 +11,12 @@ internal data class SgrStyle(
     val dim: Boolean = false,
     val italic: Boolean = false,
     val underline: Boolean = false,
+    /** 反显：前景与背景互换，TUI 用它标记列表选中项与光标所在条目。 */
+    val inverse: Boolean = false,
+    val strikethrough: Boolean = false,
 ) {
     val isPlain: Boolean
-        get() = fg == null && bg == null && !bold && !dim && !italic && !underline
+        get() = fg == null && bg == null && !bold && !dim && !italic && !underline && !inverse && !strikethrough
 
     companion object {
         val PLAIN = SgrStyle()
@@ -23,58 +26,89 @@ internal data class SgrStyle(
 /** SGR 参数序列解释器；[params] 为 CSI 与结尾 m 之间的原文（空串等价于 0）。 */
 internal object AnsiSgr {
 
+    /**
+     * 参数以 ; 分组、组内以 : 分隔子参数（ITU T.416），两种扩展颜色写法都要识别：
+     * `38;5;n` / `38;2;r;g;b` 跨组读取，`38:5:n` / `38:2::r:g:b` 只在组内读取。
+     * 子参数不能当作独立参数解释，否则 `4:3`（波浪下划线）会被误读成下划线加斜体。
+     */
     fun apply(params: String, style: SgrStyle): SgrStyle {
-        // 分隔符同时兼容 ; 与 :（部分程序以冒号发 truecolor 子参数）。
-        val tokens = if (params.isEmpty()) {
-            listOf(0)
+        val groups = if (params.isEmpty()) {
+            listOf(listOf(0))
         } else {
-            params.split(';', ':').map { it.toIntOrNull() ?: 0 }
+            params.split(';').map { group -> group.split(':').map { it.toIntOrNull() ?: 0 } }
         }
         var current = style
         var k = 0
-        while (k < tokens.size) {
-            when (val p = tokens[k]) {
+        while (k < groups.size) {
+            val group = groups[k]
+            val code = group[0]
+            when (code) {
                 0 -> current = SgrStyle.PLAIN
                 1 -> current = current.copy(bold = true)
                 2 -> current = current.copy(dim = true)
                 3 -> current = current.copy(italic = true)
-                4 -> current = current.copy(underline = true)
+                4 -> current = current.copy(underline = group.getOrNull(1) != 0)
+                7 -> current = current.copy(inverse = true)
+                9 -> current = current.copy(strikethrough = true)
+                21 -> current = current.copy(underline = true)
                 22 -> current = current.copy(bold = false, dim = false)
                 23 -> current = current.copy(italic = false)
                 24 -> current = current.copy(underline = false)
-                in 30..37 -> current = current.copy(fg = STANDARD[p - 30])
-                38 -> readExtendedColor(tokens, k)?.let { (color, consumed) ->
-                    current = current.copy(fg = color)
-                    k += consumed
-                }
+                27 -> current = current.copy(inverse = false)
+                29 -> current = current.copy(strikethrough = false)
+                in 30..37 -> current = current.copy(fg = STANDARD[code - 30])
                 39 -> current = current.copy(fg = null)
-                in 40..47 -> current = current.copy(bg = STANDARD[p - 40])
-                48 -> readExtendedColor(tokens, k)?.let { (color, consumed) ->
-                    current = current.copy(bg = color)
+                in 40..47 -> current = current.copy(bg = STANDARD[code - 40])
+                49 -> current = current.copy(bg = null)
+                in 90..97 -> current = current.copy(fg = BRIGHT[code - 90])
+                in 100..107 -> current = current.copy(bg = BRIGHT[code - 100])
+                // 58 为下划线颜色：不渲染，但必须按同样规则吞掉其颜色参数。
+                38, 48, 58 -> {
+                    val (color, consumed) = if (group.size > 1) {
+                        readSubparameterColor(group) to 0
+                    } else {
+                        readLegacyColor(groups, k)
+                    }
+                    when (code) {
+                        38 -> color?.let { current = current.copy(fg = it) }
+                        48 -> color?.let { current = current.copy(bg = it) }
+                    }
                     k += consumed
                 }
-                49 -> current = current.copy(bg = null)
-                in 90..97 -> current = current.copy(fg = BRIGHT[p - 90])
-                in 100..107 -> current = current.copy(bg = BRIGHT[p - 100])
             }
             k++
         }
         return current
     }
 
-    /** 解析 38/48 的扩展颜色参数，返回颜色与额外消费的 token 数；参数不足时返回 null。 */
-    private fun readExtendedColor(tokens: List<Int>, index: Int): Pair<Long, Int>? =
-        when (tokens.getOrNull(index + 1)) {
-            5 -> tokens.getOrNull(index + 2)?.let { n -> color256(n)?.let { it to 2 } }
-            2 -> {
-                val r = tokens.getOrNull(index + 2) ?: return null
-                val g = tokens.getOrNull(index + 3) ?: return null
-                val b = tokens.getOrNull(index + 4) ?: return null
-                (0xFF000000L or (r.coerceIn(0, 255).toLong() shl 16) or
-                    (g.coerceIn(0, 255).toLong() shl 8) or b.coerceIn(0, 255).toLong()) to 4
-            }
-            else -> null
+    /** `38:5:n`、`38:2:r:g:b` 与带色彩空间 ID 的 `38:2::r:g:b`。 */
+    private fun readSubparameterColor(group: List<Int>): Long? = when (group.getOrNull(1)) {
+        5 -> group.getOrNull(2)?.let(::color256)
+        2 -> {
+            val rgb = if (group.size >= 6) group.subList(3, 6) else group.drop(2).take(3)
+            if (rgb.size == 3) rgb(rgb[0], rgb[1], rgb[2]) else null
         }
+        else -> null
+    }
+
+    /** `38;5;n` 与 `38;2;r;g;b`：返回颜色与额外消费的组数；参数不足时不消费。 */
+    private fun readLegacyColor(groups: List<List<Int>>, index: Int): Pair<Long?, Int> {
+        fun at(offset: Int): Int? = groups.getOrNull(index + offset)?.getOrNull(0)
+        return when (at(1)) {
+            5 -> at(2)?.let { color256(it) to 2 } ?: (null to 1)
+            2 -> {
+                val r = at(2)
+                val g = at(3)
+                val b = at(4)
+                if (r != null && g != null && b != null) rgb(r, g, b) to 4 else null to 1
+            }
+            else -> null to 0
+        }
+    }
+
+    private fun rgb(r: Int, g: Int, b: Int): Long =
+        0xFF000000L or (r.coerceIn(0, 255).toLong() shl 16) or
+            (g.coerceIn(0, 255).toLong() shl 8) or b.coerceIn(0, 255).toLong()
 
     fun color256(n: Int): Long? = when (n) {
         in 0..7 -> STANDARD[n]

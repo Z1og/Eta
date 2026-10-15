@@ -16,6 +16,14 @@ internal object TexMathDelimiters {
         var lineStart = 0
         var index = 0
         while (index < source.length) {
+            val char = source[index]
+            // 先消费换行，保证围栏分支跳到行尾时游标一定前进。
+            if (char == '\n') {
+                index += 1
+                lineStart = index
+                continue
+            }
+
             if (index == lineStart) {
                 val lineEnd = source.indexOf('\n', index).let { if (it < 0) source.length else it }
                 val marker = fenceMarker(source.substring(index, lineEnd))
@@ -33,12 +41,7 @@ internal object TexMathDelimiters {
                     continue
                 }
             }
-            val char = source[index]
             when {
-                char == '\n' -> {
-                    lineStart = index + 1
-                    index += 1
-                }
                 char == '`' -> {
                     val run = source.runLength(index, '`')
                     index = codeSpanEnd(source, index + run, run) ?: (index + run)

@@ -22,6 +22,7 @@ import io.github.mangi.eta.R
 import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaPreference
 import io.github.mangi.eta.ui.components.EtaPreferenceColors
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
@@ -124,13 +125,12 @@ fun AgentSkillsScreen(
                     },
                     startAction = {
                         if (state.isImporting) {
+                            // 加载态与图标同宽，切换时标题不横向跳动。
                             Box(
-                                modifier = Modifier
-                                    .padding(end = 6.dp)
-                                    .size(24.dp),
+                                modifier = Modifier.size(EtaPreferenceDefaults.IconSize),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                InfiniteProgressIndicator(size = 22.dp)
+                                InfiniteProgressIndicator(size = 20.dp)
                             }
                         } else {
                             EtaPreferenceIcon(Icons.Rounded.FolderZip, enabled = !operationPending, tint = EtaPreferenceColors.Orange)
@@ -212,11 +212,22 @@ fun AgentSkillsScreen(
             }
         }
 
+        if (state.skills.isEmpty() && state.isLoading) {
+            item(key = "loading") {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    InfiniteProgressIndicator(size = 24.dp)
+                }
+            }
+        }
         if (state.skills.isEmpty() && !state.isLoading) {
             item(key = "empty") {
                 ListEmptyState(
                     title = stringResource(R.string.ui_no_skills_installed_yet_4e960f),
                     summary = stringResource(R.string.skills_choose_package),
+                    icon = Icons.Rounded.FolderZip,
                     action = {
                         EtaTextButton(
                             text = stringResource(R.string.skills_import_zip),

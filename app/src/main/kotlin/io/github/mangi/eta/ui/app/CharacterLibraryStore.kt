@@ -8,12 +8,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.mangi.eta.agent.roleplay.CharacterBookDraft
 import io.github.mangi.eta.agent.roleplay.CharacterCard
 import io.github.mangi.eta.agent.roleplay.CharacterCardCodec
-import io.github.mangi.eta.agent.roleplay.CharacterCardFormat
-import io.github.mangi.eta.agent.roleplay.CharacterCardException
 import io.github.mangi.eta.agent.roleplay.CharacterCardCompatibility
-import io.github.mangi.eta.agent.roleplay.CharacterBookDraft
+import io.github.mangi.eta.agent.roleplay.CharacterCardException
+import io.github.mangi.eta.agent.roleplay.CharacterCardFormat
 import io.github.mangi.eta.agent.roleplay.CharacterProfile
 import io.github.mangi.eta.agent.roleplay.RoleplayBinding
 import io.github.mangi.eta.agent.roleplay.UserPersona
@@ -69,6 +69,7 @@ internal class CharacterLibraryStore(
     private var memoryCharacterId: String? = null
     private var memorySnapshot: AgentMemorySnapshot? = null
 
+    /** 收藏置顶，其余按最近更新排列；搜索同时匹配名称与标签。 */
     val filteredCharacters: List<CharacterProfile>
         get() {
             val term = query.trim()
@@ -76,7 +77,7 @@ internal class CharacterLibraryStore(
                 term.isEmpty() ||
                     it.card.name.contains(term, ignoreCase = true) ||
                     it.card.tags.any { tag -> tag.contains(term, ignoreCase = true) }
-            }
+            }.sortedWith(compareByDescending<CharacterProfile> { it.card.favorite }.thenByDescending { it.updatedAt })
         }
 
     fun loadLibrary() = runOperation("角色库读取失败，请重试", queueIfBusy = true) {
@@ -167,6 +168,23 @@ internal class CharacterLibraryStore(
         val profile = io { CharacterRepository.duplicate(id) }
         characters = io { CharacterRepository.list() }
         onDuplicated(profile.id)
+    }
+
+    fun toggleFavorite(id: String) = runOperation("收藏状态保存失败，请重试") {
+        val profile = io { CharacterRepository.get(id) } ?: error("CHARACTER_NOT_FOUND")
+        val saved = io { CharacterRepository.save(profile.copy(card = profile.card.withFavorite(!profile.card.favorite))) }
+        if (selected?.id == id) selected = saved
+        characters = io { CharacterRepository.list() }
+    }
+
+    /** 更换头像：图片统一转为 PNG 存入角色目录，导出 PNG 角色卡时即使用新头像。 */
+    fun changeAvatar(id: String, uri: Uri) = runOperation("头像更换失败，请换一张图片重试") {
+        val saved = io {
+            context.contentResolver.openInputStream(uri)?.use { CharacterRepository.replaceAvatar(id, it) }
+                ?: error("AVATAR_INPUT_UNAVAILABLE")
+        }
+        if (selected?.id == id) selected = saved
+        characters = io { CharacterRepository.list() }
     }
 
     fun restoreDefaultCharacter() = runOperation("默认角色恢复失败，请重试") {

@@ -2,8 +2,6 @@ package io.github.mangi.eta.agent.model
 
 import org.json.JSONArray
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -51,20 +49,6 @@ class AgentDeviceToolCatalogTest {
         assertFalse("personal_context" in reads)
         assertFalse("search_coloros_notes" in reads)
         assertFalse("search_coloros_memories" in reads)
-    }
-
-    @Test
-    fun inspectionAndLogQueryParametersHaveBoundedContracts() {
-        val tools = JSONArray()
-        AgentDeviceToolCatalog.appendTo(tools, directTools = true, sensitiveReadTools = true, sensitiveActionTools = true)
-        val validator = AgentToolCallValidator(tools)
-        fun validate(name: String, args: String) = validator.validate(AgentModelClient.ToolCall("test", name, args))
-        assertNull(validate("inspect_app", """{"package_name":"example.app","permission_offset":10,"permission_limit":100}"""))
-        assertNotNull(validate("inspect_app", """{"package_name":"example.app","permission_limit":201}"""))
-        assertNotNull(validate("inspect_app", """{"package_name":"example.app","user_id":-1}"""))
-        assertNull(validate("get_logcat", """{"pid":42,"tag":"Eta","level":"W","buffer":"crash","scan_lines":2000,"max_lines":20}"""))
-        assertNotNull(validate("get_logcat", """{"tag":"Eta;echo"}"""))
-        assertNotNull(validate("get_logcat", """{"scan_lines":10001}"""))
     }
 
     private fun names(

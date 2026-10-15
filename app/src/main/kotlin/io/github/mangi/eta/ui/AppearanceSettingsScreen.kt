@@ -206,18 +206,21 @@ internal fun AppearanceSettingsScreen(onBack: () -> Unit) {
                     enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
                     exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
                 ) {
-                    EtaPreferenceDivider(hasLeading = false)
-                    EtaOverlayDropdownPreference(
-                        title = stringResource(R.string.appearance_blur_style),
-                        summary = blurStyleSummaries[appearance.topBarBlurStyle.ordinal],
-                        items = blurStyleLabels,
-                        selectedIndex = appearance.topBarBlurStyle.ordinal,
-                        onSelectedIndexChange = { index ->
-                            blurStyles.getOrNull(index)?.let { style ->
-                                update { current -> current.copy(topBarBlurStyle = style) }
-                            }
-                        },
-                    )
+                    // AnimatedVisibility 的内容按层叠摆放，分割线和行必须包进 Column 才会上下排列。
+                    Column {
+                        EtaPreferenceDivider(hasLeading = false)
+                        EtaOverlayDropdownPreference(
+                            title = stringResource(R.string.appearance_blur_style),
+                            summary = blurStyleSummaries[appearance.topBarBlurStyle.ordinal],
+                            items = blurStyleLabels,
+                            selectedIndex = appearance.topBarBlurStyle.ordinal,
+                            onSelectedIndexChange = { index ->
+                                blurStyles.getOrNull(index)?.let { style ->
+                                    update { current -> current.copy(topBarBlurStyle = style) }
+                                }
+                            },
+                        )
+                    }
                 }
                 EtaPreferenceDivider(hasLeading = false)
                 EtaSwitchPreference(

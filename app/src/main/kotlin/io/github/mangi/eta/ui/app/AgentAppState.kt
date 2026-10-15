@@ -552,12 +552,16 @@ internal class AgentAppState(
         }
     }
 
-    suspend fun openAssistantConversation(conversationKey: String): Boolean {
-        if (conversationKey.isBlank()) return false
+    suspend fun openAssistantConversation(conversationKey: String): Boolean =
+        openArchivedConversation(AgentRuntimeWire.ETA_VOICE_HANDOFF_SOURCE, conversationKey)
+
+    /** 打开外部入口按 [source] 与 [conversationKey] 归档的会话；先导入尚未入库的归档结果。 */
+    suspend fun openArchivedConversation(source: String, conversationKey: String): Boolean {
+        if (source.isBlank() || conversationKey.isBlank()) return false
         importArchivedExternalRuns()
         return withContext(Dispatchers.Main.immediate) {
             val conversationId = archiveConversationId(
-                source = AgentRuntimeWire.ETA_VOICE_HANDOFF_SOURCE,
+                source = source,
                 conversationKey = conversationKey,
             )
             if (conversationsById[conversationId] == null) {
@@ -1779,6 +1783,7 @@ internal class AgentAppState(
                     updatedAtMillis = conversationUpdatedAt[id] ?: 0L,
                     mode = ConversationModeUi.Chat,
                     characterName = state.roleplay?.characterName,
+                    characterAvatarPath = state.roleplay?.avatarPath,
                     isActiveRun = state.isStreaming,
                 )
             }

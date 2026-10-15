@@ -11,6 +11,25 @@ class AgentTraceFormatterTest {
     private val formatter = AgentTraceFormatter()
 
     @Test
+    fun terminalLifecyclesHaveDistinctLabelsAndKeepCommandRedaction() {
+        listOf(
+            "terminal" to """{"command":"echo secret-marker"}""",
+            "terminal_job" to """{"action":"start","command":"echo secret-marker"}""",
+            "terminal_daemon" to """{"action":"start","command":"echo secret-marker"}""",
+        ).forEach { (name, args) ->
+            val call = AgentModelClient.ToolCall("task", name, args)
+            val summary = formatter.summarizeArguments(call)
+            assertFalse(summary.contains("secret-marker"))
+            val label = when (name) { "terminal_job" -> "异步命令"; "terminal_daemon" -> "后台服务"; else -> "终端" }
+            assertTrue(summary, summary.contains(label))
+            assertEquals("echo secret-marker", formatter.displayCommand(call))
+        }
+        val result = formatter.summarizeResult("terminal_job", AgentModelClient.ToolResult(
+            """{"ok":true,"tool":"terminal_job","action":"read","stdout":"done","exit_code":0}"""))
+        assertTrue(result, result.contains("done"))
+    }
+
+    @Test
     fun publicWebArgumentsExposeOnlyActionAndHost() {
         val search = formatter.summarizeArguments(AgentModelClient.ToolCall(
             "search", "web_search", """{"query":"private-query","max_results":3}""",

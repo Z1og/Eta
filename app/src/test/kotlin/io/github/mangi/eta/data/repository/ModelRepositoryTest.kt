@@ -78,6 +78,25 @@ class ModelRepositoryTest {
     }
 
     @Test
+    fun newRemoteModelsSkipsModelsAlreadyAddedIgnoringCase() = runBlocking {
+        ProviderRepository.addProvider(
+            provider(models = listOf(Model(id = "kept", modelId = "Qwen-Max", displayName = "Qwen Max"))),
+        )
+
+        val fresh = ModelRepository.newRemoteModels(
+            PROVIDER_ID,
+            listOf(
+                Model(id = "", modelId = "qwen-max", displayName = "qwen-max", source = ModelSource.REMOTE),
+                Model(id = "", modelId = "qwen-flash", displayName = "qwen-flash", source = ModelSource.REMOTE),
+                Model(id = "", modelId = "QWEN-FLASH", displayName = "QWEN-FLASH", source = ModelSource.REMOTE),
+                Model(id = "", modelId = " ", displayName = "blank", source = ModelSource.REMOTE),
+            ),
+        )
+
+        assertEquals(listOf("qwen-flash"), fresh.map { it.modelId })
+    }
+
+    @Test
     fun remoteSyncPreservesManualAndCatalogModelsAndOnlyRemovesStaleRemoteModels() = runBlocking {
         ProviderRepository.addProvider(
             provider(
@@ -131,9 +150,17 @@ class ModelRepositoryTest {
                     id = "remote-new",
                     modelId = "remote-new",
                     displayName = "Remote New",
+                    contextWindow = 262_144,
+                    source = ModelSource.REMOTE,
+                ),
+                Model(
+                    id = "remote-unpicked",
+                    modelId = "remote-unpicked",
+                    displayName = "Remote Unpicked",
                     source = ModelSource.REMOTE,
                 ),
             ),
+            adoptedModelIds = setOf("REMOTE-NEW"),
         )
 
         assertTrue(result.applied)
@@ -151,8 +178,10 @@ class ModelRepositoryTest {
         )
         assertEquals(ModelSource.CATALOG, restored.getValue("catalog-model").source)
         assertEquals(ModelSource.REMOTE, restored.getValue("remote-new").source)
+        assertEquals(262_144, restored.getValue("remote-new").effectiveContextWindow)
+        assertEquals(null, restored.getValue("catalog-model").effectiveContextWindow)
 
-        val emptyResult = ModelRepository.syncRemoteModels(PROVIDER_ID, emptyList())
+        val emptyResult = ModelRepository.syncRemoteModels(PROVIDER_ID, emptyList(), emptySet())
         assertFalse(emptyResult.applied)
         assertEquals(restored.keys, ModelRepository.modelsByProvider(PROVIDER_ID).mapTo(mutableSetOf()) { it.modelId })
     }

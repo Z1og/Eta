@@ -1,35 +1,50 @@
 package io.github.mangi.eta.ui.app
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ShortText
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.rounded.AddComment
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.R
 import io.github.mangi.eta.ui.components.AdaptiveTopAppBar
+import io.github.mangi.eta.ui.components.CharacterAvatar
 import io.github.mangi.eta.ui.components.ConversationSidePaneScaffold
 import io.github.mangi.eta.ui.components.MiuixBackButton
+import io.github.mangi.eta.ui.components.RoleplayChatUi
 import io.github.mangi.eta.ui.components.TopBarBackdrop
 import io.github.mangi.eta.ui.components.captureForTopBar
 import io.github.mangi.eta.ui.components.rememberTopBarBackdrop
@@ -47,7 +62,10 @@ import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowListPopup
+import io.github.mangi.eta.ui.voice.SpeechAutoReadToggle
 
 /**
  * Agent App 统一壳层。
@@ -58,7 +76,7 @@ import top.yukonga.miuix.kmp.window.WindowListPopup
  * - Settings 由标准二级页骨架自己提供 TopAppBar，壳层在此路由不重复绘制。
  */
 @Composable
-fun AgentAppShell(
+internal fun AgentAppShell(
     currentRoute: AppRoute?,
     isCurrentRoute: Boolean,
     conversationPaneState: ConversationPaneUiState?,
@@ -86,6 +104,8 @@ fun AgentAppShell(
     onOpenSettings: () -> Unit,
     onOpenModelProviders: () -> Unit,
     modifier: Modifier = Modifier,
+    homeCharacter: RoleplayChatUi? = null,
+    onOpenCharacter: () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -114,6 +134,8 @@ fun AgentAppShell(
                             onStopKimiWeb = onStopKimiWeb,
                             onRefreshKimiWeb = onRefreshKimiWeb,
                             onOpenBrowser = onOpenBrowser,
+                            homeCharacter = homeCharacter,
+                            onOpenCharacter = onOpenCharacter,
                         )
                     }
                 }
@@ -173,16 +195,24 @@ private fun AgentTopBar(
     onStopKimiWeb: () -> Unit,
     onRefreshKimiWeb: () -> Unit,
     onOpenBrowser: () -> Unit,
+    homeCharacter: RoleplayChatUi?,
+    onOpenCharacter: () -> Unit,
 ) {
     val isHome = route is AppRoute.Home
     val navigationIcon: @Composable () -> Unit = {
         if (isHome) {
-            IconButton(onClick = onOpenConversationPane) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ShortText,
-                    modifier = Modifier.size(24.dp),
-                    contentDescription = stringResource(R.string.action_conversation_history),
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onOpenConversationPane) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ShortText,
+                        modifier = Modifier.size(24.dp),
+                        contentDescription = stringResource(R.string.action_conversation_history),
+                    )
+                }
+                // 角色对话的身份标识放在顶栏左侧，点按进入角色详情；普通对话保持空标题。
+                homeCharacter?.let { character ->
+                    CharacterTopBarIdentity(character = character, onClick = onOpenCharacter)
+                }
             }
         } else {
             MiuixBackButton(onClick = onBack)
@@ -190,6 +220,7 @@ private fun AgentTopBar(
     }
     val actions: @Composable RowScope.() -> Unit = {
         if (isHome) {
+            SpeechAutoReadToggle()
             TopBarOverflowMenu(
                 onNewConversation = onNewConversation,
                 onOpenTerminal = onOpenTerminal,
@@ -203,8 +234,10 @@ private fun AgentTopBar(
         }
     }
 
-    if (isHome) {
-        // 首页聊天舞台保持紧凑；二级内容页统一使用可折叠大标题。
+    // 首页聊天舞台与浏览器、终端这类整屏工具页没有可驱动折叠的滚动列表，大标题会一直展开、
+    // 白占一屏顶部；它们使用紧凑标题，其余二级内容页统一使用可折叠大标题。
+    val compactTitle = isHome || route is AppRoute.Browser || route is AppRoute.Terminal
+    if (compactTitle) {
         SmallTopAppBar(
             title = titleForRoute(route),
             color = color,
@@ -308,7 +341,22 @@ private fun TopBarOverflowMenu(
                             )
                         },
                     ),
-                ) + if (canStopKimiWeb) listOf(DropdownItem(text = stopKimiWebText)) else emptyList()
+                ) + if (canStopKimiWeb) {
+                    listOf(
+                        DropdownItem(
+                            text = stopKimiWebText,
+                            icon = { modifier ->
+                                Icon(
+                                    imageVector = Icons.Rounded.Stop,
+                                    contentDescription = null,
+                                    modifier = modifier.size(TopBarMenuIconSize),
+                                )
+                            },
+                        ),
+                    )
+                } else {
+                    emptyList()
+                }
             }
             ListPopupColumn {
                 menuItems.forEachIndexed { index, item ->
@@ -368,4 +416,32 @@ private fun titleForRoute(route: AppRoute?): String = when (route) {
     is AppRoute.ModelProviderDetail -> stringResource(R.string.route_provider_details)
     is AppRoute.ModelProviderNew -> stringResource(R.string.route_new_provider)
     null -> stringResource(R.string.app_name)
+}
+
+@Composable
+private fun CharacterTopBarIdentity(character: RoleplayChatUi, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(start = 4.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CharacterAvatar(
+            name = character.characterName,
+            avatarPath = character.avatarPath,
+            size = 32.dp,
+            shape = CircleShape,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = character.characterName,
+            style = MiuixTheme.textStyles.body1,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 180.dp),
+        )
+    }
 }

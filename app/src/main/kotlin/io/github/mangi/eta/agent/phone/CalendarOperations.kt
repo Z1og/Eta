@@ -41,11 +41,9 @@ internal class CalendarOperations(
     fun execute(tool: String, args: JSONObject): JSONObject =
         when (tool) {
             "list_calendars" -> {
-                PhoneOperation.allowed(args, emptySet())
                 PhoneOperation.ok(tool).put("items", JSONArray(calendars()))
             }
             "read_calendar_event" -> {
-                PhoneOperation.allowed(args, setOf("event_id"))
                 read(PhoneOperation.id(args, "event_id"))?.let {
                     PhoneOperation.ok(tool).put("event", it)
                 } ?: missing()
@@ -134,14 +132,12 @@ internal class CalendarOperations(
     }
 
     private fun create(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, eventFields)
         val result = createBatch(listOf(args), "create_calendar_event")
         val item = result.getJSONArray("events").getJSONObject(0)
         return result.put("event_id", item.getString("event_id")).put("event", item)
     }
 
     private fun createMany(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, setOf("calendar_id", "events"))
         val events =
             args.optJSONArray("events") ?: PhoneOperation.error("INVALID_ARGUMENT", "events 必须是数组")
         if (events.length() !in 1..30) PhoneOperation.error("INVALID_ARGUMENT", "每批最多创建30个日程")
@@ -150,7 +146,6 @@ internal class CalendarOperations(
                 val event =
                     events.optJSONObject(index)
                         ?: PhoneOperation.error("INVALID_ARGUMENT", "日程条目必须是对象")
-                PhoneOperation.allowed(event, eventFields - "calendar_id")
                 JSONObject(event.toString()).also {
                     if (args.has("calendar_id")) it.put("calendar_id", args.get("calendar_id"))
                 }
@@ -205,7 +200,6 @@ internal class CalendarOperations(
     }
 
     private fun update(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, eventFields - "calendar_id" + "event_id")
         val id = PhoneOperation.id(args, "event_id")
         val before = read(id) ?: return missing()
         if (before.optString("rrule").isNotBlank() && !before.isNull("rrule"))
@@ -248,7 +242,6 @@ internal class CalendarOperations(
     }
 
     private fun delete(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, setOf("event_id", "scope"))
         val id = PhoneOperation.id(args, "event_id")
         val before = read(id) ?: return missing()
         val scope = PhoneOperation.text(args, "scope", false, 20) ?: "event"
@@ -291,10 +284,6 @@ internal class CalendarOperations(
             }
 
     private fun search(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(
-            args,
-            setOf("query", "start_time", "end_time", "limit", "offset", "sort"),
-        )
         val text = PhoneOperation.text(args, "query", false, 200)
         val limit = PhoneOperation.integer(args, "limit", 1, 30, 10).toInt()
         val offset = PhoneOperation.integer(args, "offset", 0, 10000, 0).toInt()
@@ -412,17 +401,5 @@ internal class CalendarOperations(
 
     companion object {
         private const val DAY_MS = 86_400_000L
-        val eventFields =
-            setOf(
-                "calendar_id",
-                "title",
-                "start_time",
-                "end_time",
-                "timezone",
-                "all_day",
-                "location",
-                "description",
-                "reminder_minutes",
-            )
     }
 }

@@ -12,10 +12,9 @@ internal object AgentFileToolCatalog {
             .put("path", path())
             .put("offset_bytes", integer("字节起点，默认 0；续读使用上次 next_offset_bytes，不要自行推算。", 0))
             .put("max_bytes", integer("单次文本字节预算，默认 16000；为兼容旧调用接受更大值，但实际最多返回 16000 字节。", 4, 262144))
-            .put("start_line", integer("可选的 1 起始行号，不可与 offset_bytes 同时提供；远距离定位受扫描预算限制，检查 start_line_reached。", 1))
+            .put("start_line", integer("可选的 1 起始行号，按行读取时 offset_bytes 应省略或为 0；远距离定位受扫描预算限制，检查 start_line_reached。", 1))
             .put("max_lines", integer("最多返回多少行，默认 200；超长单行也受字节预算限制。", 1, 2000))
-            .put("expected_revision", revision()), listOf("path"),
-            JSONObject().put("not", JSONObject().put("required", JSONArray(listOf("offset_bytes", "start_line"))))))
+            .put("expected_revision", revision()), listOf("path")))
         tools.put(tool("write_file", "创建、完整覆盖或追加 UTF-8 文件；会创建父目录。局部修改请用 edit_file。expected_revision 可防止覆盖已变化的文件；atomic 说明后端是否原子替换。", properties()
             .put("path", path()).put("content", text("完整文件内容或追加内容，UTF-8 编码后最多 512 KiB。", 524288))
             .put("append", JSONObject().put("type", "boolean").put("default", false))
@@ -50,8 +49,8 @@ internal object AgentFileToolCatalog {
         .put("environment", JSONObject().put("type", "string").put("enum", JSONArray(listOf("android", "linux")))
             .put("description", "文件路径所属环境，默认 android；linux 使用设置中选定的发行版和后端，不能使用宿主 rootfs 路径代替 guest 路径。"))
         .put("identity", JSONObject().put("type", "string").put("enum", JSONArray(listOf("user", "root")))
-            .put("description", "Android 默认 user（Eta App UID，不是 ADB Shell）；需要 Root 时显式 root。Linux 默认按用户选定的 PRoot/chroot 后端解析，不会失败后自动升级身份。"))
-        .put("cwd", text("相对路径的基准目录。Android user 默认 Eta 私有工作区，root 默认 /data/local/tmp/eta；Linux 默认 /workspace。与终端保持相同路径规则。", 4096))
+            .put("description", "可选的宿主执行身份；Android 已确认 Root 授权时默认 root，否则 user，与终端一致。Linux 按所选后端解析，PRoot 使用 user，chroot 使用 root。"))
+        .put("cwd", text("可选的工作目录；省略时与终端共用当前环境的默认工作区，实际路径见本次执行上下文。", 4096))
 
     private fun path(): JSONObject = text("绝对路径或相对于 cwd 的路径；仅接受文件系统路径，不接受 content URI。使用已导入文件的路径时操作的是该副本。", 4096)
     private fun revision(): JSONObject = text("上一次文件或目录结果中的 revision；不同环境和身份的版本不能混用。", 256)
@@ -60,10 +59,9 @@ internal object AgentFileToolCatalog {
         JSONObject().put("type", "integer").put("description", description).put("minimum", minimum)
             .also { if (maximum != null) it.put("maximum", maximum) }
 
-    private fun tool(name: String, description: String, properties: JSONObject, required: List<String>, constraints: JSONObject? = null): JSONObject {
+    private fun tool(name: String, description: String, properties: JSONObject, required: List<String>): JSONObject {
         val schema = JSONObject().put("type", "object").put("properties", properties)
             .put("additionalProperties", false).put("required", JSONArray(required))
-        constraints?.keys()?.forEach { schema.put(it, constraints.get(it)) }
         return AgentToolSchema.function(name, description, schema)
     }
 }

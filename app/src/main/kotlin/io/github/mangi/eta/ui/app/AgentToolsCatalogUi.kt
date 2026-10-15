@@ -138,6 +138,8 @@ internal fun buildToolsState(context: Context): AgentToolsUiState =
                 title = context.getString(R.string.state_terminal_and_files_ae7c54),
                 tools = listOf(
                     ToolItemUi("terminal", context.getString(R.string.tool_ui_session_terminal_09c6e6), context.getString(R.string.tool_ui_user_root_shell_conversational_execution_and_asy_13c2ab)),
+                    ToolItemUi("terminal_job", context.getString(R.string.tool_terminal_job), context.getString(R.string.tool_terminal_job_description)),
+                    ToolItemUi("terminal_daemon", context.getString(R.string.tool_terminal_daemon), context.getString(R.string.tool_terminal_daemon_description)),
                     ToolItemUi("edit_file", context.getString(R.string.tool_edit_file), context.getString(R.string.tool_edit_file_description)),
                     ToolItemUi("stat_file", context.getString(R.string.tool_stat_file), context.getString(R.string.tool_stat_file_description)),
                     ToolItemUi("glob_files", context.getString(R.string.tool_glob_files), context.getString(R.string.tool_glob_files_description)),

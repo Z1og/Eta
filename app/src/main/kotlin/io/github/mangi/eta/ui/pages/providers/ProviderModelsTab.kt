@@ -5,6 +5,10 @@ package io.github.mangi.eta.ui.pages.providers
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -12,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,16 +26,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Tune
@@ -42,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
@@ -50,6 +59,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -67,26 +77,25 @@ import io.github.mangi.eta.data.repository.ModelRepository
 import io.github.mangi.eta.data.repository.RemoteModelFetcher
 import io.github.mangi.eta.data.repository.RuntimeConfigRepository
 import io.github.mangi.eta.ui.components.EtaArrowPreference
-import io.github.mangi.eta.ui.components.EtaCard
-import io.github.mangi.eta.ui.components.EtaCheckboxPreference
+import io.github.mangi.eta.ui.components.EtaChoiceChip
+import io.github.mangi.eta.ui.components.EtaTextButton
 import io.github.mangi.eta.ui.components.EtaOverlayDialog
 import io.github.mangi.eta.ui.components.EtaPreferenceColors
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
-import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupItem
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
 import io.github.mangi.eta.ui.components.EtaPreferenceIcon
-import io.github.mangi.eta.ui.components.EtaSwitchPreference
-import io.github.mangi.eta.ui.components.EtaTextButton
+import io.github.mangi.eta.ui.components.EtaSwitch
 import io.github.mangi.eta.ui.components.MiuixDialogActions
 import io.github.mangi.eta.ui.components.StatusError
 import io.github.mangi.eta.ui.components.StatusSuccess
+import io.github.mangi.eta.ui.model.ModelSearchQuery
 import io.github.mangi.eta.ui.model.formatCompactTokenCount
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -94,12 +103,16 @@ import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.preference.CheckboxLocation
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.rounded.DeleteOutline
+import top.yukonga.miuix.kmp.squircle.squircleSurface
 
-private val modelSearchSeparators = Regex("""[^\p{L}\p{N}]+""")
 private val editableReasoningEfforts = listOf(
     ReasoningEffort.OFF,
     ReasoningEffort.MINIMAL,
@@ -109,6 +122,12 @@ private val editableReasoningEfforts = listOf(
     ReasoningEffort.XHIGH,
     ReasoningEffort.MAX,
 )
+
+/**
+ * 常见上下文窗口档位。取十进制整数：标称 262,144、1,048,576 的模型按 256K、1M 填写只会略早压缩，
+ * 不会越过真实上限。
+ */
+internal val contextWindowPresets = listOf(128_000, 200_000, 256_000, 1_000_000)
 
 private val modelDialogBodyMaxHeight = 520.dp
 private val modelDialogChromeHeight = 112.dp
@@ -148,32 +167,10 @@ internal fun contextWindowInputError(
 }
 
 internal fun filterProviderModels(models: List<Model>, query: String): List<Model> {
-    val queryTokens = query.lowercase().split(modelSearchSeparators).filter(String::isNotBlank)
+    val search = ModelSearchQuery(query)
     return models
         .sortedBy { it.sortOrder }
-        .filter { model ->
-            if (queryTokens.isEmpty()) {
-                true
-            } else {
-                val searchableFields = listOf(model.displayName, model.modelId).map { field ->
-                    field.lowercase().filter(Char::isLetterOrDigit)
-                }
-                queryTokens.all { token ->
-                    searchableFields.any { field -> field.containsCharactersInOrder(token) }
-                }
-            }
-        }
-}
-
-private fun String.containsCharactersInOrder(query: String): Boolean {
-    var queryIndex = 0
-    for (character in this) {
-        if (character == query[queryIndex]) {
-            queryIndex++
-            if (queryIndex == query.length) return true
-        }
-    }
-    return false
+        .filter { model -> search.matches(model.displayName, model.modelId) }
 }
 
 @Composable
@@ -193,9 +190,12 @@ internal fun ProviderModelsTab(
     var editorError by remember { mutableStateOf<String?>(null) }
     var modelPendingDelete by remember { mutableStateOf<Model?>(null) }
     var selectionMode by remember(provider.id) { mutableStateOf(false) }
+    // 退出多选时不清空已选集合：编辑栏和删除按钮还在退场动画里，清空会让数量闪成 0。
+    // 下次进入多选会整体替换为当次长按的模型，旧集合不会带进新一轮选择。
     var selectedModelIds by remember(provider.id) { mutableStateOf(setOf<String>()) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
     var modelSearchQuery by remember(provider.id) { mutableStateOf("") }
+    var pendingImport by remember(provider.id) { mutableStateOf<RemoteModelImport?>(null) }
     val normalizedModelSearchQuery = modelSearchQuery.trim()
     val filteredModels = remember(provider.models, modelSearchQuery) {
         filterProviderModels(provider.models, modelSearchQuery)
@@ -207,7 +207,6 @@ internal fun ProviderModelsTab(
         isBackEnabled = selectionMode,
         onBackCompleted = {
             selectionMode = false
-            selectedModelIds = emptySet()
         },
     )
 
@@ -224,95 +223,130 @@ internal fun ProviderModelsTab(
             ),
             overscrollEffect = null,
         ) {
-            item(key = "actions", contentType = "section") {
-                ProviderSection(title = stringResource(R.string.ui_model_management_183414)) {
-                    EtaArrowPreference(
-                        title = if (isFetching) context.getString(R.string.page_retrieving_a880c9) else context.getString(R.string.page_automatically_pull_from_remote_f883d0),
-                        summary = stringResource(R.string.provider_models_endpoint_summary, provider.baseUrl),
-                        enabled = !isFetching && !isMutatingModel,
-                        startAction = {
-                            EtaPreferenceIcon(
-                                icon = Icons.Rounded.CloudDownload,
-                                enabled = !isFetching && !isMutatingModel,
-                                tint = EtaPreferenceColors.Blue,
-                            )
-                        },
-                        onClick = {
-                            scope.launch {
-                                isFetching = true
-                                message = null
-                                try {
-                                    val models = RemoteModelFetcher.fetch(provider).getOrElse { throwable ->
-                                        message = context.getString(
-                                            R.string.provider_error,
-                                            throwable.message ?: throwable.javaClass.simpleName,
-                                        )
-                                        return@launch
-                                    }
-                                    val chatModels = models.filter(RemoteModelFetcher::isChatCapableModel)
-                                    val sync = ModelRepository.syncRemoteModels(provider.id, chatModels)
-                                    if (sync.applied) {
-                                        RuntimeConfigRepository.syncToRemotePreferences(EtaApp.serviceInstance)
-                                    }
-                                    val filteredCount = models.size - chatModels.size
-                                    message = if (!sync.applied) {
-                                        context.getString(R.string.page_the_remote_end_did_not_return_a_usable_conversation__781487)
-                                    } else if (filteredCount > 0) {
-                                        context.getString(
-                                            R.string.provider_models_fetched_filtered,
-                                            chatModels.size,
-                                            filteredCount,
-                                        )
-                                    } else {
-                                        context.resources.getQuantityString(
-                                            R.plurals.provider_models_fetched,
-                                            chatModels.size,
-                                            chatModels.size,
-                                        )
-                                    }
-                                } catch (cancelled: CancellationException) {
-                                    throw cancelled
-                                } catch (throwable: Throwable) {
-                                    message = context.getString(
-                                        R.string.provider_error,
-                                        throwable.message ?: context.getString(R.string.provider_sync_failed),
-                                    )
-                                } finally {
-                                    isFetching = false
-                                }
+            // 多选时“模型管理”收起，换成吸顶的编辑栏：数量与全选放在这里，底部只留删除。
+            // 两个条目始终存在，只在内部做尺寸动画：下方列表随高度变化连续上移，
+            // 而不是条目增删时先跳位再补位移。
+            stickyHeader(key = "selection_header", contentType = "selection_header") {
+                AnimatedVisibility(
+                    visible = selectionMode,
+                    enter = expandVertically(selectionMotion(), expandFrom = Alignment.Top) +
+                        fadeIn(selectionFade(delayMillis = SelectionMotionMillis / 3)),
+                    exit = shrinkVertically(selectionMotion(), shrinkTowards = Alignment.Top) +
+                        fadeOut(selectionFade()),
+                ) {
+                    val visibleIds = filteredModels.mapTo(mutableSetOf()) { it.id }
+                    val allVisibleSelected = visibleIds.isNotEmpty() && selectedModelIds.containsAll(visibleIds)
+                    ModelSelectionHeader(
+                        selectedCount = selectedModelIds.size,
+                        allVisibleSelected = allVisibleSelected,
+                        enabled = !isFetching && !isMutatingModel && visibleIds.isNotEmpty(),
+                        // 全选只作用于当前搜索结果：先搜索再全选，可以一次清掉一类模型。
+                        onToggleAll = {
+                            selectedModelIds = if (allVisibleSelected) {
+                                selectedModelIds - visibleIds
+                            } else {
+                                selectedModelIds + visibleIds
                             }
                         },
-                    )
-
-                    EtaArrowPreference(
-                        title = stringResource(R.string.ui_add_custom_model_a5ddc0),
-                        summary = stringResource(R.string.ui_manually_fill_in_the_display_name_and_model_id_077a7b),
-                        enabled = !isFetching && !isMutatingModel,
-                        startAction = {
-                            EtaPreferenceIcon(
-                                icon = Icons.Rounded.Add,
-                                enabled = !isFetching && !isMutatingModel,
-                                tint = EtaPreferenceColors.Blue,
-                            )
-                        },
-                        onClick = {
-                            editorError = null
-                            isCreatingModel = true
-                            editingModel = Model(
-                                id = "",
-                                modelId = "",
-                                displayName = context.getString(R.string.page_custom_model_25be0f),
-                            )
+                        onExit = {
+                            selectionMode = false
                         },
                     )
-                    message?.let {
-                        EtaPreferenceDivider(hasLeading = false)
-                        Text(
-                            text = it,
-                            style = MiuixTheme.textStyles.footnote2,
-                            color = if (it.startsWith(context.getString(R.string.page_fail_3e3c80))) StatusError else StatusSuccess,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                }
+            }
+            item(key = "actions", contentType = "section") {
+                AnimatedVisibility(
+                    visible = !selectionMode,
+                    // 卡片先淡出再收起高度，避免内容被压扁的观感；回来时先撑开再淡入。
+                    enter = expandVertically(selectionMotion(), expandFrom = Alignment.Top) +
+                        fadeIn(selectionFade(delayMillis = SelectionMotionMillis / 3)),
+                    exit = shrinkVertically(selectionMotion(), shrinkTowards = Alignment.Top) +
+                        fadeOut(selectionFade()),
+                ) {
+                    ProviderSection(title = stringResource(R.string.ui_model_management_183414)) {
+                        EtaArrowPreference(
+                            title = if (isFetching) context.getString(R.string.page_retrieving_a880c9) else context.getString(R.string.page_automatically_pull_from_remote_f883d0),
+                            summary = stringResource(R.string.provider_models_endpoint_summary, provider.baseUrl),
+                            enabled = !isFetching && !isMutatingModel,
+                            startAction = {
+                                EtaPreferenceIcon(
+                                    icon = Icons.Rounded.CloudDownload,
+                                    enabled = !isFetching && !isMutatingModel,
+                                    tint = EtaPreferenceColors.Blue,
+                                )
+                            },
+                            onClick = {
+                                scope.launch {
+                                    isFetching = true
+                                    message = null
+                                    try {
+                                        val models = RemoteModelFetcher.fetch(provider).getOrElse { throwable ->
+                                            message = context.getString(
+                                                R.string.provider_error,
+                                                throwable.message ?: throwable.javaClass.simpleName,
+                                            )
+                                            return@launch
+                                        }
+                                        val chatModels = models.filter(RemoteModelFetcher::isChatCapableModel)
+                                        val candidates = ModelRepository.newRemoteModels(provider.id, chatModels)
+                                        if (candidates.isNotEmpty()) {
+                                            pendingImport = RemoteModelImport(chatModels, candidates)
+                                            return@launch
+                                        }
+                                        // 没有新模型时仍同步一次，刷新已添加模型的元数据并移除远端已下线的模型。
+                                        val sync = ModelRepository.syncRemoteModels(provider.id, chatModels, emptySet())
+                                        if (sync.applied) {
+                                            RuntimeConfigRepository.syncToRemotePreferences(EtaApp.serviceInstance)
+                                        }
+                                        message = if (sync.applied) {
+                                            context.getString(R.string.provider_models_up_to_date)
+                                        } else {
+                                            context.getString(R.string.page_the_remote_end_did_not_return_a_usable_conversation__781487)
+                                        }
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (throwable: Throwable) {
+                                        message = context.getString(
+                                            R.string.provider_error,
+                                            throwable.message ?: context.getString(R.string.provider_sync_failed),
+                                        )
+                                    } finally {
+                                        isFetching = false
+                                    }
+                                }
+                            },
                         )
+
+                        EtaArrowPreference(
+                            title = stringResource(R.string.ui_add_custom_model_a5ddc0),
+                            summary = stringResource(R.string.ui_manually_fill_in_the_display_name_and_model_id_077a7b),
+                            enabled = !isFetching && !isMutatingModel,
+                            startAction = {
+                                EtaPreferenceIcon(
+                                    icon = Icons.Rounded.Add,
+                                    enabled = !isFetching && !isMutatingModel,
+                                    tint = EtaPreferenceColors.Blue,
+                                )
+                            },
+                            onClick = {
+                                editorError = null
+                                isCreatingModel = true
+                                editingModel = Model(
+                                    id = "",
+                                    modelId = "",
+                                    displayName = context.getString(R.string.page_custom_model_25be0f),
+                                )
+                            },
+                        )
+                        message?.let {
+                            EtaPreferenceDivider(hasLeading = false)
+                            Text(
+                                text = it,
+                                style = MiuixTheme.textStyles.footnote2,
+                                color = if (it.startsWith(context.getString(R.string.page_fail_3e3c80))) StatusError else StatusSuccess,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -345,7 +379,8 @@ internal fun ProviderModelsTab(
                 item(key = "models_empty", contentType = "empty") {
                     ProviderSection(
                         title = modelListTitle,
-                        modifier = Modifier.padding(bottom = 24.dp),
+                        // 与非空列表末尾的 24dp 间隔一致：分组自带 16dp，再补 8dp。
+                        modifier = Modifier.padding(bottom = 8.dp),
                     ) {
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
@@ -425,25 +460,13 @@ internal fun ProviderModelsTab(
         AnimatedVisibility(
             visible = selectionMode,
             modifier = Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically { it } + fadeIn(),
-            exit = slideOutVertically { it } + fadeOut(),
+            enter = slideInVertically(selectionMotion()) { it } + fadeIn(selectionFade()),
+            exit = slideOutVertically(selectionMotion()) { it } + fadeOut(selectionFade()),
         ) {
-            ModelSelectionBar(
+            ModelDeleteBar(
                 selectedCount = selectedModelIds.size,
-                totalCount = provider.models.size,
                 enabled = !isFetching && !isMutatingModel,
-                onToggleAll = {
-                    selectedModelIds = if (selectedModelIds.size == provider.models.size) {
-                        emptySet()
-                    } else {
-                        provider.models.mapTo(mutableSetOf()) { it.id }
-                    }
-                },
                 onDelete = { showBatchDeleteDialog = true },
-                onExit = {
-                    selectionMode = false
-                    selectedModelIds = emptySet()
-                },
             )
         }
     }
@@ -555,7 +578,6 @@ internal fun ProviderModelsTab(
                             )
                             showBatchDeleteDialog = false
                             selectionMode = false
-                            selectedModelIds = emptySet()
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (throwable: Throwable) {
@@ -572,64 +594,157 @@ internal fun ProviderModelsTab(
             )
         }
     }
+
+    RemoteModelImportSheet(
+        pending = pendingImport,
+        onDismissRequest = { pendingImport = null },
+        onConfirm = { pending, adopted ->
+            pendingImport = null
+            scope.launch {
+                isMutatingModel = true
+                try {
+                    val sync = ModelRepository.syncRemoteModels(provider.id, pending.fetched, adopted)
+                    if (sync.applied) {
+                        RuntimeConfigRepository.syncToRemotePreferences(EtaApp.serviceInstance)
+                    }
+                    message = context.resources.getQuantityString(
+                        R.plurals.provider_models_added,
+                        sync.addedCount,
+                        sync.addedCount,
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (throwable: Throwable) {
+                    message = context.getString(
+                        R.string.provider_error,
+                        throwable.message ?: context.getString(R.string.provider_sync_failed),
+                    )
+                } finally {
+                    isMutatingModel = false
+                }
+            }
+        },
+    )
 }
 
-/** 多选模式底部悬浮操作栏：退出在左，已选数量其次，全选与删除在右；删除沿用统一破坏性配色。 */
+/** 进出多选的统一节奏：强调型减速曲线，起步干脆、收尾柔和，几处动画共用同一时长。 */
+private const val SelectionMotionMillis = 360
+private val SelectionEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
+private fun <T> selectionMotion() = tween<T>(SelectionMotionMillis, easing = SelectionEasing)
+
+private fun selectionFade(delayMillis: Int = 0) =
+    tween<Float>(SelectionMotionMillis / 2, delayMillis = delayMillis, easing = LinearEasing)
+
+/**
+ * 多选模式的吸顶编辑栏：取消在左、已选数量居中、全选在右。
+ * 两侧都用文字并与列表正文、勾选框对齐到同一左右边缘（分组外边距加行内边距）；
+ * 点击区向外扩出，视觉边缘不变。
+ */
 @Composable
-private fun ModelSelectionBar(
+private fun ModelSelectionHeader(
     selectedCount: Int,
-    totalCount: Int,
+    allVisibleSelected: Boolean,
     enabled: Boolean,
     onToggleAll: () -> Unit,
-    onDelete: () -> Unit,
     onExit: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    EtaCard(
-        modifier = Modifier
+    val edge = EtaPreferenceDefaults.SidePadding + 16.dp
+    Row(
+        modifier = modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 16.dp),
+            .background(MiuixTheme.colorScheme.surface)
+            .padding(horizontal = edge - SelectionHeaderTouchInset, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            IconButton(onClick = onExit, enabled = enabled) {
-                Icon(
-                    imageVector = Icons.Rounded.Close,
-                    contentDescription = stringResource(R.string.ui_exit_multiple_selection_c194fd),
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
-                )
-            }
-            Text(
-                text = pluralStringResource(
-                    R.plurals.provider_models_selected,
-                    selectedCount,
-                    selectedCount,
-                ),
-                style = MiuixTheme.textStyles.body2,
-                modifier = Modifier.weight(1f),
+        SelectionHeaderAction(
+            text = stringResource(R.string.action_cancel),
+            color = MiuixTheme.colorScheme.onSurface,
+            enabled = true,
+            onClick = onExit,
+        )
+        Text(
+            text = pluralStringResource(R.plurals.provider_models_selected, selectedCount, selectedCount),
+            style = MiuixTheme.textStyles.headline1,
+            color = MiuixTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
+        )
+        SelectionHeaderAction(
+            text = stringResource(if (allVisibleSelected) R.string.page_select_none_ba20eb else R.string.page_select_all_3e44b2),
+            color = MiuixTheme.colorScheme.primary,
+            enabled = enabled,
+            onClick = onToggleAll,
+        )
+    }
+}
+
+@Composable
+private fun SelectionHeaderAction(
+    text: String,
+    color: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = text,
+        style = MiuixTheme.textStyles.body1,
+        color = if (enabled) color else MiuixTheme.colorScheme.disabledOnSecondaryVariant,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = SelectionHeaderTouchInset, vertical = 10.dp),
+    )
+}
+
+private val SelectionHeaderTouchInset = 8.dp
+
+/** 多选模式底部只放一个删除动作，写明数量，避免误删时看不清范围。 */
+@Composable
+private fun ModelDeleteBar(
+    selectedCount: Int,
+    enabled: Boolean,
+    onDelete: () -> Unit,
+) {
+    val active = enabled && selectedCount > 0
+    Row(
+        modifier = Modifier
+            .navigationBarsPadding()
+            .padding(horizontal = 32.dp)
+            .padding(bottom = 16.dp)
+            .fillMaxWidth()
+            .squircleSurface(
+                color = if (active) {
+                    MiuixTheme.colorScheme.error.copy(alpha = 0.12f)
+                } else {
+                    MiuixTheme.colorScheme.surfaceContainerHigh
+                },
+                cornerRadius = 26.dp,
             )
-            EtaTextButton(
-                text = if (selectedCount == totalCount) context.getString(R.string.page_select_none_ba20eb) else context.getString(R.string.page_select_all_3e44b2),
-                enabled = enabled,
-                onClick = onToggleAll,
-            )
-            EtaTextButton(
-                text = stringResource(R.string.ui_delete_3755f5),
-                enabled = selectedCount > 0 && enabled,
-                colors = ButtonDefaults.textButtonColorsPrimary(
-                    color = MiuixTheme.colorScheme.error,
-                    textColor = MiuixTheme.colorScheme.onError,
-                ),
-                onClick = onDelete,
-            )
-        }
+            .clickable(enabled = active, onClick = onDelete)
+            .padding(vertical = 15.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val tint = if (active) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.disabledOnSecondaryVariant
+        Icon(
+            imageVector = Icons.Rounded.DeleteOutline,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = if (selectedCount > 0) {
+                pluralStringResource(R.plurals.provider_delete_models_action, selectedCount, selectedCount)
+            } else {
+                stringResource(R.string.provider_delete_models_pick_hint)
+            },
+            style = MiuixTheme.textStyles.button,
+            color = tint,
+        )
     }
 }
 
@@ -648,9 +763,19 @@ private fun ModelListItem(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val rowTint by animateColorAsState(
+        targetValue = if (selectionMode && checked) {
+            MiuixTheme.colorScheme.primary.copy(alpha = 0.06f)
+        } else {
+            Color.Transparent
+        },
+        animationSpec = tween(durationMillis = 160),
+        label = "model_row_tint",
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .drawBehind { drawRect(rowTint) }
             .combinedClickable(
                 enabled = enabled,
                 onClick = if (selectionMode) onToggleChecked else onSetCurrent,
@@ -735,7 +860,8 @@ private fun ModelEditDialog(
     var displayName by remember(model.id, isNew) { mutableStateOf(model.displayName) }
     var modelId by remember(model.id, isNew) { mutableStateOf(model.modelId) }
     var contextWindowOverrideText by remember(model.id, isNew) {
-        mutableStateOf(model.contextWindowOverride?.toString().orEmpty())
+        // 早先拉取、未写入窗口的模型也带着远端标注，打开编辑时直接预填。
+        mutableStateOf((model.contextWindowOverride ?: model.contextWindow)?.toString().orEmpty())
     }
     var reasoningOverrideActive by remember(model.id, isNew) {
         mutableStateOf(
@@ -870,7 +996,7 @@ private fun ModelEditDialog(
                 Spacer(modifier = Modifier.height(12.dp))
                 TextField(
                     value = contextWindowOverrideText,
-                    onValueChange = { contextWindowOverrideText = it },
+                    onValueChange = { value -> contextWindowOverrideText = value.filter(Char::isDigit) },
                     label = stringResource(R.string.ui_context_length_tokens_227860),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
@@ -879,7 +1005,39 @@ private fun ModelEditDialog(
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                val contextValue = contextWindowOverrideText.toIntOrNull()
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 10.dp),
+                ) {
+                    contextWindowPresets.forEach { preset ->
+                        EtaChoiceChip(
+                            text = formatCompactTokenCount(preset),
+                            selected = contextValue == preset,
+                            onClick = { contextWindowOverrideText = preset.toString() },
+                            enabled = !isSaving,
+                        )
+                    }
+                }
+                Text(
+                    text = when {
+                        contextWindowOverrideText.isBlank() ->
+                            stringResource(R.string.provider_context_window_hint)
+                        contextError != null ->
+                            stringResource(R.string.provider_context_window_invalid)
+                        contextValue != null && contextValue !in contextWindowPresets ->
+                            stringResource(R.string.provider_context_window_value, formatCompactTokenCount(contextValue))
+                        else -> stringResource(R.string.provider_context_window_usage)
+                    },
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = if (contextError != null && contextWindowOverrideText.isNotBlank()) {
+                        StatusError
+                    } else {
+                        MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    },
+                    modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -900,57 +1058,73 @@ private fun ModelEditDialog(
                         Text(text = note, modifier = Modifier.weight(1f, fill = false))
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
-                EtaPreferenceGroup(modifier = Modifier.fillMaxWidth()) {
-                    EtaSwitchPreference(
+                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+                // 弹窗内不再套卡片：卡片与弹窗同色看不出边界，内边距只会让这一段错开左缘。
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(enabled = !isSaving) {
+                            reasoningOverrideActive = true
+                            reasoningEnabled = !reasoningEnabled
+                        }
+                        .padding(horizontal = 4.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.ui_support_thinking_5b9e4c),
+                            style = MiuixTheme.textStyles.body1,
+                            color = MiuixTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = if (reasoningOverrideActive) {
+                                stringResource(R.string.page_covered_model_automatic_capabilities_3fa7d4)
+                            } else {
+                                stringResource(
+                                    if (model.reasoning == true) {
+                                        R.string.provider_auto_reasoning_detected
+                                    } else {
+                                        R.string.provider_auto_reasoning_unknown
+                                    },
+                                )
+                            },
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    EtaSwitch(
                         checked = reasoningEnabled,
                         onCheckedChange = { enabled ->
                             reasoningOverrideActive = true
                             reasoningEnabled = enabled
                         },
-                        title = stringResource(R.string.ui_support_thinking_5b9e4c),
-                        summary = if (reasoningOverrideActive) {
-                            context.getString(R.string.page_covered_model_automatic_capabilities_3fa7d4)
-                        } else {
-                            stringResource(
-                                if (model.reasoning == true) {
-                                    R.string.provider_auto_reasoning_supported
-                                } else {
-                                    R.string.provider_auto_reasoning_unknown
-                                },
-                            )
-                        },
                         enabled = !isSaving,
                     )
-                    if (reasoningEnabled) {
-                        EtaPreferenceDivider(hasLeading = false)
-                        EtaCheckboxPreference(
-                            title = ReasoningEffort.DEFAULT.displayName,
-                            summary = stringResource(R.string.ui_determined_by_model_or_provider_06c326),
-                            checked = true,
-                            onCheckedChange = null,
-                            checkboxLocation = CheckboxLocation.End,
-                            enabled = false,
-                        )
+                }
+                if (reasoningEnabled) {
+                    // Default 始终可用（交给模型或 Provider 决定），不作为可选项展示。
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 10.dp),
+                    ) {
                         editableReasoningEfforts.forEach { effort ->
-                            EtaPreferenceDivider(hasLeading = false)
-                            EtaCheckboxPreference(
-                                title = effort.displayName,
-                                summary = if (effort == ReasoningEffort.OFF) {
-                                    context.getString(R.string.page_allow_thinking_to_be_turned_off_during_conversations_5a32a9)
-                                } else {
-                                    null
-                                },
-                                checked = effort in selectedReasoningEfforts,
-                                onCheckedChange = { checked ->
+                            val checked = effort in selectedReasoningEfforts
+                            EtaChoiceChip(
+                                text = effort.displayName,
+                                selected = checked,
+                                onClick = {
                                     reasoningOverrideActive = true
                                     selectedReasoningEfforts = if (checked) {
-                                        selectedReasoningEfforts + effort
-                                    } else {
                                         selectedReasoningEfforts - effort
+                                    } else {
+                                        selectedReasoningEfforts + effort
                                     }
                                 },
-                                checkboxLocation = CheckboxLocation.End,
                                 enabled = !isSaving,
                             )
                         }
@@ -960,7 +1134,7 @@ private fun ModelEditDialog(
                     text = stringResource(R.string.ui_only_check_the_ranges_actually_supported_by_the_mode_2c343d),
                     style = MiuixTheme.textStyles.footnote2,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(start = 4.dp, top = 8.dp),
                 )
                 error?.let { message ->
                     Text(
@@ -971,9 +1145,10 @@ private fun ModelEditDialog(
                     )
                 }
                 if (reasoningOverrideActive || onDelete != null) {
+                    // 文字链接保持轻量外观，但点击区扩展到 40dp 高，避免在弹窗底部误触。
                     Row(
-                        modifier = Modifier.padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        modifier = Modifier.padding(top = 4.dp).offset(x = (-4).dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (reasoningOverrideActive) {
@@ -982,11 +1157,12 @@ private fun ModelEditDialog(
                                 style = MiuixTheme.textStyles.body2,
                                 color = MiuixTheme.colorScheme.primary,
                                 modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
                                     .clickable(
                                         enabled = !isSaving,
                                         onClick = ::resetAutomaticReasoning,
                                     )
-                                    .padding(vertical = 4.dp),
+                                    .padding(horizontal = 8.dp, vertical = 10.dp),
                             )
                         }
                         onDelete?.let { delete ->
@@ -995,8 +1171,9 @@ private fun ModelEditDialog(
                                 style = MiuixTheme.textStyles.body2,
                                 color = MiuixTheme.colorScheme.error,
                                 modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
                                     .clickable(enabled = !isSaving, onClick = delete)
-                                    .padding(vertical = 4.dp),
+                                    .padding(horizontal = 8.dp, vertical = 10.dp),
                             )
                         }
                     }

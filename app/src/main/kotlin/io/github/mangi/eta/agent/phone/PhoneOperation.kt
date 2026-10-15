@@ -96,11 +96,6 @@ internal object PhoneOperation {
             }
         } ?: ZoneId.systemDefault().id
 
-    fun allowed(args: JSONObject, fields: Set<String>) {
-        if (args.keys().asSequence().any { it !in fields })
-            error("INVALID_ARGUMENT", "当前操作包含不支持的参数")
-    }
-
     fun ok(tool: String) = JSONObject().put("ok", true).put("tool", tool)
 
     fun changed(tool: String, verified: Boolean) =

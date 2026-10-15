@@ -62,6 +62,14 @@
   <string name="terminal_reconnect">Reconnect</string>
   <string name="terminal_console_mode">Console mode</string>
   <string name="terminal_block_mode">Simple mode</string>
+  <string name="terminal_key_paste">Paste</string>
+  <string name="terminal_keyboard_show">Show keyboard</string>
+  <string name="terminal_keyboard_hide">Hide keyboard</string>
+  <string name="terminal_key_left">Left</string>
+  <string name="terminal_key_up">Up</string>
+  <string name="terminal_key_down">Down</string>
+  <string name="terminal_key_right">Right</string>
+  <string name="terminal_key_enter">Enter</string>
   <string name="terminal_interrupted">Stopped</string>
   <string name="terminal_env_switched">Switched to %1$s</string>
   <string name="terminal_exit_code">Exit code %1$d</string>
@@ -256,6 +264,10 @@
   <string name="tool_open_uri">Open with app</string>
   <string name="tool_browser_use">Browse web</string>
   <string name="tool_terminal">Terminal</string>
+  <string name="tool_terminal_job">异步命令</string>
+  <string name="tool_terminal_job_description">启动、查看和停止后台命令；回复结束后继续运行，完成时通知</string>
+  <string name="tool_terminal_daemon">后台服务</string>
+  <string name="tool_terminal_daemon_description">启动、查看和停止可跨 Agent 任务运行的后台服务</string>
   <string name="tool_run_command">Run command</string>
   <string name="tool_read_file">Read file</string>
   <string name="tool_write_file">Write file</string>
@@ -317,7 +329,7 @@
   <string name="ui_probe_capability_failed_2e9d70">Probe failed</string>
   <string name="ui_bright_screen_evokes_automatic_voice_input_4358fe">Bright screen evokes automatic voice input</string>
   <string name="ui_only_take_over_with_agent_prefix_d17556">Only take over with /agent prefix</string>
-  <string name="ui_only_check_the_ranges_actually_supported_by_the_mode_2c343d">Only check the ranges actually supported by the model or gateway; unsupported combinations will clearly report an error before requesting.</string>
+  <string name="ui_only_check_the_ranges_actually_supported_by_the_mode_2c343d">Only pick levels the model or gateway supports.</string>
   <string name="ui_preferences_and_strategies_2abd3c">Preferences and Strategies</string>
   <string name="ui_stop_a17f70">stop</string>
   <string name="ui_allow_sensitive_device_operation_3d42ea">Allow sensitive device operation</string>
@@ -393,7 +405,6 @@
   <string name="ui_browse_the_web_da7afb">Browse the web</string>
   <string name="ui_add_custom_model_a5ddc0">Add custom model</string>
   <string name="ui_add_attachment_dba9e8">Add attachment</string>
-  <string name="ui_clear_84fcd7">Clear</string>
   <string name="ui_clear_all_memory_a43bd3">Clear all memory?</string>
   <string name="ui_about_github_star_title">Source Code</string>
   <string name="ui_about_github_star_hint">If Eta helps you, please star it on GitHub — it means a lot to us</string>
@@ -409,7 +420,6 @@
   <string name="ui_click_to_reinstall_dc60de">Click to reinstall</string>
   <string name="ui_environmental_status_5b32a1">Environment status</string>
   <string name="ui_user_skills_748e7f">Installed by you</string>
-  <string name="ui_determined_by_model_or_provider_06c326">Determined by model or provider</string>
   <string name="ui_long_press_the_power_button_1958d0">Long press the power button</string>
   <string name="ui_leave_blank_to_use_the_default_mobile_agent_prompt_w_21e7c8">Leave blank to use the default mobile Agent system prompt</string>
   <string name="ui_knew_cb63c6">Got it</string>
@@ -583,7 +593,6 @@
   <string name="page_save_failed_40525a">Save failed</string>
   <string name="page_repair_590253">repair</string>
   <string name="page_stop_loading_c62fbc">Stop loading</string>
-  <string name="page_allow_thinking_to_be_turned_off_during_conversations_5a32a9">Allow Reasoning to be disabled in conversations</string>
   <string name="page_select_none_ba20eb">Select none</string>
   <string name="page_select_all_3e44b2">Select all</string>
   <string name="page_delete_3755f5">delete</string>
@@ -727,7 +736,7 @@
   <string name="tool_ui_coloros_system_memory_eff961">ColorOS system memory</string>
   <string name="tool_ui_qq_chat_pictures_e21bf9">QQ chat pictures</string>
   <string name="tool_ui_wi_fi_password_80e9a4">Wi‑Fi password</string>
-  <string name="tool_ui_user_root_shell_conversational_execution_and_asy_13c2ab">user/root shell, conversational execution and asynchronous reading</string>
+  <string name="tool_ui_user_root_shell_conversational_execution_and_asy_13c2ab">执行命令或复用持久 Shell 会话</string>
   <string name="tool_ui_download_history_8494d7">Download history</string>
   <string name="tool_ui_personal_order_25e4c9">Personal order</string>
   <string name="tool_ui_retrieve_recording_files_from_system_media_libra_314c4d">Retrieve recording files from system media library</string>
@@ -937,7 +946,19 @@
     <item quantity="other">Fetched %d models</item>
   </plurals>
   <string name="provider_models_endpoint_summary">Read the /models list from %1$s</string>
-  <string name="provider_models_fetched_filtered">Fetched %1$d models; filtered out %2$d non-chat models</string>
+  <string name="provider_models_up_to_date">Up to date, no new models</string>
+  <string name="provider_context_window_hint">Pick a common size or type one; used to decide when to compact</string>
+  <string name="provider_context_window_invalid">Enter a positive integer</string>
+  <string name="provider_context_window_value">About %1$s tokens</string>
+  <string name="provider_context_window_usage">Conversations compact automatically as they approach this size</string>
+  <plurals name="provider_models_added">
+    <item quantity="one">Added %d model</item>
+    <item quantity="other">Added %d models</item>
+  </plurals>
+  <string name="remote_model_import_title">Add models</string>
+  <string name="remote_model_import_summary">%1$d new models available</string>
+  <string name="remote_model_import_pick_hint">Pick the models to add</string>
+  <string name="remote_model_import_confirm">Add %1$d</string>
   <string name="provider_model_list_count">Models (%1$d)</string>
   <string name="provider_model_list_matches">Models (%1$d of %2$d match)</string>
   <string name="provider_model_saved">Saved: %1$s</string>
@@ -955,7 +976,12 @@
     <item quantity="one">%d selected</item>
     <item quantity="other">%d selected</item>
   </plurals>
-  <string name="provider_auto_reasoning_supported">Auto: supports reasoning</string>
+  <plurals name="provider_delete_models_action">
+    <item quantity="one">Delete %d model</item>
+    <item quantity="other">Delete %d models</item>
+  </plurals>
+  <string name="provider_delete_models_pick_hint">Pick models to delete</string>
+  <string name="provider_auto_reasoning_detected">Detected automatically</string>
   <string name="provider_auto_reasoning_unknown">Auto: unsupported or unknown</string>
   <string name="provider_context_tag">%1$s context</string>
   <string name="provider_sync_failed">Sync failed</string>
@@ -1105,14 +1131,14 @@
   <string name="browser_title">Agent Browser</string>
   <string name="browser_open_external">Open in another app</string>
   <string name="browser_reset_session">Reset session</string>
-  <string name="browser_user_controlling">You are controlling this session. Agent web actions are paused; return to let the Agent continue.</string>
+  <string name="browser_user_controlling">You\'re controlling the page. The Agent is paused until you go back.</string>
   <string name="browser_opening">Opening webpage</string>
   <string name="browser_opening_host">Opening %1$s</string>
   <string name="model_not_selected">Not selected</string>
   <string name="conversation_model_unavailable">Model unavailable for this conversation. Using %1$s.</string>
   <string name="model_switch_current">Switch model. Current: %1$s</string>
-  <string name="model_collapse_provider">Collapse %1$s</string>
-  <string name="model_expand_provider">Expand %1$s</string>
+  <string name="model_picker_title">Choose model</string>
+  <string name="model_picker_filter_all">All</string>
   <string name="context_no_previous_usage">No usage data yet</string>
   <string name="context_no_model_limit">Context window unknown, so automatic compaction is off. You can still compact manually, or set the window in Settings → Model Providers.</string>
   <string name="context_usage_after_response">Measured after the first response</string>
@@ -1318,7 +1344,6 @@
   <string name="speech_saved">Saved</string>
   <string name="speech_saved_with_pending">Saved; some changes are still unsaved</string>
   <string name="speech_save_failed">Save failed: %1$s</string>
-  <string name="speech_loading">Loading settings…</string>
   <string name="speech_load_failed">Could not read speech settings; go back and try again</string>
   <string name="speech_oss_note">Recordings are uploaded as private objects and deleted after transcription. Grant put, read and delete permission for this prefix, and add a one-day expiration lifecycle rule as a cleanup fallback.</string>
   <string name="speech_oss_region">Region</string>
@@ -1328,6 +1353,10 @@
   <string name="speech_dictation_finish">Finish dictation</string>
   <string name="speech_read_aloud">Read aloud</string>
   <string name="speech_read_stop">Stop reading</string>
+  <string name="speech_auto_read_on">Auto read-aloud on, tap to turn off</string>
+  <string name="speech_auto_read_off">Auto read-aloud off, tap to turn on</string>
+  <string name="read_aloud_channel">Read aloud</string>
+  <string name="read_aloud_notification_title">Eta is reading aloud</string>
   <string name="speech_mic_permission">Allow Eta to use the microphone</string>
   <string name="speech_open_settings">Speech settings</string>
   <string name="speech_test_result">Recognition result: %1$s</string>
@@ -1347,4 +1376,20 @@
   <string name="tool_web_search_description">未使用 Provider 托管搜索时检索公开网页，返回标题、链接与摘要，无需额外 API Key。</string>
   <string name="tool_fetch_url">读取网页正文</string>
   <string name="tool_fetch_url_description">读取静态网页正文并分页续读；不执行网页脚本或共享浏览器登录状态。</string>
+  <string name="chat_edit_character_reply">Edit character reply</string>
+  <string name="chat_previous_candidate">Previous candidate reply</string>
+  <string name="chat_next_candidate">Next candidate reply</string>
+  <string name="chat_image_attachment">Image attachment</string>
+  <string name="chat_edit_preserve_following">Saving updates this message in place and keeps the rest of the conversation</string>
+  <string name="chat_save_message">Save message</string>
+  <string name="chat_character_story_start">The story begins here</string>
+  <string name="tool_details_expand">Expand tool details</string>
+  <string name="tool_details_collapse">Collapse tool details</string>
+  <string name="shared_folders_picker_no_subfolders">No subfolders here</string>
+  <string name="memory_empty_title">No memories yet</string>
+  <string name="memory_mode_preview">Preview</string>
+  <string name="memory_mode_edit">Edit</string>
+  <string name="memory_discard">Discard</string>
+  <string name="chat_character_input_hint">Say something to %1$s…</string>
+  <string name="chat_character_typing">%1$s is replying…</string>
 </resources>

@@ -22,6 +22,7 @@ import io.github.mangi.eta.ui.app.rememberDeviceCapabilities
 import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaPreference
 import io.github.mangi.eta.ui.components.EtaPreferenceColors
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
@@ -44,7 +45,7 @@ fun SystemEnhanceScreen(
         modifier = modifier,
     ) {
         item(key = "access") {
-            EtaPreferenceGroup(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            EtaPreferenceGroup(modifier = Modifier.padding(horizontal = EtaPreferenceDefaults.SidePadding).padding(top = 8.dp, bottom = EtaPreferenceDefaults.GroupSpacing)) {
                 EtaPreference(
                     title = "Root",
                     summary = capabilities.root.description(context),
@@ -77,7 +78,7 @@ fun SystemEnhanceScreen(
             }
         }
         item(key = "framework-help") {
-            EtaPreferenceGroup(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            EtaPreferenceGroup {
                 EtaPreference(
                     title = stringResource(R.string.capability_xposed_help),
                     summary = stringResource(R.string.capability_xposed_help_summary),
@@ -87,7 +88,7 @@ fun SystemEnhanceScreen(
         }
         item(key = "root-title") { EtaPreferenceGroupTitle(stringResource(R.string.capability_root_features)) }
         item(key = "root-features") {
-            EtaPreferenceGroup(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            EtaPreferenceGroup {
                 EtaPreference(
                     title = stringResource(R.string.capability_root_device),
                     summary = stringResource(R.string.capability_root_device_summary),
@@ -109,7 +110,7 @@ fun SystemEnhanceScreen(
         }
         item(key = "hook-title") { EtaPreferenceGroupTitle(stringResource(R.string.capability_system_features)) }
         item(key = "hook-features") {
-            EtaPreferenceGroup(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            EtaPreferenceGroup {
                 EtaPreference(
                     title = stringResource(R.string.capability_hook_assistants),
                     summary = stringResource(R.string.capability_hook_assistants_summary),

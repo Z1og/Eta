@@ -1,4 +1,5 @@
 package io.github.mangi.eta.ui.screens.terminal
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,12 +8,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -20,9 +23,13 @@ import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.terminal.TerminalEnvironment
 import io.github.mangi.eta.ui.app.displayName
+import io.github.mangi.eta.ui.components.EtaMonospace
 import io.github.mangi.eta.ui.components.EtaTextButton
+import io.github.mangi.eta.ui.components.StatusSuccess
 import io.github.mangi.eta.ui.components.EtaWindowDialog
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.squircle.squircleBackground
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Immutable
@@ -76,9 +83,10 @@ internal fun SessionListDialog(
         EtaTextButton(
             text = stringResource(R.string.terminal_new_session),
             onClick = { onNew(); onDismiss() },
+            colors = ButtonDefaults.textButtonColorsPrimary(),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp),
+                .padding(top = 12.dp),
         )
     }
 }
@@ -90,64 +98,70 @@ private fun SessionRow(
     onRestart: () -> Unit,
     onClose: () -> Unit,
 ) {
-    Column(
+    val colors = MiuixTheme.colorScheme
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onSelect)
-            .padding(vertical = 6.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = row.environment.displayName,
-                style = MiuixTheme.textStyles.body2,
-                fontWeight = if (row.active) FontWeight.SemiBold else null,
-                color = if (row.active) {
-                    MiuixTheme.colorScheme.primary
-                } else {
-                    MiuixTheme.colorScheme.onSurface
-                },
+            .padding(vertical = 3.dp)
+            .squircleBackground(
+                if (row.active) colors.primary.copy(alpha = 0.08f) else colors.surfaceContainer,
+                14.dp,
             )
-            if (row.active) {
+            .clickable(onClick = onSelect)
+            .padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StatusDot(
+            color = when {
+                !row.alive -> colors.error
+                row.running -> StatusSuccess
+                else -> colors.onSurfaceVariantSummary.copy(alpha = 0.5f)
+            },
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = stringResource(R.string.terminal_session_current),
+                    text = row.environment.displayName,
+                    style = MiuixTheme.textStyles.body2,
+                    fontWeight = FontWeight.Medium,
+                    color = if (row.active) colors.primary else colors.onSurface,
+                )
+                Text(
+                    text = if (row.active) {
+                        stringResource(R.string.terminal_session_current) + " · " + sessionStateLabel(row)
+                    } else {
+                        sessionStateLabel(row)
+                    },
                     style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.primary,
+                    color = colors.onSurfaceVariantSummary,
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
+            if (row.subtitle.isNotEmpty()) {
+                Text(
+                    text = row.subtitle,
+                    style = MiuixTheme.textStyles.footnote2.copy(fontFamily = EtaMonospace),
+                    color = colors.onSurfaceVariantSummary,
+                    maxLines = 1,
+                    overflow = TextOverflow.StartEllipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
-        if (row.subtitle.isNotEmpty()) {
-            Text(
-                text = row.subtitle,
-                style = MiuixTheme.textStyles.footnote2.copy(fontFamily = FontFamily.Monospace),
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                text = sessionStateLabel(row),
-                style = MiuixTheme.textStyles.footnote2,
-                color = if (row.running) {
-                    MiuixTheme.colorScheme.primary
-                } else {
-                    MiuixTheme.colorScheme.onSurfaceVariantSummary
-                },
-                modifier = Modifier.weight(1f),
-            )
-            EtaTextButton(
-                text = stringResource(R.string.terminal_restart_session),
-                onClick = onRestart,
-            )
-            EtaTextButton(
-                text = stringResource(R.string.terminal_close_session),
-                onClick = onClose,
-            )
-        }
+        RowIconAction(
+            icon = Icons.Rounded.RestartAlt,
+            contentDescription = stringResource(R.string.terminal_restart_session),
+            onClick = onRestart,
+        )
+        RowIconAction(
+            icon = Icons.Rounded.Close,
+            contentDescription = stringResource(R.string.terminal_close_session),
+            onClick = onClose,
+        )
     }
 }
 

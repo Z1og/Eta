@@ -43,6 +43,8 @@ data class SpeechSettings(
     val asr: AsrProvider = AsrProvider.SYSTEM,
     val tts: TtsProvider = TtsProvider.NONE,
     val autoSpeak: Boolean = false,
+    /** 聊天页回答完成后自动朗读最终回答；与助手浮窗的自动播报分开保存。 */
+    val chatAutoSpeak: Boolean = false,
     val language: String = "",
     val qwenAsr: QwenSpeechConfig = QwenSpeechConfig(),
     val qwenTts: QwenSpeechConfig = QwenSpeechConfig(),

@@ -269,6 +269,10 @@ class ShellFileToolBackendTest {
             newBackend { _, _, _ -> result(exit = -3, truncated = true) }.readBytes("/workspace/a", 0, 3)
         }
         assertFailure("FILE_TIMEOUT") { newBackend { _, _, _ -> result(exit = -2) }.readBytes("/workspace/a", 0, 3) }
+        assertFailure("FILE_INPUT_FAILED") {
+            newBackend { _, _, _ -> result(exit = SHELL_STDIN_FAILED_EXIT_CODE) }
+                .write("/workspace/a", byteArrayOf(1), false)
+        }
         assertFailure("FILE_ACCESS_DENIED") { newBackend { _, _, _ -> result(exit = 43) }.stat("/workspace/a") }
         assertFailure("FILE_HASH_UNAVAILABLE") {
             newBackend { _, _, _ -> result(exit = 45) }.write("/workspace/a", byteArrayOf(1), false, expectedSha256 = "a".repeat(64))
@@ -294,8 +298,12 @@ class ShellFileToolBackendTest {
     }
 
     private fun runShell(command: String, input: ByteArray? = null): OneShotShellResult {
-        val process = ProcessBuilder("sh", "-c", command).directory(temporaryFolder.root).start()
-        process.outputStream.use { if (input != null) it.write(input) }
+        // 这里验证 Shell 脚本及文件保护合同；用文件供给输入，避免提前退出与父进程写管道竞争。
+        val inputFile = temporaryFolder.newFile().apply { writeBytes(input ?: byteArrayOf()) }
+        val process = ProcessBuilder("sh", "-c", command)
+            .directory(temporaryFolder.root)
+            .redirectInput(inputFile)
+            .start()
         val output = process.inputStream.readBytes()
         val error = process.errorStream.readBytes()
         assertTrue("测试 Shell 没有正常结束", process.waitFor(5, TimeUnit.SECONDS))

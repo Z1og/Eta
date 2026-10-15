@@ -1,6 +1,5 @@
 package io.github.mangi.eta.ui.components
 
-import io.github.mangi.eta.ui.voice.SpeechPlaybackHost
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -12,7 +11,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -36,7 +34,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.DocumentScanner
@@ -59,19 +57,21 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.R
@@ -92,6 +92,8 @@ import io.github.mangi.eta.ui.model.ToolActivityMessageUi
 import io.github.mangi.eta.ui.model.ToolSummaryMessageUi
 import io.github.mangi.eta.ui.model.UserMessageUi
 import io.github.mangi.eta.ui.model.latestContextUsage
+import io.github.mangi.eta.ui.voice.SpeechAutoReadAloud
+import io.github.mangi.eta.ui.voice.SpeechPlaybackHost
 import kotlin.math.exp
 import kotlin.math.min
 import kotlinx.coroutines.CancellationException
@@ -103,6 +105,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.IconButtonDefaults
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
@@ -112,6 +115,8 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
+import top.yukonga.miuix.kmp.squircle.squircleBorder
+import top.yukonga.miuix.kmp.squircle.squircleSurface
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -155,7 +160,6 @@ internal fun AgentChatBody(
     onSuggestionClick: (String) -> Unit,
     onRunTraceClick: () -> Unit,
     onOpenBrowser: () -> Unit,
-    characterName: String? = null,
     isDrawerOpen: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -213,6 +217,7 @@ internal fun AgentChatBody(
     }
 
     SpeechPlaybackHost {
+        SpeechAutoReadAloud(messages = messages, isStreaming = isStreaming)
         AgentChatScaffold(
             visibleMessages = visibleMessages,
             hasMessages = visibleMessages.isNotEmpty(),
@@ -228,7 +233,6 @@ internal fun AgentChatBody(
             pendingFileReferences = pendingFileReferences,
             messageEdit = messageEdit,
             showEmptySuggestions = !isKeyboardVisible,
-            characterName = characterName,
             keepBottomAnchored = keepBottomAnchored,
             onBottomAnchorChanged = { keepBottomAnchored = it },
             onSubmit = { text ->
@@ -280,7 +284,6 @@ private fun AgentChatScaffold(
     pendingFileReferences: List<PendingFileReferenceUi>,
     messageEdit: MessageEditUiState?,
     showEmptySuggestions: Boolean,
-    characterName: String?,
     keepBottomAnchored: Boolean,
     onBottomAnchorChanged: (Boolean) -> Unit,
     onSubmit: (String) -> Unit,
@@ -357,7 +360,6 @@ private fun AgentChatScaffold(
         if (!hasMessages) {
             EmptyChatState(
                 showSuggestions = showEmptySuggestions,
-                characterName = characterName,
                 onSuggestionClick = onSuggestionClick,
                 modifier = Modifier
                     .fillMaxSize()
@@ -625,8 +627,8 @@ internal fun AgentConversationMessages(
                 .scrollEndHaptic()
                 .overScrollVertical(),
             contentPadding = PaddingValues(
-                top = 14.dp,
-                bottom = bottomInset + 14.dp,
+                top = 16.dp,
+                bottom = bottomInset + 16.dp,
             ),
             overscrollEffect = null,
         ) {
@@ -714,6 +716,17 @@ internal fun AgentConversationMessages(
             exit = fadeOut(tween(100)) + scaleOut(tween(120), targetScale = 0.86f),
         ) {
             IconButton(
+                // 与输入框同一套浮起层次：消息背景接近按钮底色时仍能一眼认出。
+                modifier = Modifier
+                    .dropShadow(
+                        shape = CircleShape,
+                        shadow = Shadow(radius = 8.dp, color = Color.Black, alpha = 0.08f),
+                    )
+                    .squircleBorder(
+                        width = 0.5.dp,
+                        color = MiuixTheme.colorScheme.outline.copy(alpha = 0.55f),
+                        cornerRadius = IconButtonDefaults.CornerRadius,
+                    ),
                 onClick = {
                     onBottomAnchorChanged(true)
                     coroutineScope.launch {
@@ -727,7 +740,7 @@ internal fun AgentConversationMessages(
                 Icon(
                     imageVector = Icons.Rounded.ArrowDownward,
                     contentDescription = stringResource(R.string.ui_back_to_bottom_32282e),
-                    modifier = Modifier.size(17.dp),
+                    modifier = Modifier.size(18.dp),
                     tint = MiuixTheme.colorScheme.onSurface,
                 )
             }
@@ -948,7 +961,7 @@ private fun AgentChatBottomBar(
                 .fillMaxWidth()
                 .background(MiuixTheme.colorScheme.surface)
                 .navigationBarsPadding()
-                .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
         ) {
             AgentChatInputBar(
                 input = input,
@@ -1018,11 +1031,11 @@ internal fun shouldRequestInitialBottom(
 @Composable
 private fun EmptyChatState(
     showSuggestions: Boolean,
-    characterName: String?,
     onSuggestionClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isCharacterConversation = characterName != null
+    val character = LocalRoleplayChat.current
+    val isCharacterConversation = character != null
     val suggestions = listOf(
         SuggestionItem(
             title = stringResource(R.string.ui_analyze_current_screen_ebf08f),
@@ -1053,15 +1066,22 @@ private fun EmptyChatState(
                 .padding(bottom = 56.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (isCharacterConversation) {
+            if (character != null) {
+                CharacterAvatar(
+                    name = character.characterName,
+                    avatarPath = character.avatarPath,
+                    size = 88.dp,
+                    shape = CircleShape,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = characterName.orEmpty(),
+                    text = character.characterName,
                     style = MiuixTheme.textStyles.title2,
                     color = MiuixTheme.colorScheme.onSurface,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "故事从这里开始",
+                    text = stringResource(R.string.chat_character_story_start),
                     style = MiuixTheme.textStyles.body2,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
@@ -1073,7 +1093,7 @@ private fun EmptyChatState(
                 )
             }
 
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             AnimatedVisibility(
                 visible = showSuggestions && !isCharacterConversation,
@@ -1094,11 +1114,11 @@ private fun EmptyChatState(
                 ),
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     suggestions.chunked(2).forEach { rowItems ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             rowItems.forEach { item ->
                                 SuggestionCard(
                                     item = item,
@@ -1122,28 +1142,28 @@ private fun SuggestionCard(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MiuixTheme.colorScheme.surface)
-            .border(
+            .squircleSurface(color = MiuixTheme.colorScheme.surface, cornerRadius = 16.dp)
+            .squircleBorder(
                 width = 0.5.dp,
                 color = MiuixTheme.colorScheme.outline.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(12.dp),
+                cornerRadius = 16.dp,
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         Icon(
             imageVector = item.icon,
             contentDescription = null,
-            modifier = Modifier.size(17.dp),
-            tint = MiuixTheme.colorScheme.onBackground,
+            modifier = Modifier.size(18.dp),
+            tint = MiuixTheme.colorScheme.primary,
         )
-        Spacer(modifier = Modifier.height(9.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = item.title,
             style = MiuixTheme.textStyles.body2,
             color = MiuixTheme.colorScheme.onSurface,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

@@ -39,9 +39,7 @@ internal fun SpeechSettingsScreen(onBack: () -> Unit, onNavigate: (AppRoute) -> 
         onBack = onBack,
     ) {
         if (current == null) {
-            item(key = "loading") {
-                SpeechNote(stringResource(R.string.speech_loading))
-            }
+            item(key = "loading") { SpeechLoadingState(failure = null) }
             return@MiuixScaffoldPage
         }
         item(key = "service_title") {

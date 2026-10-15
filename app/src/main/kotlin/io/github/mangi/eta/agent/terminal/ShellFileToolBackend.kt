@@ -171,6 +171,7 @@ internal class ShellFileToolBackend(
         val result = execute(command, stdin, maxOutputBytes)
         checkActive()
         when (result.exitCode) {
+            SHELL_STDIN_FAILED_EXIT_CODE -> fail("FILE_INPUT_FAILED", "文件写入内容未能完整传输，请重新读取并确认文件状态")
             -3 -> fail("CANCELLED", "文件操作已取消")
             -2 -> fail("FILE_TIMEOUT", "文件操作超时")
             -1 -> fail("FILE_PROCESS_FAILED", "无法启动文件操作")

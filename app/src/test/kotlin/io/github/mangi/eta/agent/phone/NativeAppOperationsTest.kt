@@ -203,21 +203,24 @@ class NativeAppOperationsTest {
     }
 
     @Test
-    fun clockInvalidTimeAndUnknownArgumentsCannotReachMutation() {
+    fun clockInvalidTimeCannotReachMutation() {
         val provider = FakeProvider()
-        for (args in
-            listOf(
-                JSONObject().put("hour", -1).put("minute", 0),
-                JSONObject()
-                    .put("hour", 8)
-                    .put("minute", 30)
-                    .put("provider_uri", "content://anything"),
-            )) {
-            val result =
-                PhoneOperations.execute(context, "set_alarm", args, userId = 0, access = provider)
-            assertEquals("INVALID_ARGUMENT", result.getString("code"))
-        }
+        val result = PhoneOperations.execute(context, "set_alarm",
+            JSONObject().put("hour", -1).put("minute", 0), userId = 0, access = provider)
+        assertEquals("INVALID_ARGUMENT", result.getString("code"))
         assertNull(provider.createdAlarm)
+    }
+
+    @Test
+    fun clockIgnoresExtraFieldsWithoutChangingProviderTarget() {
+        val provider = FakeProvider()
+        val result = PhoneOperations.execute(context, "set_alarm",
+            JSONObject().put("hour", 8).put("minute", 30).put("provider_uri", "content://anything"),
+            userId = 0, access = provider)
+        assertTrue(result.toString(), result.getBoolean("ok"))
+        assertEquals(8, provider.alarmHour)
+        assertEquals(30, provider.alarmMinute)
+        assertEquals(1, provider.calls.count { it == "add_alarm" })
     }
 
     private fun event() =

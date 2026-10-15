@@ -19,7 +19,6 @@ internal class NoteOperations(
         when (tool) {
             "create_note" -> create(args)
             "read_note" -> {
-                PhoneOperation.allowed(args, setOf("note_id"))
                 val id = id(args)
                 read(id)?.let { PhoneOperation.ok(tool).put("note", it) }
                     ?: PhoneOperation.failure("NOTE_NOT_FOUND", "未找到便签")
@@ -40,7 +39,6 @@ internal class NoteOperations(
     }
 
     private fun create(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, setOf("title", "content"))
         val content = PhoneOperation.text(args, "content", true, 20000)!!
         val title = PhoneOperation.text(args, "title", false, 200)
         val values =
@@ -71,7 +69,6 @@ internal class NoteOperations(
     }
 
     private fun delete(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, setOf("note_id"))
         val id = id(args)
         val before = read(id) ?: return PhoneOperation.failure("NOTE_NOT_FOUND", "未找到便签")
         val target =

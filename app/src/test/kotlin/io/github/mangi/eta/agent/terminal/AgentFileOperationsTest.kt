@@ -49,7 +49,7 @@ class AgentFileOperationsTest {
         File(temporary.root, "config.txt").writeText("home")
         File(cwd, "config.txt").writeText("cwd")
         val operations = AgentFileOperations(LocalFileToolBackend(
-            workspace = cwd, allowedRoots = listOf(temporary.root), home = temporary.root,
+            workspace = cwd, home = temporary.root,
         ))
         assertEquals("home", JSONObject(operations.readFile("~/config.txt")).getString("content"))
         assertEquals("cwd", JSONObject(operations.readFile("config.txt")).getString("content"))
@@ -153,12 +153,14 @@ class AgentFileOperationsTest {
         assertEquals(permissions, Files.getPosixFilePermissions(file.toPath()))
     }
 
-    @Test fun rootBoundaryRejectsSymlinkEscape() {
+    @Test fun symlinksResolveToAccessibleFilesOutsideWorkingDirectory() {
         val workspace = temporary.newFolder("workspace")
         val outside = temporary.newFile("outside.txt").apply { writeText("outside") }
         Files.createSymbolicLink(File(workspace, "escape").toPath(), outside.toPath())
         val result = JSONObject(AgentFileOperations(LocalFileToolBackend(workspace)).readFile("escape"))
-        assertEquals("PATH_OUTSIDE_SCOPE", result.getString("code"))
+        assertTrue(result.toString(), result.getBoolean("ok"))
+        assertEquals("outside", result.getString("content"))
+        assertEquals(outside.canonicalPath, result.getString("path"))
     }
 
     @Test fun cancellationPropagatesInsteadOfBecomingFileError() {

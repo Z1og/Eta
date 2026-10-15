@@ -33,8 +33,6 @@ internal data class PersonalContextRequest(
         const val MAX_LIMIT = 30
         const val MAX_OFFSET = 10_000
 
-        private val baseFields = setOf("action", "source")
-        private val queryFields = baseFields + setOf("query", "start_time", "end_time")
         private val timePattern = Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\\.[0-9]{1,9})?)?(?:Z|[+-][0-9]{2}:[0-9]{2})$")
         private val idPattern = Regex("^[0-9]{1,19}$")
 
@@ -42,13 +40,6 @@ internal data class PersonalContextRequest(
             val actionName = requiredString(arguments, "action", "必须提供有效的 action")
             val action = PersonalContextAction.entries.firstOrNull { it.wireName == actionName }
                 ?: invalid("不支持此个人上下文操作")
-            val allowed = when (action) {
-                PersonalContextAction.SOURCES -> baseFields
-                PersonalContextAction.SEARCH -> queryFields + setOf("limit", "offset", "sort")
-                PersonalContextAction.READ -> baseFields + "id"
-                PersonalContextAction.COUNT, PersonalContextAction.BILL_SUMMARY -> queryFields
-            }
-            if (arguments.keys().asSequence().any { it !in allowed }) invalid("参数包含当前操作不支持的字段")
             val source = if (arguments.has("source")) {
                 PersonalContextSources.find(requiredString(arguments, "source", "source 必须是有效的数据源名称"))
                     ?: invalid("不支持此个人上下文数据源")

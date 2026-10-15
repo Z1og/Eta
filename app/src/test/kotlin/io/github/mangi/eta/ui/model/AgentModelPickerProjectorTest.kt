@@ -72,19 +72,49 @@ class AgentModelPickerProjectorTest {
     }
 
     @Test
-    fun providerGroups_expandCurrentByDefault() {
-        val selected = AgentModelOptionUi(
-            id = "model",
-            providerId = "current",
-            providerName = "Current",
-            providerSourceType = ProviderSourceTypes.CUSTOM,
-            modelId = "model",
-            displayName = "Model",
-            contextWindow = null,
+    fun filterGroups_matchesModelNamesIdsAndProviderNames() {
+        fun option(id: String, providerId: String, providerName: String, displayName: String) =
+            AgentModelOptionUi(
+                id = id,
+                providerId = providerId,
+                providerName = providerName,
+                providerSourceType = ProviderSourceTypes.CUSTOM,
+                modelId = id,
+                displayName = displayName,
+                contextWindow = null,
+            )
+        val state = AgentModelPickerUiState(
+            providerGroups = listOf(
+                AgentModelProviderGroupUi(
+                    providerId = "deepseek",
+                    providerName = "DeepSeek",
+                    providerSourceType = ProviderSourceTypes.CUSTOM,
+                    models = listOf(
+                        option("deepseek-v4.1-flash", "deepseek", "DeepSeek", "DeepSeek V4.1 Flash"),
+                        option("deepseek-r2", "deepseek", "DeepSeek", "DeepSeek R2"),
+                    ),
+                ),
+                AgentModelProviderGroupUi(
+                    providerId = "zhipu",
+                    providerName = "智谱",
+                    providerSourceType = ProviderSourceTypes.CUSTOM,
+                    models = listOf(option("glm-5", "zhipu", "智谱", "GLM-5")),
+                ),
+            ),
         )
-        val expanded = defaultExpandedModelProviderIds(selected)
 
-        assertEquals(setOf("current"), expanded)
+        assertEquals(state.providerGroups, state.filterGroups("  "))
+        assertEquals(
+            listOf("deepseek-v4.1-flash"),
+            state.filterGroups("v4flash").flatMap { it.models }.map { it.id },
+        )
+        assertEquals(listOf("glm-5"), state.filterGroups("智谱").flatMap { it.models }.map { it.id })
+        assertEquals(
+            listOf("deepseek-r2"),
+            state.filterGroups("deepseek r2").flatMap { it.models }.map { it.id },
+        )
+        assertEquals(emptyList<AgentModelProviderGroupUi>(), state.filterGroups("claude"))
+        assertEquals(3, state.modelCount)
     }
 
     @Test

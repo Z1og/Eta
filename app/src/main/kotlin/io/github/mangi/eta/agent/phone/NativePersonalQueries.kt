@@ -22,10 +22,6 @@ internal class NativePersonalQueries(
     )
 
     fun execute(tool: String, args: JSONObject): JSONObject {
-        PhoneOperation.allowed(
-            args,
-            setOf("query", "limit", "offset", "start_time", "end_time", "sort", "match", "current_only"),
-        )
         if (args.has("current_only")) PhoneOperation.boolean(args, "current_only")
         if (args.has("match") && args.optString("match") != "name")
             PhoneOperation.error("INVALID_ARGUMENT", "当前数据源不支持此检索方式")

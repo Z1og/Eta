@@ -129,6 +129,11 @@
             android:exported="false" />
 
         <service
+            android:name=".agent.voice.ReadAloudPlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <service
             android:name=".agent.runtime.AgentRuntimeService"
             android:exported="true"
             tools:ignore="ExportedService" />

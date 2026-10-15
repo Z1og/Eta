@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -53,6 +54,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
@@ -81,6 +83,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 internal fun AgentOverlayCapsule(
     state: AgentOverlayState,
     expanded: Boolean,
+    yielded: Boolean,
     onToggleExpanded: () -> Unit,
     onCollapsedSettled: () -> Unit,
     onPause: () -> Unit,
@@ -118,6 +121,16 @@ internal fun AgentOverlayCapsule(
         if (!expanded && supplementMode) leaveSupplementMode()
     }
 
+    // 为 Agent 手势让路：离开时快速上移收小淡出，回来时用弹簧落回，只改绘制层不触发重排。
+    val clearance by animateFloatAsState(
+        targetValue = if (yielded) 1f else 0f,
+        animationSpec = if (yielded) {
+            tween(durationMillis = 180, easing = FastOutLinearInEasing)
+        } else {
+            spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+        },
+        label = "capsule_clearance",
+    )
     val accent by animateColorAsState(overlayPhaseAccent(state.phase), tween(240), label = "capsule_accent")
     val statusText = state.status.localizedText()
     val expandDescription = stringResource(R.string.overlay_capsule_toggle, statusText)
@@ -143,8 +156,12 @@ internal fun AgentOverlayCapsule(
                     .graphicsLayer {
                         // 点击时轻微回弹，展开后保持原尺寸；只改绘制层，不触发重新布局。
                         val press = 1f - 0.03f * (1f - expansion) * expansion * 4f
-                        scaleX = press
-                        scaleY = press
+                        val shrink = 1f - 0.08f * clearance
+                        scaleX = press * shrink
+                        scaleY = press * shrink
+                        translationY = -12.dp.toPx() * clearance
+                        alpha = 1f - clearance
+                        transformOrigin = TransformOrigin(0.5f, 0f)
                     }
                     .shadow(10.dp, RoundedCornerShape(CapsuleCorner), ambientColor = accent, spotColor = accent)
                     .clip(RoundedCornerShape(CapsuleCorner))

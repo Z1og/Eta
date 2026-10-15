@@ -3,11 +3,13 @@ package io.github.mangi.eta.ui.voice
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -34,17 +36,20 @@ import io.github.mangi.eta.data.model.TtsProvider
 import io.github.mangi.eta.ui.components.EtaDropdownPreference
 import io.github.mangi.eta.ui.components.EtaOverlayDropdownPreference
 import io.github.mangi.eta.ui.components.EtaPreference
+import io.github.mangi.eta.ui.components.EtaPreferenceDefaults
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
 import io.github.mangi.eta.ui.components.EtaSwitchPreference
 import io.github.mangi.eta.ui.components.EtaTextButton
+import io.github.mangi.eta.ui.components.ListEmptyState
 import io.github.mangi.eta.ui.components.StatusError
 import io.github.mangi.eta.ui.components.StatusSuccess
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -78,6 +83,21 @@ internal fun SpeechNote(text: String, modifier: Modifier = Modifier) {
         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         modifier = modifier.padding(horizontal = 32.dp, vertical = 8.dp),
     )
+}
+
+/** 配置读取期间显示加载指示，读取失败时换成带图标的错误说明，两种状态不再长得一样。 */
+@Composable
+internal fun SpeechLoadingState(failure: String?) {
+    if (failure != null) {
+        ListEmptyState(title = failure, icon = Icons.Rounded.ErrorOutline)
+    } else {
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            InfiniteProgressIndicator(size = 24.dp)
+        }
+    }
 }
 
 /** 卡片内的表单字段块，与 Provider 配置页使用同一套内边距与字段间距。 */
@@ -337,7 +357,7 @@ internal fun SpeechSaveBlock(store: SpeechSettingsStore, validate: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp)
+            .padding(horizontal = EtaPreferenceDefaults.SidePadding)
             .padding(top = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

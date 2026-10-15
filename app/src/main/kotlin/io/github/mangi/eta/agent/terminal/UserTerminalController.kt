@@ -27,7 +27,6 @@ internal class UserTerminalController(
     private companion object {
         const val DEFAULT_CWD = "/data/local/tmp/eta"
         const val LINUX_DEFAULT_CWD = "/workspace"
-        const val MAX_COMMAND_CHARS = 16_000
         const val MAX_SESSIONS = 6
         const val STREAM_MAX_BYTES = 1024 * 1024
         const val POLL_INTERVAL_MS = 50L
@@ -173,7 +172,6 @@ internal class UserTerminalController(
      */
     fun exec(sessionId: String, command: String, onDelta: (text: String, isStderr: Boolean) -> Unit): ExecResult {
         val trimmed = command.trim()
-        require(trimmed.length <= MAX_COMMAND_CHARS) { "command 过长：${trimmed.length}" }
         val current = synchronized(sessionLock) { sessions[sessionId] }
             ?: return ExecResult(
                 exitCode = null,

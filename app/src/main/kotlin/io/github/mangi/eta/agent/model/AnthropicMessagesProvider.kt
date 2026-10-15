@@ -14,6 +14,7 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
     private const val ADAPTIVE_MODEL_DEFAULT_MAX_TOKENS = 16_384
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     private val TOP_LEVEL_COMBINATORS = listOf("oneOf", "anyOf", "allOf")
+    private const val TRANSIENT_BLOCK = "_eta_transient"
 
     override val id: String = "anthropic_messages"
 
@@ -87,20 +88,30 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
     ): JSONObject {
         val systemParts = mutableListOf<String>()
         val anthropicMessages = JSONArray()
-        val latestAssistantIndex = (messages.length() - 1 downTo 0).firstOrNull { index ->
-            messages.optJSONObject(index)?.optString("role") == "assistant"
-        }
+        // 当前轮（最后一条真实用户消息之后）的助手消息都原样带回签名块：工具循环中逐轮保持
+        // 同一前缀，缓存才能在每一轮续用；更早轮次统一去掉思考，形态在各轮之间同样稳定。
+        val currentTurnStart = (messages.length() - 1 downTo 0).firstOrNull { index ->
+            messages.optJSONObject(index)?.let { it.optString("role") == "user" && !it.optBoolean("_eta_observation") } == true
+        } ?: -1
         for (index in 0 until messages.length()) {
             val message = messages.optJSONObject(index) ?: continue
             when (message.optString("role")) {
                 "system" -> providerMessageText(message.opt("content"))
                     .takeIf { it.isNotBlank() }
                     ?.let(systemParts::add)
-                "user" -> appendTurn(anthropicMessages, "user", convertUserContent(message.opt("content")))
+                "user" -> appendTurn(
+                    anthropicMessages,
+                    "user",
+                    convertUserContent(message.opt("content")).also { blocks ->
+                        if (message.optBoolean("_eta_observation")) {
+                            for (block in 0 until blocks.length()) blocks.optJSONObject(block)?.put(TRANSIENT_BLOCK, true)
+                        }
+                    },
+                )
                 "assistant" -> appendTurn(
                     anthropicMessages,
                     "assistant",
-                    convertAssistantContent(message, index == latestAssistantIndex),
+                    convertAssistantContent(message, index > currentTurnStart),
                 )
                 "tool" -> appendTurn(
                     anthropicMessages,
@@ -122,14 +133,46 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
             .put("messages", anthropicMessages)
             .also { request ->
                 val system = systemParts.joinToString("\n\n").trim()
-                if (system.isNotBlank()) request.put("system", system)
-                convertTools(tools)?.let { request.put("tools", it) }
+                if (system.isNotBlank()) {
+                    request.put("system", JSONArray().put(cacheBreakpoint(JSONObject().put("type", "text").put("text", system))))
+                }
+                convertTools(tools)?.let { converted ->
+                    converted.optJSONObject(converted.length() - 1)?.let(::cacheBreakpoint)
+                    request.put("tools", converted)
+                }
+                markConversationBreakpoint(anthropicMessages)
                 RequestBodyMerge.mergeCustomBody(request, config.customBody)
                 val explicitMaxTokens = request.opt("max_tokens")
                     .takeIf { config.customBody.any { body -> body.key == "max_tokens" } }
                 ProviderReasoning.applyAnthropicRequest(request, config)
                 if (explicitMaxTokens != null) request.put("max_tokens", explicitMaxTokens)
             }
+    }
+
+    /**
+     * Anthropic 只缓存显式标记的前缀。工具目录与系统提示各设一个断点，跨会话复用；
+     * 最后一条消息再设一个随轮前移的断点，下一轮按最长匹配前缀读取，覆盖整个工具循环。
+     */
+    private fun cacheBreakpoint(block: JSONObject): JSONObject =
+        block.put("cache_control", JSONObject().put("type", "ephemeral"))
+
+    private fun markConversationBreakpoint(messages: JSONArray) {
+        val content = messages.optJSONObject(messages.length() - 1)?.optJSONArray("content") ?: return
+        val blocks = (0 until content.length()).mapNotNull(content::optJSONObject)
+        // 观察截图只活一轮，断点落在它之前才能被下一轮命中；思考块不可标记，空文本标记会被拒绝。
+        val target = blocks.lastOrNull { block ->
+            !block.optBoolean(TRANSIENT_BLOCK) && when (block.optString("type")) {
+                "text" -> block.optString("text").isNotEmpty()
+                "image", "tool_result", "tool_use", "document" -> true
+                else -> false
+            }
+        }
+        target?.let(::cacheBreakpoint)
+        // 标记只服务于选断点，发送前从所有消息中清除。
+        for (message in 0 until messages.length()) {
+            val blocksOfMessage = messages.optJSONObject(message)?.optJSONArray("content") ?: continue
+            for (block in 0 until blocksOfMessage.length()) blocksOfMessage.optJSONObject(block)?.remove(TRANSIENT_BLOCK)
+        }
     }
 
     /**
@@ -218,7 +261,7 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
 
     /**
      * input_schema 顶层不接受 oneOf/anyOf/allOf，否则整个请求 400。只在发送副本上移除；
-     * 本地 AgentToolCallValidator 仍按原始 schema 校验，组合约束失败时把错误返回给模型。
+     * 参数交给对应工具执行，执行结果随工具回合返回模型。
      */
     private fun inputSchema(parameters: JSONObject?): JSONObject {
         parameters ?: return JSONObject().put("type", "object")

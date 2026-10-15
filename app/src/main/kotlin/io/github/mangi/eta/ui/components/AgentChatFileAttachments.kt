@@ -214,14 +214,14 @@ internal fun PendingFileReferenceStrip(
                     .widthIn(max = 250.dp)
                     .squircleSurface(
                         color = MiuixTheme.colorScheme.surfaceContainerHigh,
-                        cornerRadius = 14.dp,
+                        cornerRadius = 12.dp,
                     )
                     .squircleBorder(
                         width = 0.5.dp,
                         color = MiuixTheme.colorScheme.outline.copy(alpha = 0.5f),
-                        cornerRadius = 14.dp,
+                        cornerRadius = 12.dp,
                     )
-                    .padding(start = 12.dp, end = 6.dp),
+                    .padding(start = 12.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -246,7 +246,7 @@ internal fun PendingFileReferenceStrip(
                 )
                 Box(
                     modifier = Modifier
-                        .size(28.dp)
+                        .size(32.dp)
                         .clip(CircleShape)
                         .clickable { onRemoveReference(pending.id) },
                     contentAlignment = Alignment.Center,

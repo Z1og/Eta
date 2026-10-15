@@ -1,6 +1,12 @@
 package io.github.mangi.eta.ui.app
 
 import android.app.Application
+import android.net.Uri
+import io.github.mangi.eta.agent.terminal.FileToolBackend
+import io.github.mangi.eta.agent.terminal.FileToolStat
+import io.github.mangi.eta.agent.terminal.FileToolKind
+import io.github.mangi.eta.agent.terminal.LocalFileToolBackend
+import org.junit.Assert.assertArrayEquals
 import io.github.mangi.eta.agent.terminal.TerminalPrivateStorage
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -15,6 +21,27 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class WorkspaceFileStoreTest {
+    @Test
+    fun exportUsesThePrivilegedBackendForAnAppUnreadableArtifact() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val bytes = ByteArray(70_000) { (it % 256).toByte() }
+        var reads = 0
+        val store = WorkspaceFileStore(context) { root ->
+            object : FileToolBackend by LocalFileToolBackend(root) {
+                override val identity = "root"
+                override fun stat(path: String) = FileToolStat(path, "root.bin", FileToolKind.FILE, bytes.size.toLong(), "revision")
+                override fun readBytes(path: String, offset: Long, limit: Int): ByteArray {
+                    reads++
+                    return bytes.copyOfRange(offset.toInt(), minOf(bytes.size, offset.toInt() + limit))
+                }
+            }
+        }
+        val destination = File(context.cacheDir, "export.bin")
+        store.exportFile("root.bin", Uri.fromFile(destination))
+        assertArrayEquals(bytes, destination.readBytes())
+        assertTrue(reads > 1)
+    }
+
     @Test
     fun freshWorkspaceCanBeListedWithoutRuntimeInitialization() = runBlocking {
         val context = RuntimeEnvironment.getApplication()

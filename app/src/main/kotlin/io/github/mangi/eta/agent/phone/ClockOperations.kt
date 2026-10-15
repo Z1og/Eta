@@ -16,7 +16,6 @@ internal class ClockOperations(
     fun execute(tool: String, args: JSONObject): JSONObject =
         when (tool) {
             "list_alarms" -> {
-                PhoneOperation.allowed(args, setOf("query", "limit", "offset", "hour", "minute", "enabled_only"))
                 val query = PhoneOperation.text(args, "query", false, 200).orEmpty()
                 val limit = PhoneOperation.integer(args, "limit", 1, 50, 20).toInt()
                 val offset = PhoneOperation.integer(args, "offset", 0, 10000, 0).toInt()
@@ -77,7 +76,6 @@ internal class ClockOperations(
     }
 
     private fun create(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, setOf("hour", "minute", "label", "repeat_days"))
         val hour = PhoneOperation.integer(args, "hour", 0, 23).toInt()
         val minute = PhoneOperation.integer(args, "minute", 0, 59).toInt()
         val days =
@@ -119,14 +117,6 @@ internal class ClockOperations(
     }
 
     private fun change(tool: String, args: JSONObject): JSONObject {
-        PhoneOperation.allowed(
-            args,
-            when (tool) {
-                "update_alarm_time" -> setOf("alarm_id", "hour", "minute")
-                "set_alarm_enabled" -> setOf("alarm_id", "enabled")
-                else -> setOf("alarm_id")
-            },
-        )
         val id = PhoneOperation.id(args, "alarm_id")
         val before =
             alarms().firstOrNull { it.optString("alarm_id") == id.toString() }

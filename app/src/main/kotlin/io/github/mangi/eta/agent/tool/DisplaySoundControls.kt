@@ -88,7 +88,6 @@ internal class DisplaySoundControls(
             )
 
     fun brightness(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, setOf("percent"))
         val percent = PhoneOperation.integer(args, "percent", 0, 100).toInt()
         val before =
             brightness()
@@ -110,7 +109,6 @@ internal class DisplaySoundControls(
     }
 
     fun timeout(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, setOf("seconds"))
         val seconds = PhoneOperation.integer(args, "seconds", 15, 1800)
         val key = Settings.System.SCREEN_OFF_TIMEOUT
         val before = Settings.System.getLong(context.contentResolver, key, -1)
@@ -131,7 +129,6 @@ internal class DisplaySoundControls(
     }
 
     fun dnd(args: JSONObject): JSONObject {
-        PhoneOperation.allowed(args, setOf("mode"))
         val mode = PhoneOperation.text(args, "mode", true, 20)
         val expected =
             mapOf("off" to 0, "priority" to 1, "silent" to 2, "alarms" to 3)[mode]

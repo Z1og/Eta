@@ -47,7 +47,7 @@ internal object AgentMemoryToolCatalog {
             .put(
                 AgentToolSchema.function(
                     name = "memory_write",
-                    description = "Atomically update persistent MEMORY.md. Store only durable cross-conversation facts, preferences, relationships, and ongoing project context; never store secrets, credentials, verification codes, or transient requests. Keep '# 核心记忆' concise, correct stale facts, and prefer replacing an existing section over blindly appending duplicates. Use the revision supplied in the run-start memory context or the latest memory_get result.",
+                    description = "Atomically update persistent MEMORY.md. Store only durable cross-conversation facts, preferences, relationships, and ongoing project context; never store secrets, credentials, verification codes, or transient requests. Keep '# 核心记忆' concise, correct stale facts, and prefer replacing an existing section over blindly appending duplicates. Use the revision from the most recent memory_write or memory_get result, or the session memory snapshot if neither has run.",
                     parameters = JSONObject()
                         .put("type", "object")
                         .put(
@@ -72,7 +72,7 @@ internal object AgentMemoryToolCatalog {
                                         .put("type", "string")
                                         .put("minLength", 64)
                                         .put("maxLength", 64)
-                                        .put("description", "Exact SHA-256 revision from the run-start memory context or latest memory_get result."),
+                                        .put("description", "Exact SHA-256 revision from the most recent memory_write or memory_get result, or the session memory snapshot."),
                                 )
                                 .put(
                                     "start_line",

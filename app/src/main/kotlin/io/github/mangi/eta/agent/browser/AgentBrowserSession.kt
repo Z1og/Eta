@@ -10,7 +10,6 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
-import io.github.mangi.eta.agent.media.AgentImageCodec
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -24,6 +23,8 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.core.graphics.createBitmap
+import io.github.mangi.eta.agent.media.AgentImageCodec
+import io.github.mangi.eta.agent.tool.requiredText
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.Locale
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import org.json.JSONTokener
 
@@ -474,8 +476,8 @@ internal object AgentBrowserSession {
     }
 
     private fun click(args: JSONObject): BrowserToolResult {
-        val view = requirePage()
         val target = targetFrom(args)
+        val view = requirePage()
         val value = evaluateObject(view, BrowserDomScripts.click(target.selector, target.x, target.y))
         waitForPostAction()
         return toolResult(
@@ -485,13 +487,10 @@ internal object AgentBrowserSession {
     }
 
     private fun type(args: JSONObject): BrowserToolResult {
-        if (!args.has("text") || args.isNull("text")) {
-            throw BrowserFailure("INVALID_ARGUMENT", "type 缺少 text")
-        }
-        val inputText = args.optString("text")
+        val inputText = args.requiredText("text")
         val submit = args.optBoolean("submit", false)
-        val view = requirePage()
         val target = targetFrom(args)
+        val view = requirePage()
         val value = evaluateObject(
             view,
             BrowserDomScripts.type(
@@ -709,13 +708,21 @@ internal object AgentBrowserSession {
         if (selector == null && !hasX) {
             throw BrowserFailure("INVALID_ARGUMENT", "需要 selector 或 coordinate_x/coordinate_y")
         }
-        val x = if (hasX) args.optInt("coordinate_x") else null
-        val y = if (hasY) args.optInt("coordinate_y") else null
+        val x = if (hasX) coordinateFrom(args, "coordinate_x") else null
+        val y = if (hasY) coordinateFrom(args, "coordinate_y") else null
         return BrowserTarget(
             selector = selector,
             x = x,
             y = y,
         )
+    }
+
+    private fun coordinateFrom(args: JSONObject, name: String): Int {
+        val value = (args.opt(name) as? Number)?.toDouble()
+        if (value == null || value != value.toInt().toDouble()) {
+            throw JSONException("$name 必须是整数坐标")
+        }
+        return value.toInt()
     }
 
     private fun validatedSelector(args: JSONObject, required: Boolean): String? {
@@ -1004,7 +1011,7 @@ internal object AgentBrowserSession {
 
     private fun failureResult(action: String, throwable: Throwable): BrowserToolResult {
         val failure = throwable as? BrowserFailure
-        val message = failure?.message ?: "浏览器操作失败"
+        val message = failure?.message ?: if (throwable is JSONException) throwable.message.orEmpty() else "浏览器操作失败"
         if (failure?.code !in setOf("CANCELLED", "USER_CONTROL_ACTIVE")) {
             runCatching {
                 callOnMain {
@@ -1017,7 +1024,7 @@ internal object AgentBrowserSession {
         }
         return errorResult(
             action = action,
-            code = failure?.code ?: "BROWSER_ERROR",
+            code = failure?.code ?: if (throwable is JSONException) "INVALID_ARGUMENT" else "BROWSER_ERROR",
             message = message,
             status = failure?.status ?: "error",
         )

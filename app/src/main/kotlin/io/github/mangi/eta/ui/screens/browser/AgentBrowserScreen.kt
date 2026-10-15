@@ -6,9 +6,11 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -16,7 +18,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,7 +28,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -36,10 +37,11 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AdsClick
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.GppMaybe
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -53,9 +55,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -67,18 +69,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.browser.AgentBrowserSession
 import io.github.mangi.eta.agent.browser.BrowserSessionSnapshot
-import io.github.mangi.eta.ui.components.EtaCard
-import io.github.mangi.eta.ui.components.EtaCardDefaults
 import io.github.mangi.eta.ui.components.EtaTextButton
 import io.github.mangi.eta.ui.components.EtaWindowDialog
 import io.github.mangi.eta.ui.components.MiuixDialogActions
@@ -87,15 +91,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
+import top.yukonga.miuix.kmp.basic.ListPopupColumn
+import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.squircle.squircleSurface
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.window.WindowListPopup
 
 /**
  * Agent 与用户共享的浏览器会话。
@@ -113,7 +120,7 @@ internal fun AgentBrowserScreen(
     val scope = rememberCoroutineScope()
     val noExternalAppMessage = stringResource(R.string.browser_no_external_app)
     val snapshot by AgentBrowserSession.snapshots.collectAsState()
-    var address by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf(TextFieldValue("")) }
     var addressFocused by remember { mutableStateOf(false) }
     var actionPending by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
@@ -121,10 +128,15 @@ internal fun AgentBrowserScreen(
     LaunchedEffect(context.applicationContext) {
         AgentBrowserSession.initialize(context.applicationContext)
     }
-    LaunchedEffect(snapshot.displayUrl, addressFocused) {
-        if (!addressFocused) {
-            address = snapshot.displayUrl
+    // 未编辑时地址栏只显示域名，信息密度低、一眼可读；获得焦点后换成完整地址并全选，便于直接改写。
+    // 编辑期间页面跳转不覆盖用户正在输入的内容，只在进入编辑的那一刻填入完整地址。
+    LaunchedEffect(addressFocused) {
+        if (addressFocused) {
+            address = TextFieldValue(snapshot.displayUrl, TextRange(0, snapshot.displayUrl.length))
         }
+    }
+    LaunchedEffect(snapshot.displayUrl, snapshot.host, addressFocused) {
+        if (!addressFocused) address = TextFieldValue(snapshot.host.ifBlank { snapshot.displayUrl })
     }
 
     fun launchBrowserAction(action: () -> Unit) {
@@ -141,11 +153,8 @@ internal fun AgentBrowserScreen(
 
     fun navigate() {
         if (actionPending) return
-        val target = if (address == snapshot.displayUrl) {
-            snapshot.url
-        } else {
-            address.trim()
-        }
+        val input = address.text.trim()
+        val target = if (input == snapshot.displayUrl) snapshot.url else input
         if (target.isBlank()) return
         focusManager.clearFocus()
         keyboard?.hide()
@@ -154,80 +163,33 @@ internal fun AgentBrowserScreen(
         }
     }
 
+    fun refreshOrStop() {
+        if (snapshot.isLoading) {
+            scope.launch(Dispatchers.IO) { AgentBrowserSession.stopFromUser() }
+        } else {
+            launchBrowserAction { AgentBrowserSession.reloadFromUser() }
+        }
+    }
+
+    // 浏览器是整屏工具：页面外的界面压缩成一行地址栏和一条可选状态条，其余空间全部留给网页。
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(MiuixTheme.colorScheme.surface)
-            .padding(horizontal = 12.dp)
-            .padding(bottom = 12.dp)
             .imePadding()
             .navigationBarsPadding(),
     ) {
-        TextField(
-            value = address,
-            onValueChange = {
-                address = it
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { state -> addressFocused = state.isFocused },
-            label = stringResource(R.string.ui_url_or_domain_name_3ee97a),
-            useLabelAsPlaceholder = true,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Uri,
-                imeAction = ImeAction.Go,
-            ),
-            keyboardActions = KeyboardActions(onGo = { navigate() }),
-            leadingIcon = {
-                Icon(
-                    imageVector = if (snapshot.url.startsWith("https://")) {
-                        Icons.Rounded.Lock
-                    } else {
-                        Icons.Rounded.Language
-                    },
-                    contentDescription = null,
-                    modifier = Modifier.padding(start = 12.dp).size(18.dp),
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                )
-            },
-            trailingIcon = {
-                IconButton(
-                    onClick = ::navigate,
-                    enabled = address.isNotBlank() && !actionPending,
-                    modifier = Modifier
-                        .padding(end = 6.dp)
-                        .alpha(if (address.isNotBlank() && !actionPending) 1f else 0.34f),
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                        contentDescription = stringResource(R.string.ui_access_7f5641),
-                        modifier = Modifier.size(19.dp),
-                        tint = MiuixTheme.colorScheme.onSurface,
-                    )
-                }
-            },
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-        BrowserStatusBanner(snapshot)
-
-        BrowserWindow(
+        BrowserAddressRow(
             snapshot = snapshot,
+            address = address,
+            onAddressChange = { address = it },
+            focused = addressFocused,
+            onFocusChange = { addressFocused = it },
             actionPending = actionPending,
+            onGo = ::navigate,
             onBack = { launchBrowserAction { AgentBrowserSession.goBackFromUser() } },
             onForward = { launchBrowserAction { AgentBrowserSession.goForwardFromUser() } },
-            onRefresh = {
-                if (snapshot.isLoading) {
-                    scope.launch(Dispatchers.IO) {
-                        AgentBrowserSession.stopFromUser()
-                    }
-                } else {
-                    launchBrowserAction {
-                        AgentBrowserSession.reloadFromUser()
-                    }
-                }
-            },
+            onRefresh = ::refreshOrStop,
             onOpenExternal = {
                 val currentUrl = snapshot.url.takeIf { it.startsWith("http://") || it.startsWith("https://") }
                 if (currentUrl != null) {
@@ -239,10 +201,23 @@ internal fun AgentBrowserScreen(
                 }
             },
             onReset = { showResetDialog = true },
+        )
+        BrowserStatusStrip(snapshot)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(0.5.dp)
+                .background(MiuixTheme.colorScheme.dividerLine),
+        )
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-        )
+        ) {
+            BrowserWebViewHost(modifier = Modifier.fillMaxSize())
+            BrowserLoadingProgress(snapshot)
+            BrowserStateOverlay(snapshot = snapshot, onRetry = ::refreshOrStop)
+        }
     }
 
     if (showResetDialog) {
@@ -255,10 +230,11 @@ internal fun AgentBrowserScreen(
             MiuixDialogActions(
                 confirmText = stringResource(R.string.browser_reset),
                 confirmEnabled = !actionPending,
+                destructive = true,
                 onCancel = { showResetDialog = false },
                 onConfirm = {
                     showResetDialog = false
-                    address = ""
+                    address = TextFieldValue("")
                     launchBrowserAction { AgentBrowserSession.resetFromUser() }
                 },
             )
@@ -267,141 +243,171 @@ internal fun AgentBrowserScreen(
 }
 
 /**
- * 统一的浏览器窗口：工具栏、进度条与网页内容收进同一张卡片，
- * 进度条悬浮在内容顶部，加载时不再挤压布局。
+ * 地址行：后退、前进与地址胶囊同处一行，刷新/停止放在胶囊尾部，低频的外部打开与重置收进菜单。
+ * 整行固定 48dp 高，替代原先的大输入框加页面内工具栏两层结构。
  */
 @Composable
-private fun BrowserWindow(
+private fun BrowserAddressRow(
     snapshot: BrowserSessionSnapshot,
+    address: TextFieldValue,
+    onAddressChange: (TextFieldValue) -> Unit,
+    focused: Boolean,
+    onFocusChange: (Boolean) -> Unit,
     actionPending: Boolean,
+    onGo: () -> Unit,
     onBack: () -> Unit,
     onForward: () -> Unit,
     onRefresh: () -> Unit,
     onOpenExternal: () -> Unit,
     onReset: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    EtaCard(
-        modifier = modifier,
-        insideMargin = PaddingValues(0.dp),
-        colors = CardDefaults.defaultColors(
-            color = MiuixTheme.colorScheme.surfaceContainer,
-            contentColor = MiuixTheme.colorScheme.onSurface,
-        ),
+    val colors = MiuixTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        BrowserToolbar(
-            snapshot = snapshot,
-            actionPending = actionPending,
-            onBack = onBack,
-            onForward = onForward,
-            onRefresh = onRefresh,
+        AnimatedVisibility(
+            visible = !focused,
+            enter = fadeIn() + expandHorizontally(),
+            exit = fadeOut() + shrinkHorizontally(),
+        ) {
+            Row {
+                BrowserControlButton(
+                    icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                    description = stringResource(R.string.browser_back),
+                    enabled = snapshot.canGoBack && !actionPending,
+                    onClick = onBack,
+                )
+                BrowserControlButton(
+                    icon = Icons.AutoMirrored.Rounded.ArrowForward,
+                    description = stringResource(R.string.browser_forward),
+                    enabled = snapshot.canGoForward && !actionPending,
+                    onClick = onForward,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 4.dp)
+                .height(40.dp)
+                .squircleSurface(color = colors.surfaceContainerHigh, cornerRadius = 20.dp)
+                .padding(start = 12.dp, end = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = if (snapshot.url.startsWith("https://")) Icons.Rounded.Lock else Icons.Rounded.Language,
+                contentDescription = null,
+                modifier = Modifier.size(15.dp),
+                tint = colors.onSurfaceVariantSummary,
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (address.text.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.ui_url_or_domain_name_3ee97a),
+                        style = MiuixTheme.textStyles.body2,
+                        color = colors.onSurfaceVariantSummary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                BasicTextField(
+                    value = address,
+                    onValueChange = onAddressChange,
+                    singleLine = true,
+                    textStyle = MiuixTheme.textStyles.body2.copy(color = colors.onSurface),
+                    cursorBrush = SolidColor(colors.primary),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { onGo() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { onFocusChange(it.isFocused) },
+                )
+            }
+            if (focused) {
+                BrowserControlButton(
+                    icon = Icons.AutoMirrored.Rounded.ArrowForward,
+                    description = stringResource(R.string.ui_access_7f5641),
+                    enabled = address.text.isNotBlank() && !actionPending,
+                    onClick = onGo,
+                    size = 36.dp,
+                )
+            } else {
+                BrowserControlButton(
+                    icon = if (snapshot.isLoading) Icons.Rounded.Close else Icons.Rounded.Refresh,
+                    description = stringResource(
+                        if (snapshot.isLoading) R.string.browser_stop_loading else R.string.browser_refresh,
+                    ),
+                    enabled = snapshot.available && (snapshot.isLoading || !actionPending),
+                    onClick = onRefresh,
+                    size = 36.dp,
+                )
+            }
+        }
+        BrowserOverflowMenu(
+            enabled = snapshot.available,
+            resetEnabled = snapshot.available && !actionPending,
             onOpenExternal = onOpenExternal,
             onReset = onReset,
         )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(0.5.dp)
-                .background(MiuixTheme.colorScheme.outline.copy(alpha = 0.45f)),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                // 不能用 squircleClip：shader 遮罩会强制离屏合成，WebView 每帧重绘导致闪烁。
-                // 普通 clip 走 clipToOutline，硬件裁剪对 WebView 安全。
-                .clip(
-                    RoundedCornerShape(
-                        bottomStart = EtaCardDefaults.CornerRadius,
-                        bottomEnd = EtaCardDefaults.CornerRadius,
-                    )
-                ),
-        ) {
-            BrowserWebViewHost(modifier = Modifier.fillMaxSize())
-
-            BrowserLoadingProgress(snapshot)
-
-            BrowserStateOverlay(
-                snapshot = snapshot,
-                onRetry = onRefresh,
-            )
-        }
     }
 }
 
 @Composable
-private fun BrowserToolbar(
-    snapshot: BrowserSessionSnapshot,
-    actionPending: Boolean,
-    onBack: () -> Unit,
-    onForward: () -> Unit,
-    onRefresh: () -> Unit,
+private fun BrowserOverflowMenu(
+    enabled: Boolean,
+    resetEnabled: Boolean,
     onOpenExternal: () -> Unit,
     onReset: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BrowserControlButton(
-            icon = Icons.AutoMirrored.Rounded.ArrowBack,
-            description = stringResource(R.string.browser_back),
-            enabled = snapshot.canGoBack && !actionPending,
-            onClick = onBack,
-        )
-        BrowserControlButton(
-            icon = Icons.AutoMirrored.Rounded.ArrowForward,
-            description = stringResource(R.string.browser_forward),
-            enabled = snapshot.canGoForward && !actionPending,
-            onClick = onForward,
-        )
-        BrowserControlButton(
-            icon = if (snapshot.isLoading) {
-                Icons.Rounded.Close
-            } else {
-                Icons.Rounded.Refresh
+    var expanded by remember { mutableStateOf(false) }
+    val items = listOf(
+        DropdownItem(
+            text = stringResource(R.string.browser_open_external),
+            enabled = enabled,
+            icon = { modifier ->
+                Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = modifier.size(20.dp))
             },
-            description = if (snapshot.isLoading) stringResource(R.string.browser_stop_loading) else stringResource(R.string.browser_refresh),
-            enabled = snapshot.available && (snapshot.isLoading || !actionPending),
-            onClick = onRefresh,
+        ),
+        DropdownItem(
+            text = stringResource(R.string.browser_reset_session),
+            enabled = resetEnabled,
+            icon = { modifier ->
+                Icon(Icons.Rounded.DeleteOutline, contentDescription = null, modifier = modifier.size(20.dp))
+            },
+        ),
+    )
+    Box {
+        BrowserControlButton(
+            icon = Icons.Rounded.MoreVert,
+            description = stringResource(R.string.action_more),
+            enabled = enabled,
+            onClick = { expanded = true },
         )
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 8.dp),
+        WindowListPopup(
+            show = expanded,
+            alignment = PopupPositionProvider.Align.End,
+            onDismissRequest = { expanded = false },
         ) {
-            Text(
-                text = snapshot.title.ifBlank { stringResource(R.string.browser_title) },
-                style = MiuixTheme.textStyles.body2,
-                fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.onSurface,
-                maxLines = 1,
-            )
-            if (snapshot.host.isNotBlank()) {
-                Text(
-                    text = snapshot.host,
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    maxLines = 1,
-                )
+            ListPopupColumn {
+                items.forEachIndexed { index, item ->
+                    DropdownImpl(
+                        item = item,
+                        optionSize = items.size,
+                        isSelected = false,
+                        index = index,
+                        onSelectedIndexChange = {
+                            expanded = false
+                            if (index == 0) onOpenExternal() else onReset()
+                        },
+                    )
+                }
             }
         }
-
-        BrowserControlButton(
-            icon = Icons.AutoMirrored.Rounded.OpenInNew,
-            description = stringResource(R.string.browser_open_external),
-            enabled = snapshot.available,
-            onClick = onOpenExternal,
-        )
-        BrowserControlButton(
-            icon = Icons.Rounded.Delete,
-            description = stringResource(R.string.browser_reset_session),
-            enabled = snapshot.available && !actionPending,
-            onClick = onReset,
-        )
     }
 }
 
@@ -411,10 +417,13 @@ private fun BrowserControlButton(
     description: String,
     enabled: Boolean,
     onClick: () -> Unit,
+    size: Dp = 40.dp,
 ) {
     IconButton(
         onClick = onClick,
         enabled = enabled,
+        minWidth = size,
+        minHeight = size,
         modifier = Modifier
             .alpha(if (enabled) 1f else 0.34f)
             .semantics(mergeDescendants = true) {
@@ -425,7 +434,7 @@ private fun BrowserControlButton(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(20.dp),
             tint = MiuixTheme.colorScheme.onSurface,
         )
     }
@@ -455,7 +464,7 @@ private fun BoxScope.BrowserLoadingProgress(snapshot: BrowserSessionSnapshot) {
                 .takeIf { it in 1..99 }
                 ?.let { it / 100f },
             modifier = Modifier.fillMaxWidth(),
-            height = 2.5.dp,
+            height = 2.dp,
         )
     }
 }
@@ -496,54 +505,43 @@ private fun BoxScope.BrowserStateOverlay(
     }
 }
 
+/** 接管或出错时在地址栏下出现一条细状态条，不再用整张卡片挤占网页高度。 */
 @Composable
-private fun ColumnScope.BrowserStatusBanner(snapshot: BrowserSessionSnapshot) {
+private fun ColumnScope.BrowserStatusStrip(snapshot: BrowserSessionSnapshot) {
+    val error = snapshot.error?.takeIf { snapshot.hasCommittedPage }
     val message = when {
-        snapshot.error != null -> snapshot.error
-        snapshot.isUserControlling && snapshot.available ->
-            stringResource(R.string.browser_user_controlling)
+        error != null -> error
+        snapshot.isUserControlling && snapshot.available -> stringResource(R.string.browser_user_controlling)
         else -> null
     }
-    val color = when {
-        snapshot.error != null -> StatusError
-        else -> MiuixTheme.colorScheme.primary
-    }
-    val icon = if (snapshot.error != null) {
-        Icons.Rounded.GppMaybe
-    } else {
-        Icons.Rounded.AdsClick
-    }
-
+    val color = if (error != null) StatusError else MiuixTheme.colorScheme.primary
     AnimatedVisibility(
         visible = message != null,
         enter = fadeIn() + expandVertically(),
         exit = fadeOut() + shrinkVertically(),
     ) {
-        EtaCard(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 10.dp),
-            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-            colors = CardDefaults.defaultColors(
-                color = color.copy(alpha = 0.10f),
-                contentColor = MiuixTheme.colorScheme.onSurface,
-            ),
+                .background(color.copy(alpha = 0.08f))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(17.dp),
-                    tint = color,
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = message.orEmpty(),
-                    modifier = Modifier.weight(1f),
-                    style = MiuixTheme.textStyles.footnote1,
-                    color = MiuixTheme.colorScheme.onSurface,
-                )
-            }
+            Icon(
+                imageVector = if (error != null) Icons.Rounded.GppMaybe else Icons.Rounded.AdsClick,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = color,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = message.orEmpty(),
+                modifier = Modifier.weight(1f),
+                style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -590,7 +588,7 @@ private fun BrowserEmptyState(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .consumeTouches()
-            .background(MiuixTheme.colorScheme.surfaceContainer)
+            .background(MiuixTheme.colorScheme.surface)
             .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -624,7 +622,7 @@ private fun BrowserLoadingState(
     Column(
         modifier = modifier
             .consumeTouches()
-            .background(MiuixTheme.colorScheme.surfaceContainer)
+            .background(MiuixTheme.colorScheme.surface)
             .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -639,6 +637,7 @@ private fun BrowserLoadingState(
             style = MiuixTheme.textStyles.body2,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -652,7 +651,7 @@ private fun BrowserFailedState(
     Column(
         modifier = modifier
             .consumeTouches()
-            .background(MiuixTheme.colorScheme.surfaceContainer)
+            .background(MiuixTheme.colorScheme.surface)
             .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -677,7 +676,7 @@ private fun BrowserFailedState(
                 textAlign = TextAlign.Center,
             )
         }
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         EtaTextButton(
             text = stringResource(R.string.ui_reload_5982c4),
             onClick = onRetry,
@@ -689,7 +688,7 @@ private fun BrowserFailedState(
 @Composable
 private fun BrowserWebViewHost(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val backgroundColor = MiuixTheme.colorScheme.surfaceContainer.toArgb()
+    val backgroundColor = MiuixTheme.colorScheme.surface.toArgb()
     val container = remember(context) {
         FrameLayout(context).apply {
             layoutParams = ViewGroup.LayoutParams(

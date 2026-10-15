@@ -13,7 +13,15 @@ import java.io.Closeable
 import kotlinx.coroutines.CancellationException
 
 /** 只协调本进程的录音和播放；所有入口共用一个租约，资源仍由入口生命周期持有。 */
-internal class SpeechAudioLease(private val context: Context, private val interrupt: () -> Unit) : Closeable {
+/**
+ * [interruptOnScreenOff] 为 false 时锁屏不打断：聊天朗读需要在锁屏和后台继续，
+ * 录音与助手浮窗仍随熄屏结束。
+ */
+internal class SpeechAudioLease(
+    private val context: Context,
+    private val interruptOnScreenOff: Boolean = true,
+    private val interrupt: () -> Unit,
+) : Closeable {
     private val manager = context.getSystemService(AudioManager::class.java)
     private val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
         .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT)
@@ -32,7 +40,7 @@ internal class SpeechAudioLease(private val context: Context, private val interr
         try {
             context.registerReceiver(receiver, IntentFilter().apply {
                 addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
-                addAction(Intent.ACTION_SCREEN_OFF)
+                if (interruptOnScreenOff) addAction(Intent.ACTION_SCREEN_OFF)
             }, Context.RECEIVER_NOT_EXPORTED)
             registered = true
             if (playback) requestPlaybackFocus(beforeFocus)

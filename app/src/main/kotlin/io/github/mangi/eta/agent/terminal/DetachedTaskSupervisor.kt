@@ -10,39 +10,6 @@ import kotlin.concurrent.thread
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** 一条守护任务记录。pid + token 用于跨 App 重启后的认领，以及停止前防止 PID 复用误杀。 */
-internal data class DetachedTask(
-    val id: String,
-    val pid: Long,
-    val token: String,
-    val command: String,
-    val cwd: String,
-    val identity: String,
-    val environment: TerminalEnvironment,
-    val logPath: String,
-    val startedAt: Long,
-    val backend: LinuxExecutionBackend = LinuxExecutionBackend.CHROOT,
-    val hostWorkspace: String? = null,
-)
-
-internal data class DetachedTaskStatus(
-    val task: DetachedTask,
-    val running: Boolean,
-)
-
-internal sealed interface DaemonStartResult {
-    data class Started(val task: DetachedTask) : DaemonStartResult
-    data class Failed(val code: String, val message: String) : DaemonStartResult
-}
-
-internal data class DaemonLogsResult(
-    val ok: Boolean,
-    val text: String = "",
-    val truncated: Boolean = false,
-    val code: String = "",
-    val message: String = "",
-)
-
 /**
  * 守护任务（detached task）宿主：启动脱离任何命令会话进程组的长驻进程，并托管其生命周期。
  *
@@ -61,6 +28,7 @@ internal class DetachedTaskSupervisor(
     private val daemonDir: String = DEFAULT_DAEMON_DIR,
     private val linuxSharedMountsProvider: () -> List<SharedFolderMount> = { emptyList() },
     private val rootAvailable: () -> Boolean = { TerminalRuntime.rootAvailable },
+    private val oneShotSupervisor: ShellProcessSupervisor = ShellProcessSupervisor(rootAvailable = rootAvailable),
     private val acquireUserLease: (String, () -> Unit) -> Boolean = TerminalRuntime::acquireUserTask,
     private val releaseUserLease: (String) -> Unit = TerminalRuntime::releaseUserTask,
 ) {
@@ -73,6 +41,7 @@ internal class DetachedTaskSupervisor(
 
         // 进程内允许 AI 侧与 UI 侧各持一个实例；记录文件的读-改-写必须经同一把锁串行。
         private val RECORDS_LOCK = Any()
+        private val COMMAND_PROCESSES = java.util.concurrent.ConcurrentHashMap<String, CommandProcess>()
         private val USER_WAITERS = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
         /** AI 工具侧与 UI 侧共用同一份记录文件，路径只能在这里定义一次。 */
@@ -80,7 +49,6 @@ internal class DetachedTaskSupervisor(
             File(context.filesDir, "terminal-daemons.json")
     }
 
-    private val oneShotSupervisor = ShellProcessSupervisor(rootAvailable = rootAvailable)
 
     /** command/cwd/identity/environment 必须已由调用方归一化。 */
     fun start(
@@ -88,6 +56,9 @@ internal class DetachedTaskSupervisor(
         cwd: String,
         identity: String,
         environment: TerminalEnvironment,
+        commandTask: Boolean = false,
+        description: String = "",
+        timeoutMs: Long = 0,
     ): DaemonStartResult {
         if (identity != "root" && identity != "user") return DaemonStartResult.Failed("INVALID_ARGUMENT", "执行身份无效")
         if (identity == "root" && !rootAvailable()) return DaemonStartResult.Failed("ROOT_REQUIRED", "Root 授权不可用")
@@ -100,8 +71,9 @@ internal class DetachedTaskSupervisor(
         if (list().count { it.running } >= MAX_TASKS) {
             return DaemonStartResult.Failed("MAX_TASKS_REACHED", "守护任务数量已达上限 $MAX_TASKS，请先停止不用的任务")
         }
-        val id = "dm_" + UUID.randomUUID().toString().take(8)
+        val id = (if (commandTask) "job_" else "dm_") + UUID.randomUUID().toString().take(8)
         val token = UUID.randomUUID().toString().replace("-", "")
+        if (commandTask) return startCommand(id, command, cwd, identity, environment, description, timeoutMs)
         if (identity == "user") return startUserDaemon(id, token, command, cwd, environment)
         val wireDir = wireDaemonDir(environment)
         val wirePidFile = "$wireDir/$id.pid"
@@ -150,6 +122,9 @@ internal class DetachedTaskSupervisor(
             environment = environment,
             logPath = "$wireDir/$id.log",
             startedAt = System.currentTimeMillis(),
+            commandTask = commandTask,
+            description = description,
+            timeoutMs = timeoutMs,
         )
         if (!synchronized(RECORDS_LOCK) { saveTasksLocked(loadTasksLocked() + task) }) {
             stopTaskProcess(task)
@@ -168,7 +143,7 @@ internal class DetachedTaskSupervisor(
         if (tasks.isEmpty()) return emptyList()
         // 不同身份分组巡检：/proc/<pid>/environ 只有进程属主与 root 可读，用任务自身身份探测最稳。
         val aliveById = mutableMapOf<String, Boolean>()
-        tasks.groupBy { it.identity }.forEach { (identity, group) ->
+        tasks.filter { it.completedAt == null }.groupBy { it.identity }.forEach { (identity, group) ->
             if (identity == "root" && !rootAvailable()) return@forEach
             val probeScript = aliveCheckFunction() + "\n" + group.joinToString("\n") { task ->
                 "if eta_alive ${task.pid} ${shellQuote(ownerProof(task))}; " +
@@ -193,9 +168,13 @@ internal class DetachedTaskSupervisor(
         }
         // 探测失败的任务保守视为仍在运行，不误报死亡；确认死亡的才允许被 prune 清掉。
         val statuses = tasks.map { task ->
+            if (task.completedAt != null) return@map DetachedTaskStatus(task, false)
             var running = aliveById[task.id] ?: true
-            if (task.identity == "user" && aliveById[task.id] == true && !adoptUserTask(task)) running = false
-            DetachedTaskStatus(task, running)
+            if (!task.commandTask && task.identity == "user" && aliveById[task.id] == true && !adoptUserTask(task)) running = false
+            if (task.commandTask && !running) {
+                val exitCode = readCommandExit(task)
+                DetachedTaskStatus(completeCommand(task.id, exitCode, if (exitCode == null) "interrupted" else null) ?: task, false)
+            } else DetachedTaskStatus(task, running)
         }
         if (aliveById.isNotEmpty()) {
             pruneExitedRecords(statuses)
@@ -226,10 +205,110 @@ internal class DetachedTaskSupervisor(
 
     fun findTask(id: String): DetachedTask? = synchronized(RECORDS_LOCK) { loadTasksLocked().firstOrNull { it.id == id } }
 
+    private class CommandProcess(val process: Process, val supervisor: ShellProcessSupervisor) {
+        @Volatile var stopReason: String? = null
+    }
+
+    private fun startCommand(id: String, command: String, cwd: String, identity: String,
+        environment: TerminalEnvironment, description: String, timeoutMs: Long): DaemonStartResult {
+        val workspace = if (identity == "user") TerminalRuntime.userWorkspacePath else TerminalRuntime.ROOT_WORKSPACE_PATH
+        val wireDir = when {
+            environment.isLinux -> LINUX_DAEMON_DIR
+            identity == "user" && daemonDir == DEFAULT_DAEMON_DIR -> "$workspace/daemon"
+            else -> daemonDir
+        }
+        val logPath = "$wireDir/$id.log"
+        val script = "mkdir -p ${shellQuote(wireDir)} && { cd ${shellQuote(cwd)} && " +
+            commandPayload(command, "$wireDir/$id.exit") + "; } > ${shellQuote(logPath)} 2>&1"
+        val process = oneShotSupervisor.startShellProcess(identity, script, true, environment,
+            linuxRootfsPath = rootfsPath(environment), linuxSharedMounts = linuxSharedMountsProvider())
+            ?: return DaemonStartResult.Failed("PROCESS_START_FAILED", "无法启动后台命令")
+        val ownership = oneShotSupervisor.ownershipOf(process)
+        if (ownership == null) {
+            oneShotSupervisor.terminateAndReap(process)
+            oneShotSupervisor.unregisterProcess(process)
+            return DaemonStartResult.Failed("PROCESS_START_FAILED", "后台命令未完成进程归属确认")
+        }
+        val task = DetachedTask(id, ownership.pid, ownership.token, command, cwd, identity, environment,
+            logPath, System.currentTimeMillis(), LinuxEnvironmentPaths.backendOf(rootfsPath(environment)), workspace,
+            commandTask = true, description = description, timeoutMs = timeoutMs, isolatedGroup = ownership.isolatedGroup)
+        if (!synchronized(RECORDS_LOCK) { saveTasksLocked(loadTasksLocked() + task) }) {
+            oneShotSupervisor.terminateAndReap(process)
+            oneShotSupervisor.unregisterProcess(process)
+            return DaemonStartResult.Failed("RECORDS_WRITE_FAILED", "无法保存后台命令")
+        }
+        val running = CommandProcess(process, oneShotSupervisor)
+        COMMAND_PROCESSES[id] = running
+        process.outputStream.close()
+        val reader = thread(name = "eta-command-output", isDaemon = true) {
+            process.inputStream.use { ByteArrayOutputCollector().readFrom(it, 8_192) }
+        }
+        thread(name = "eta-command-completion", isDaemon = true) {
+            try {
+                val exitCode = process.waitFor()
+                reader.join(500)
+                completeCommand(id, if (running.stopReason == null) exitCode else null, running.stopReason)
+            } finally {
+                oneShotSupervisor.retireExitedProcess(process)
+                COMMAND_PROCESSES.remove(id, running)
+            }
+        }
+        return DaemonStartResult.Started(task)
+    }
+
+    fun stopCommand(id: String, reason: String = "stopped"): Boolean {
+        val task = findTask(id)?.takeIf { it.commandTask } ?: return false
+        if (task.completedAt != null) return true
+        if (task.identity == "root" && !rootAvailable()) return false
+        COMMAND_PROCESSES[id]?.stopReason = reason
+        if (!stopTaskProcess(task, removeFiles = false)) return false
+        return completeCommand(id, null, reason) != null
+    }
+
+    fun markCompletionNotified(id: String): Boolean = synchronized(RECORDS_LOCK) {
+        val tasks = loadTasksLocked()
+        val index = tasks.indexOfFirst { it.id == id && it.completedAt != null }
+        if (index < 0) return@synchronized false
+        tasks[index] = tasks[index].copy(completionNotified = true)
+        saveTasksLocked(tasks)
+    }
+
+    private fun completeCommand(id: String, exitCode: Int?, reason: String?): DetachedTask? = synchronized(RECORDS_LOCK) {
+        val tasks = loadTasksLocked()
+        val index = tasks.indexOfFirst { it.id == id }
+        if (index < 0) return@synchronized null
+        val existing = tasks[index]
+        if (existing.completedAt != null) return@synchronized existing
+        val completed = existing.copy(completedAt = System.currentTimeMillis(), exitCode = exitCode, endReason = reason)
+        tasks[index] = completed
+        if (saveTasksLocked(tasks)) completed else null
+    }
+
+    private fun readCommandExit(task: DetachedTask): Int? {
+        val path = hostDaemonPath(task, task.logPath.removeSuffix(".log") + ".exit")
+        val result = runOneShotShell(
+            processSupervisor = oneShotSupervisor,
+            identity = task.identity,
+            command = "head -c 32 ${shellQuote(path)} 2>/dev/null",
+            timeoutSeconds = 5,
+            maxOutputBytes = 32,
+        )
+        return if (result.exitCode == 0) result.output.decodeToString().trim().toIntOrNull() else null
+    }
+
+    private fun commandPayload(command: String, exitPath: String): String {
+        val payload = "$command\neta_command_status=${'$'}?\nwait\nexit ${'$'}eta_command_status"
+        // 命令自身可调用 exit；在子壳执行后由宿主壳原子记录退出码，App 重启后仍可确认结果。
+        return "{ sh -c ${shellQuote(payload)}; eta_status=$?; " +
+            "printf '%s\\n' \"${'$'}eta_status\" > ${shellQuote("$exitPath.tmp")} && " +
+            "mv ${shellQuote("$exitPath.tmp")} ${shellQuote(exitPath)}; exit \"${'$'}eta_status\"; }"
+    }
+
     /** 停止并删除记录与日志；进程已退出时等价于清理记录。 */
     fun stop(id: String): Boolean {
         val tasks = synchronized(RECORDS_LOCK) { loadTasksLocked() }
         val task = tasks.firstOrNull { it.id == id } ?: return false
+        if (task.commandTask && task.completedAt == null) return stopCommand(id)
         if (task.identity == "root" && !rootAvailable()) return false
         if (!stopTaskProcess(task)) return false
         synchronized(RECORDS_LOCK) {
@@ -243,20 +322,28 @@ internal class DetachedTaskSupervisor(
         return true
     }
 
-    private fun stopTaskProcess(task: DetachedTask): Boolean {
+    private fun stopTaskProcess(task: DetachedTask, removeFiles: Boolean = true): Boolean {
+        COMMAND_PROCESSES[task.id]?.let { live ->
+            live.supervisor.terminateAndReap(live.process)
+            if (!removeFiles) return true
+        }
         val stopScript = buildString {
             appendLine(aliveCheckFunction())
             appendLine("if eta_alive ${task.pid} ${shellQuote(ownerProof(task))}; then")
             // setsid 路径下 pgid==pid，按组一次收整棵树；无 setsid 的退化环境只杀主进程。
-            appendLine("  if [ -d /proc ]; then kill -TERM -${task.pid} 2>/dev/null; else kill -TERM ${task.pid} 2>/dev/null; fi")
+            if (task.isolatedGroup != null) {
+                appendLine("  kill -TERM ${if (task.isolatedGroup) "-" else ""}${task.pid} 2>/dev/null")
+            } else appendLine("  if [ -d /proc ]; then kill -TERM -${task.pid} 2>/dev/null; else kill -TERM ${task.pid} 2>/dev/null; fi")
             appendLine("  sleep 1")
             appendLine("  if eta_alive ${task.pid} ${shellQuote(ownerProof(task))}; then")
-            appendLine("    if [ -d /proc ]; then kill -9 -${task.pid} 2>/dev/null; else kill -9 ${task.pid} 2>/dev/null; fi")
+            if (task.isolatedGroup != null) {
+                appendLine("    kill -9 ${if (task.isolatedGroup) "-" else ""}${task.pid} 2>/dev/null")
+            } else appendLine("    if [ -d /proc ]; then kill -9 -${task.pid} 2>/dev/null; else kill -9 ${task.pid} 2>/dev/null; fi")
             appendLine("  fi")
             appendLine("  sleep 0.1")
             appendLine("  eta_alive ${task.pid} ${shellQuote(ownerProof(task))} && exit 81")
             appendLine("fi")
-            append("rm -f ${shellQuote(hostDaemonPath(task, task.logPath))} ${shellQuote(hostDaemonPath(task, task.logPath.removeSuffix(".log") + ".pid"))}")
+            if (removeFiles) append("rm -f ${shellQuote(hostDaemonPath(task, task.logPath))} ${shellQuote(hostDaemonPath(task, task.logPath.removeSuffix(".log") + ".pid"))} ${shellQuote(hostDaemonPath(task, task.logPath.removeSuffix(".log") + ".exit"))}")
         }
         val result = runOneShotShell(
             processSupervisor = oneShotSupervisor,
@@ -285,12 +372,13 @@ internal class DetachedTaskSupervisor(
         if (!hostDir.mkdirs() && !hostDir.isDirectory) return DaemonStartResult.Failed("WORKSPACE_UNAVAILABLE", "工作目录不可访问")
         val pidFile = File(hostDir, "$id.pid")
         val logFile = File(hostDir, "$id.log")
+        val commandBody = "exec sh -c ${shellQuote(command)}"
         val payload = if (environment.isLinux) {
             val rootfs = rootfsPath(environment)
             if (!LinuxEnvironmentPaths.rootfsReady(rootfs)) return DaemonStartResult.Failed("LINUX_ENVIRONMENT_NOT_READY", "Linux 环境尚未安装")
             if (!ProotCommandBuilder.available()) return DaemonStartResult.Failed("PROOT_UNAVAILABLE", "当前设备没有可用的免 Root Linux 运行组件")
-            ProotCommandBuilder.payload(requireNotNull(rootfs), "cd ${shellQuote(cwd)} && exec sh -c ${shellQuote(command)}", linuxSharedMountsProvider(), workspace = workspace)
-        } else "cd ${shellQuote(cwd)} && exec sh -c ${shellQuote(command)}"
+            ProotCommandBuilder.payload(requireNotNull(rootfs), "cd ${shellQuote(cwd)} && $commandBody", linuxSharedMountsProvider(), workspace = workspace)
+        } else "cd ${shellQuote(cwd)} && $commandBody"
         val lease = "daemon:$id"
         val stopped = java.util.concurrent.atomic.AtomicBoolean(false)
         val launchLock = Any()
@@ -441,14 +529,15 @@ internal class DetachedTaskSupervisor(
         val excess = statuses.size - MAX_RETAINED_RECORDS
         if (excess <= 0) return
         val victims = statuses
-            .filter { !it.running }
+            .filter { !it.running && (!it.task.commandTask || it.task.completionNotified) }
             .sortedBy { it.task.startedAt }
             .take(excess)
         if (victims.isEmpty()) return
         victims.groupBy { it.task.identity }.forEach { (identity, group) ->
             val removeScript = group.joinToString("\n") {
                 "rm -f ${shellQuote(hostDaemonPath(it.task, it.task.logPath))} " +
-                    shellQuote(hostDaemonPath(it.task, it.task.logPath.removeSuffix(".log") + ".pid"))
+                    shellQuote(hostDaemonPath(it.task, it.task.logPath.removeSuffix(".log") + ".pid")) + " " +
+                    shellQuote(hostDaemonPath(it.task, it.task.logPath.removeSuffix(".log") + ".exit"))
             }
             runOneShotShell(
                 processSupervisor = oneShotSupervisor,
@@ -468,7 +557,7 @@ internal class DetachedTaskSupervisor(
         return runCatching {
             val array = JSONArray(recordsFile.readText())
             (0 until array.length()).mapTo(mutableListOf()) { index ->
-                array.getJSONObject(index).toTask()
+                array.getJSONObject(index).toDetachedTask()
             }
         }.getOrElse {
             logger.warn("Agent terminal daemon records corrupted, resetting")
@@ -480,7 +569,7 @@ internal class DetachedTaskSupervisor(
         runCatching {
             recordsFile.parentFile?.mkdirs()
             val array = JSONArray()
-            tasks.forEach { array.put(it.toJson()) }
+            tasks.forEach { array.put(it.toRecordJson()) }
             val tmp = File(recordsFile.parentFile, recordsFile.name + ".tmp")
             tmp.writeText(array.toString())
             if (!tmp.renameTo(recordsFile)) {
@@ -492,34 +581,4 @@ internal class DetachedTaskSupervisor(
             false
         }
 
-    private fun DetachedTask.toJson(): JSONObject = JSONObject()
-        .put("id", id)
-        .put("pid", pid)
-        .put("token", token)
-        .put("command", command)
-        .put("cwd", cwd)
-        .put("identity", identity)
-        .put("environment", environment.wireName)
-        .put("log_path", logPath)
-        .put("started_at", startedAt)
-        .put("backend", backend.wireName)
-        .put("host_workspace", hostWorkspace ?: JSONObject.NULL)
-
-    private fun JSONObject.toTask(): DetachedTask = DetachedTask(
-        id = getString("id"),
-        pid = getLong("pid"),
-        token = getString("token"),
-        command = getString("command"),
-        cwd = getString("cwd"),
-        identity = getString("identity"),
-        environment = when (optString("environment")) {
-            TerminalEnvironment.ALPINE.wireName -> TerminalEnvironment.ALPINE
-            TerminalEnvironment.DEBIAN.wireName -> TerminalEnvironment.DEBIAN
-            else -> TerminalEnvironment.ANDROID
-        },
-        logPath = getString("log_path"),
-        startedAt = getLong("started_at"),
-        backend = LinuxExecutionBackend.entries.firstOrNull { it.wireName == optString("backend") } ?: LinuxExecutionBackend.CHROOT,
-        hostWorkspace = optString("host_workspace").takeIf { it.isNotBlank() && it != "null" },
-    )
 }

@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 
@@ -51,6 +52,21 @@ internal data class CharacterCard(val raw: JsonObject) {
     val nickname get() = data.text("nickname").ifBlank { name }
     val characterBook get() = data["character_book"] as? JsonObject
     val extensions get() = data["extensions"] as? JsonObject ?: JsonObject(emptyMap())
+    /** 收藏与原版一致记在 extensions.fav；旧卡可能只有顶层 fav，读取时一并兼容。 */
+    val favorite: Boolean
+        get() = (extensions["fav"] as? JsonPrimitive)?.booleanOrNull
+            ?: (raw["fav"] as? JsonPrimitive)?.booleanOrNull
+            ?: false
+
+    fun withFavorite(favorite: Boolean): CharacterCard {
+        val updatedExtensions = JsonObject(extensions.toMutableMap().apply { put("fav", JsonPrimitive(favorite)) })
+        val updatedData = JsonObject(data.toMutableMap().apply { put("extensions", updatedExtensions) })
+        return CharacterCard(JsonObject(raw.toMutableMap().apply {
+            if (raw["data"] is JsonObject) put("data", updatedData) else put("extensions", updatedExtensions)
+            if (containsKey("fav")) put("fav", JsonPrimitive(favorite))
+        }))
+    }
+
     fun worldbookDraft(): CharacterBookDraft = CharacterWorldbookDraftCodec.read(this)
     fun withWorldbook(draft: CharacterBookDraft): CharacterCard = CharacterWorldbookDraftCodec.write(this, draft)
     val depthPrompt: CharacterDepthPrompt?

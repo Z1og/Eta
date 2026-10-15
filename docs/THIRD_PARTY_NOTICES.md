@@ -26,6 +26,10 @@ Eta 使用 [DexKit](https://github.com/LuckyPray/DexKit) 解析系统应用的 D
 
 DexKit 的 JVM 接口等非 `Core/` 代码采用 [Apache License 2.0](https://github.com/LuckyPray/DexKit/blob/2.2.0/LICENSE)，`Core/` 原生解析代码采用 [GNU LGPL v3](https://github.com/LuckyPray/DexKit/blob/2.2.0/Core/LICENSE)。Eta 通过官方 AAR 使用其独立原生动态库；上游源码、构建配置与版权声明可在 [官方源码](https://github.com/LuckyPray/DexKit/tree/2.2.0) 获取。这些第三方组件保留原有许可证权利，不受 Eta 主项目非商业许可证的附加限制。
 
+## JetBrains Mono
+
+终端界面使用 [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) 2.304 的无连字版本（Regular、Bold），以字体资源随 APK 分发。该字体采用 SIL Open Font License 1.1，版权归 The JetBrains Mono Project Authors；许可全文随 APK 保存在 [`assets/licenses/jetbrains-mono-OFL.txt`](../app/src/main/assets/licenses/jetbrains-mono-OFL.txt)。
+
 ## Material Icons
 
 Eta 的功能图标使用 AndroidX Compose Material Icons 的 Rounded 系列，通过 `material-icons-extended` 依赖提供。图标及其 AndroidX 实现采用 [Apache License 2.0](https://github.com/androidx/androidx/blob/androidx-main/LICENSE.txt)，来源见 [Material Design Icons](https://github.com/google/material-design-icons)。

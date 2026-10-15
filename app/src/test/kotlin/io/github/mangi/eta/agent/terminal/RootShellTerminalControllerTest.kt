@@ -1,16 +1,10 @@
 package io.github.mangi.eta.agent.terminal
 
 import io.github.mangi.eta.core.AgentLogger
-import io.github.mangi.eta.agent.model.AgentModelClient
-import io.github.mangi.eta.agent.model.AgentTerminalToolCatalog
-import io.github.mangi.eta.agent.model.AgentToolCallValidator
 import java.io.File
-import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -26,53 +20,29 @@ class RootShellTerminalControllerTest {
         val controller = RootShellTerminalController(NoopLogger)
         try {
             val open = JSONObject(
-                controller.terminalAction(
-                    action = "open",
-                    command = "",
-                    cwd = temporaryFolder.root.absolutePath,
-                    timeoutMs = 5_000,
-                    identity = "user",
-                    mergeStderr = false,
-                    sessionId = null,
-                    jobId = null,
-                    async = false,
-                    offsetChars = 0,
-                    maxChars = 8_000,
-                    closeIfDone = false
+                controller.executeTool("terminal", JSONObject().put("action", "open")
+                    .put("cwd", temporaryFolder.root.absolutePath)
+                    .put("identity", "user")
                 )
             )
             val sessionId = open.getString("session_id")
 
             val export = JSONObject(
-                controller.terminalAction(
-                    action = "exec",
-                    command = "export ETA_TEST_VALUE=streaming",
-                    cwd = null,
-                    timeoutMs = 5_000,
-                    identity = "user",
-                    mergeStderr = false,
-                    sessionId = sessionId,
-                    jobId = null,
-                    async = false,
-                    offsetChars = 0,
-                    maxChars = 8_000,
-                    closeIfDone = false
+                controller.executeTool("terminal", JSONObject().put("action", "exec")
+                    .put("command", "export ETA_TEST_VALUE=streaming")
+                    .put("timeout_ms", 5_000)
+                    .put("identity", "user")
+                    .put("merge_stderr", false)
+                    .put("session_id", sessionId)
                 )
             )
             val echo = JSONObject(
-                controller.terminalAction(
-                    action = "exec",
-                    command = "printf %s \"\$ETA_TEST_VALUE\"",
-                    cwd = null,
-                    timeoutMs = 5_000,
-                    identity = "user",
-                    mergeStderr = false,
-                    sessionId = sessionId,
-                    jobId = null,
-                    async = false,
-                    offsetChars = 0,
-                    maxChars = 8_000,
-                    closeIfDone = false
+                controller.executeTool("terminal", JSONObject().put("action", "exec")
+                    .put("command", "printf %s \"\$ETA_TEST_VALUE\"")
+                    .put("timeout_ms", 5_000)
+                    .put("identity", "user")
+                    .put("merge_stderr", false)
+                    .put("session_id", sessionId)
                 )
             )
 
@@ -85,46 +55,37 @@ class RootShellTerminalControllerTest {
     }
 
     @Test
-    fun asyncExecRejectsSessionIdBecauseItDoesNotReuseSessionState() {
-        val controller = RootShellTerminalController(NoopLogger)
+    fun stoppingBackgroundJobDoesNotCloseTerminalSession() {
+        val supervisor = DetachedTaskSupervisor(NoopLogger, File(temporaryFolder.root, "jobs.json"),
+            daemonDir = File(temporaryFolder.root, "logs").path, rootAvailable = { false })
+        val jobs = BackgroundTerminalJobs(supervisor, NoopLogger)
+        val controller = RootShellTerminalController(NoopLogger, detachedSupervisor = supervisor, backgroundJobs = jobs, rootAvailable = { false })
         try {
-            val open = JSONObject(
-                controller.terminalAction(
-                    action = "open",
-                    command = "",
-                    cwd = temporaryFolder.root.absolutePath,
-                    timeoutMs = 5_000,
-                    identity = "user",
-                    mergeStderr = false,
-                    sessionId = null,
-                    jobId = null,
-                    async = false,
-                    offsetChars = 0,
-                    maxChars = 8_000,
-                    closeIfDone = false
-                )
-            )
-            val result = JSONObject(
-                controller.terminalAction(
-                    action = "exec",
-                    command = "sleep 1",
-                    cwd = null,
-                    timeoutMs = 5_000,
-                    identity = "user",
-                    mergeStderr = false,
-                    sessionId = open.getString("session_id"),
-                    jobId = null,
-                    async = true,
-                    offsetChars = 0,
-                    maxChars = 8_000,
-                    closeIfDone = false
-                )
-            )
+            val open = JSONObject(controller.executeTool("terminal", JSONObject()
+                .put("action", "open").put("cwd", temporaryFolder.root.path)))
+            val sessionId = open.getString("session_id")
+            val started = JSONObject(controller.executeTool("terminal_job", JSONObject()
+                .put("action", "start").put("command", "sleep 30")
+                .put("cwd", temporaryFolder.root.path)))
+            assertTrue(started.toString(), started.getBoolean("ok"))
+            assertEquals("terminal_job", started.getString("tool"))
+            assertEquals("start", started.getString("action"))
+            val jobId = started.getString("job_id")
 
-            assertFalse(result.toString(), result.getBoolean("ok"))
-            assertEquals("ASYNC_SESSION_UNSUPPORTED", result.getString("code"))
+            val stopped = JSONObject(controller.executeTool("terminal_job", JSONObject()
+                .put("action", "stop").put("job_id", jobId)))
+            assertEquals("stopped", stopped.getString("status"))
+            assertEquals("stop", stopped.getString("action"))
+            val result = JSONObject(controller.executeTool("terminal", JSONObject()
+                .put("command", "printf session_alive").put("session_id", sessionId)))
+            assertTrue(result.toString(), result.getBoolean("ok"))
+            assertEquals("session_alive", result.getString("stdout"))
+            val removed = JSONObject(controller.executeTool("terminal_job", JSONObject()
+                .put("action", "read").put("job_id", jobId)))
+            assertEquals("stopped", removed.getString("status"))
         } finally {
             controller.closeAll()
+            jobs.close()
         }
     }
 
@@ -137,12 +98,12 @@ class RootShellTerminalControllerTest {
 
         try {
             val result = JSONObject(
-                controller.terminalOpenAndExec(
-                    command = command,
-                    cwd = cwd,
-                    timeoutMs = 5_000,
-                    identity = "user",
-                    mergeStderr = false
+                controller.executeTool("terminal", JSONObject().put("action", "exec")
+                    .put("command", command)
+                    .put("cwd", cwd)
+                    .put("timeout_ms", 5_000)
+                    .put("identity", "user")
+                    .put("merge_stderr", false)
                 )
             )
 
@@ -159,54 +120,48 @@ class RootShellTerminalControllerTest {
     }
 
     @Test
-    fun terminalSchemaAndExecutionRejectIgnoredOrConflictingArguments() {
-        val tools = JSONArray().also(AgentTerminalToolCatalog::appendTo)
-        assertEquals(1, tools.length())
-        assertEquals("terminal", tools.getJSONObject(0).getJSONObject("function").getString("name"))
-        val validator = AgentToolCallValidator(tools)
-        val invalid = listOf(
-            """{"action":"exec"}""",
-            """{"action":"exec","command":"pwd","session_id":"session","cwd":"/tmp"}""",
-            """{"action":"exec","command":"pwd","session_id":"session","identity":"user"}""",
-            """{"action":"exec","command":"pwd","session_id":"session","environment":"android"}""",
-            """{"action":"exec","command":"pwd","session_id":"session","async":true}""",
-            """{"action":"open","command":"pwd"}""",
-            """{"action":"close"}""",
-            """{"action":"close","session_id":"session","job_id":"job"}""",
-            """{"action":"daemon_list","identity":"root"}""",
-            """{"action":"daemon_logs"}""",
-            """{"action":"daemon_start","command":"sleep 1","timeout_ms":1000}""",
-            """{"action":"read_async_result","job_id":"job","offset_chars":-1}""",
-            """{"action":"exec","command":"pwd","timeout_ms":"1000"}""",
-        )
-        val controller = RootShellTerminalController(NoopLogger)
+    fun terminalExecAcceptsExtraFieldsAndUsesExecutionDefaults() {
+        val controller = RootShellTerminalController(NoopLogger, rootAvailable = { false })
         try {
-            invalid.forEach { json ->
-                assertNotNull(json, validator.validate(AgentModelClient.ToolCall("call", "terminal", json)))
-                val result = JSONObject(controller.terminalAction(JSONObject(json)))
-                assertFalse(json, result.getBoolean("ok"))
-                assertTrue(result.toString(), result.getString("code") in setOf("INVALID_ARGUMENT", "ASYNC_SESSION_UNSUPPORTED"))
-            }
-            listOf(
-                """{"action":"open"}""",
-                """{"action":"exec","command":"pwd"}""",
-                """{"action":"exec","command":"pwd","session_id":"session","async":false}""",
-                """{"action":"close","job_id":"job"}""",
-                """{"action":"daemon_start","command":"sleep 1"}""",
-                """{"action":"daemon_list"}""",
-                """{"action":"daemon_logs","task_id":"task"}""",
-                """{"action":"daemon_stop","task_id":"task"}""",
-                """{"action":"read_async_result","job_id":"job"}""",
-            ).forEach { json ->
-                assertNull(json, validator.validate(AgentModelClient.ToolCall("call", "terminal", json)))
-                assertNull(json, TerminalToolContract.validate(JSONObject(json)))
-            }
-            val legacy = """{"action":"open_and_exec","command":"pwd"}"""
-            assertNotNull(validator.validate(AgentModelClient.ToolCall("call", "terminal", legacy)))
-            assertNull(TerminalToolContract.validate(JSONObject(legacy)))
-        } finally {
-            controller.closeAll()
-        }
+            val result = JSONObject(controller.executeTool("terminal", JSONObject()
+                .put("action", "EXEC").put("command", "printf result")
+                .put("identity", "USER").put("environment", "ANDROID")
+                .put("cwd", temporaryFolder.root.path).put("timeout_ms", "5000")
+                .put("unused", true)))
+            assertTrue(result.toString(), result.getBoolean("ok"))
+            assertEquals("result", result.getString("stdout"))
+            assertEquals("user", result.getString("identity"))
+        } finally { controller.closeAll() }
+    }
+
+    @Test
+    fun sessionExecUsesStoredEnvironmentDespiteRedundantArguments() {
+        val controller = RootShellTerminalController(NoopLogger, rootAvailable = { false })
+        try {
+            val open = JSONObject(controller.executeTool("terminal", JSONObject()
+                .put("action", "open").put("identity", "user").put("cwd", temporaryFolder.root.path)))
+            assertTrue(open.toString(), open.getBoolean("ok"))
+            val result = JSONObject(controller.executeTool("terminal", JSONObject()
+                .put("action", "exec").put("command", "pwd")
+                .put("session_id", open.getString("session_id"))
+                .put("cwd", "/missing").put("identity", "root").put("environment", "linux")))
+            assertTrue(result.toString(), result.getBoolean("ok"))
+            assertEquals(temporaryFolder.root.canonicalPath, result.getString("stdout").trim())
+            assertEquals("user", result.getString("identity"))
+        } finally { controller.closeAll() }
+    }
+
+    @Test
+    fun longCommandsCanWriteFiles() {
+        val controller = RootShellTerminalController(NoopLogger, rootAvailable = { false })
+        val content = "a".repeat(20_000)
+        try {
+            val result = JSONObject(controller.executeTool("terminal", JSONObject()
+                .put("action", "exec").put("cwd", temporaryFolder.root.path)
+                .put("command", "cat > note.txt <<'EOF'\n$content\nEOF")))
+            assertTrue(result.toString(), result.getBoolean("ok"))
+            assertEquals("$content\n", File(temporaryFolder.root, "note.txt").readText())
+        } finally { controller.closeAll() }
     }
 
     @Test
@@ -215,7 +170,7 @@ class RootShellTerminalControllerTest {
         try {
             val args = JSONObject().put("action", "exec").put("command", "printf visible_output")
                 .put("identity", "user").put("cwd", temporaryFolder.root.absolutePath)
-            val result = JSONObject(controller.terminalAction(args))
+            val result = JSONObject(controller.executeTool("terminal", args))
             assertTrue(result.toString(), result.getBoolean("ok"))
             assertEquals("visible_output", result.getString("stdout"))
             assertEquals("exited", result.getString("status"))
@@ -234,7 +189,7 @@ class RootShellTerminalControllerTest {
     fun outputJustOverDisplayLimitIsMarkedTruncated() {
         val controller = RootShellTerminalController(NoopLogger)
         try {
-            val result = JSONObject(controller.terminalAction(JSONObject()
+            val result = JSONObject(controller.executeTool("terminal", JSONObject()
                 .put("action", "exec")
                 .put("command", "awk 'BEGIN { for (i=0;i<16001;i++) printf \"x\" }'")
                 .put("identity", "user")
@@ -259,35 +214,6 @@ class RootShellTerminalControllerTest {
     }
 
     @Test
-    fun completedAsyncJobIsRetainedUntilLastRequestedPage() {
-        val controller = RootShellTerminalController(NoopLogger)
-        try {
-            val started = JSONObject(controller.terminalAction(JSONObject()
-                .put("action", "exec").put("command", "printf abcdef").put("async", true)
-                .put("identity", "user").put("cwd", temporaryFolder.root.absolutePath)))
-            val jobId = started.getString("job_id")
-            val request = JSONObject().put("action", "read_async_result").put("job_id", jobId)
-                .put("max_chars", 3).put("close_if_done", true)
-            var first = JSONObject(controller.terminalAction(request))
-            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3)
-            while (first.getBoolean("running") && System.nanoTime() < deadline) {
-                Thread.sleep(10)
-                first = JSONObject(controller.terminalAction(request))
-            }
-            assertFalse(first.toString(), first.getBoolean("running"))
-            assertEquals("abc", first.getString("stdout"))
-            assertFalse(first.getBoolean("job_closed"))
-            assertEquals(6, first.getInt("total_chars"))
-            val last = JSONObject(controller.terminalAction(request.put("offset_chars", first.getInt("next_offset_chars"))))
-            assertEquals("def", last.getString("stdout"))
-            assertTrue(last.getBoolean("job_closed"))
-            assertEquals("JOB_NOT_FOUND", JSONObject(controller.terminalAction(request)).getString("code"))
-        } finally {
-            controller.closeAll()
-        }
-    }
-
-    @Test
     fun linuxEnvironmentRequiresInstallationAndRootIdentity() {
         val missingController = RootShellTerminalController(
             logger = NoopLogger,
@@ -295,20 +221,13 @@ class RootShellTerminalControllerTest {
         )
         try {
             val missing = JSONObject(
-                missingController.terminalAction(
-                    action = "open_and_exec",
-                    command = "python3 --version",
-                    cwd = temporaryFolder.root.absolutePath,
-                    timeoutMs = 5_000,
-                    identity = "root",
-                    mergeStderr = false,
-                    sessionId = null,
-                    jobId = null,
-                    async = false,
-                    offsetChars = 0,
-                    maxChars = 8_000,
-                    closeIfDone = false,
-                    environment = "linux",
+                missingController.executeTool("terminal", JSONObject().put("action", "exec")
+                    .put("command", "python3 --version")
+                    .put("cwd", temporaryFolder.root.absolutePath)
+                    .put("timeout_ms", 5_000)
+                    .put("identity", "root")
+                    .put("merge_stderr", false)
+                    .put("environment", "linux")
                 ),
             )
             assertFalse(missing.toString(), missing.getBoolean("ok"))
@@ -327,20 +246,13 @@ class RootShellTerminalControllerTest {
         )
         try {
             val user = JSONObject(
-                readyController.terminalAction(
-                    action = "open_and_exec",
-                    command = "id",
-                    cwd = temporaryFolder.root.absolutePath,
-                    timeoutMs = 5_000,
-                    identity = "user",
-                    mergeStderr = false,
-                    sessionId = null,
-                    jobId = null,
-                    async = false,
-                    offsetChars = 0,
-                    maxChars = 8_000,
-                    closeIfDone = false,
-                    environment = "linux",
+                readyController.executeTool("terminal", JSONObject().put("action", "exec")
+                    .put("command", "id")
+                    .put("cwd", temporaryFolder.root.absolutePath)
+                    .put("timeout_ms", 5_000)
+                    .put("identity", "user")
+                    .put("merge_stderr", false)
+                    .put("environment", "linux")
                 ),
             )
             assertFalse(user.toString(), user.getBoolean("ok"))
@@ -364,20 +276,12 @@ class RootShellTerminalControllerTest {
         )
         try {
             val result = JSONObject(
-                debianController.terminalAction(
-                    action = "open_and_exec",
-                    command = "python3 --version",
-                    cwd = null,
-                    timeoutMs = 5_000,
-                    identity = "root",
-                    mergeStderr = false,
-                    sessionId = null,
-                    jobId = null,
-                    async = false,
-                    offsetChars = 0,
-                    maxChars = 8_000,
-                    closeIfDone = false,
-                    environment = "linux",
+                debianController.executeTool("terminal", JSONObject().put("action", "exec")
+                    .put("command", "python3 --version")
+                    .put("timeout_ms", 5_000)
+                    .put("identity", "root")
+                    .put("merge_stderr", false)
+                    .put("environment", "linux")
                 ),
             )
             assertFalse(result.toString(), result.getBoolean("ok"))

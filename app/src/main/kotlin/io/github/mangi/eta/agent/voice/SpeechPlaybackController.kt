@@ -27,8 +27,11 @@ internal class SpeechPlaybackController(
     private val context: Context,
     private val scope: CoroutineScope,
     private val beforePlayback: () -> Unit = {},
+    private val interruptOnScreenOff: Boolean = true,
     private val afterPlayback: () -> Unit = {},
     private val synthesize: suspend (SpeechSettings, SpeechCredentials, String, (ByteArray) -> Unit) -> Unit = ::synthesizeSpeech,
+    /** 整篇单会话流式合成；为 null 时只用逐段请求。 */
+    private val streamSynthesize: (suspend (SpeechSettings, SpeechCredentials, List<String>, (ByteArray) -> Unit) -> Unit)? = ::streamSpeech,
     private val createOutput: () -> SpeechAudioOutput = ::SpeechPcmOutput,
 ) {
     private val mutableState = MutableStateFlow(SpeechPlaybackState())
@@ -45,7 +48,7 @@ internal class SpeechPlaybackController(
         mutableState.value = SpeechPlaybackState(messageId, loading = true)
         job = scope.launch(Dispatchers.Main.immediate) {
             try {
-                lease = SpeechAudioLease(context) { stop() }.also { it.acquire(playback = false) }
+                lease = SpeechAudioLease(context, interruptOnScreenOff) { stop() }.also { it.acquire(playback = false) }
                 val config = settings ?: SpeechSettingsRepository.settings()
                 val secrets = credentials ?: SpeechSettingsRepository.credentials(context)
                 validateSpeechSettings(config, secrets, synthesis = true)
@@ -79,9 +82,12 @@ internal class SpeechPlaybackController(
 
     /**
      * 合成按网络速度下载，播放按实时速度写入音轨，两者经队列解耦。若在合成回调里直接写音轨，
-     * 读流会被播放节奏拖住，一段音频时长超过合成超时就会中断，服务端也会长时间等待客户端读取。
-     * 最多领先播放 [PREFETCH_CHUNKS] 段，既消除段间等待首包的停顿，也限制缓冲的 PCM 内存。
-     * 段与段无缝相接，接缝处由 [SpeechSegmentFade] 淡入淡出。
+     * 读流会被播放节奏拖住，服务端也会长时间等待客户端读取。
+     *
+     * 优先把整篇放进一个流式合成会话，音频是一条连续的流，整体只在首尾淡入淡出。
+     * 流式会话在出声前失败（例如账号未开通实时模型、自定义地址不支持 WebSocket）时，
+     * 回落到逐段请求：最多领先播放 [PREFETCH_CHUNKS] 段，接缝处由 [SpeechSegmentFade] 淡入淡出。
+     * 已经出声后再失败则直接报错，不从头重读。
      */
     private suspend fun playChunks(
         config: SpeechSettings,
@@ -94,7 +100,25 @@ internal class SpeechPlaybackController(
         val ahead = Semaphore(PREFETCH_CHUNKS)
         launch {
             try {
-                for (chunk in chunks) {
+                var streamed = false
+                val stream = streamSynthesize
+                if (stream != null) {
+                    try {
+                        ahead.acquire()
+                        stream(config, secrets, chunks) { bytes ->
+                            streamed = true
+                            queue.trySend(SpeechQueueItem.Audio(bytes))
+                        }
+                        queue.send(SpeechQueueItem.ChunkEnd)
+                        streamed = true
+                    } catch (error: Exception) {
+                        if (error is CancellationException && error !is kotlinx.coroutines.TimeoutCancellationException) throw error
+                        if (streamed) throw error
+                        AndroidAgentLogger.warn("Eta speech stream unavailable, using segments: code=${error.speechFailure().code}")
+                        ahead.release()
+                    }
+                }
+                if (!streamed) for (chunk in chunks) {
                     ahead.acquire()
                     synthesize(config, secrets, chunk) { bytes -> queue.trySend(SpeechQueueItem.Audio(bytes)) }
                     queue.send(SpeechQueueItem.ChunkEnd)

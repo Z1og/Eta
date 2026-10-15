@@ -60,11 +60,11 @@ internal object RootAccess {
         val prefs = preferences ?: context.applicationContext
             .getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .also { preferences = it }
+        mutableState.value = mutableState.value.copy(isChecking = true)
         scope.launch {
-            mutableState.value = mutableState.value.copy(isChecking = true)
             try {
                 val present = suExists()
-                if (!present) {
+                if (!present && !explicit) {
                     mutableState.value = RootAccessState(RootAccessStatus.UNAVAILABLE)
                     return@launch
                 }
@@ -97,10 +97,11 @@ internal object RootAccess {
                 mutableState.value = RootAccessState(
                     status = when {
                         granted -> RootAccessStatus.GRANTED
+                        result.errorCode == "ROOT_UNAVAILABLE" -> RootAccessStatus.UNAVAILABLE
                         result.timedOut -> RootAccessStatus.TIMED_OUT
                         else -> RootAccessStatus.DENIED
                     },
-                    suPresent = true,
+                    suPresent = present || granted,
                 )
             } finally {
                 mutableState.value = mutableState.value.copy(isChecking = false)

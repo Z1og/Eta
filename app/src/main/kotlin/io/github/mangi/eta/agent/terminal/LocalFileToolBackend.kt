@@ -15,7 +15,6 @@ import java.security.MessageDigest
 
 internal class LocalFileToolBackend(
     workspace: File,
-    allowedRoots: List<File> = listOf(workspace),
     home: File = workspace,
     override val environment: String = "android",
     override val identity: String = "user",
@@ -23,7 +22,6 @@ internal class LocalFileToolBackend(
 ) : FileToolBackend {
     private val workspace = workspace.canonicalFile
     private val home = home.canonicalFile
-    private val roots = allowedRoots.map { it.canonicalFile.toPath() }
 
     override fun resolve(path: String): String {
         checkActive()
@@ -35,9 +33,6 @@ internal class LocalFileToolBackend(
             File(path).isAbsolute -> File(path)
             else -> File(workspace, path)
         }.canonicalFile
-        if (roots.none { candidate.toPath().startsWith(it) }) {
-            throw FileToolException("PATH_OUTSIDE_SCOPE", "路径不在当前文件空间的访问范围内")
-        }
         return candidate.path
     }
 

@@ -68,7 +68,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -211,15 +210,16 @@ internal fun AgentChatInputBar(
         ) {
             Text(
                 text = if (preserveFollowingMessages) {
-                    "保存后原位更新这条消息，并保留后续对话"
+                    stringResource(R.string.chat_edit_preserve_following)
                 } else if (editHasLaterTurns) {
                     stringResource(R.string.chat_edit_replace_later)
                 } else {
                     stringResource(R.string.chat_edit_replace_message)
                 },
-                style = MiuixTheme.textStyles.body2,
+                style = MiuixTheme.textStyles.footnote1,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.padding(start = 8.dp, bottom = 6.dp),
+                // 与输入框内正文同一起点（容器 10dp + 文本 8dp）。
+                modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 8.dp),
             )
         }
 
@@ -256,13 +256,23 @@ internal fun AgentChatInputBar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 40.dp)
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                     contentAlignment = Alignment.TopStart,
                 ) {
+                    // 占位文字与输入正文共用同一行高，首字输入时基线不跳动。
+                    val inputTextStyle = MiuixTheme.textStyles.body1.copy(lineHeight = 22.sp)
+                    val character = LocalRoleplayChat.current
                     if (textFieldState.text.isBlank()) {
                         Text(
-                            text = if (isStreaming) stringResource(R.string.chat_eta_working) else stringResource(R.string.chat_input_hint),
-                            style = MiuixTheme.textStyles.body1,
+                            text = when {
+                                // 角色对话的占位文字跟随角色，避免“交给 Eta”打断沉浸感。
+                                character != null && isStreaming ->
+                                    stringResource(R.string.chat_character_typing, character.characterName)
+                                character != null -> stringResource(R.string.chat_character_input_hint, character.characterName)
+                                isStreaming -> stringResource(R.string.chat_eta_working)
+                                else -> stringResource(R.string.chat_input_hint)
+                            },
+                            style = inputTextStyle,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         )
                     }
@@ -272,11 +282,7 @@ internal fun AgentChatInputBar(
                             .fillMaxWidth()
                             .focusRequester(focusRequester),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-                        textStyle = TextStyle(
-                            color = MiuixTheme.colorScheme.onSurface,
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp,
-                        ),
+                        textStyle = inputTextStyle.copy(color = MiuixTheme.colorScheme.onSurface),
                         cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
                         lineLimits = TextFieldLineLimits.MultiLine(
                             minHeightInLines = 1,
@@ -399,7 +405,7 @@ internal fun AgentChatInputBar(
                                         },
                                         contentDescription = when {
                                             streaming -> stringResource(R.string.chat_stop)
-                                            isEditingMessage && preserveFollowingMessages -> "保存消息"
+                                            isEditingMessage && preserveFollowingMessages -> stringResource(R.string.chat_save_message)
                                             else -> stringResource(R.string.chat_send)
                                         },
                                         modifier = Modifier.size(
@@ -510,7 +516,7 @@ private fun PendingImageStrip(
             Box(
                 modifier = Modifier
                     .size(60.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(MiuixTheme.colorScheme.surfaceContainer),
             ) {
                 rememberDataUrlBitmap(image.dataUrl)?.let { bitmap ->
@@ -521,22 +527,29 @@ private fun PendingImageStrip(
                         contentScale = ContentScale.Crop,
                     )
                 }
+                // 可见圆点保持小巧，触控区放大到右上角 32dp，避免误触缩略图。
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(3.dp)
-                        .size(18.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.58f))
-                        .clickable { onRemoveImage(image.id) },
-                    contentAlignment = Alignment.Center,
+                        .size(32.dp)
+                        .clickable(interactionSource = null, indication = null) { onRemoveImage(image.id) },
+                    contentAlignment = Alignment.TopEnd,
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = stringResource(R.string.ui_remove_image_089db3),
-                        modifier = Modifier.size(11.dp),
-                        tint = Color.White,
-                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(4.dp)
+                            .size(18.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.58f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.ui_remove_image_089db3),
+                            modifier = Modifier.size(11.dp),
+                            tint = Color.White,
+                        )
+                    }
                 }
             }
         }
