@@ -75,6 +75,77 @@ class AgentModelRefusalTest {
     }
 
     @Test
+    fun singleRefusalSkipsSubtaskAndRunContinues() {
+        val config = AgentModelClient.ModelConfig(
+            baseUrl = "https://example.invalid", apiKey = "fixture", model = "fixture", systemPrompt = "固定约束",
+        )
+        var calls = 0
+        val provider = object : AgentProviderClient {
+            override val id = "refusal-fixture"
+            override val capabilities = ProviderCapabilities(EndpointKind.CHAT_COMPLETIONS, true, true, true, true, false, false)
+            override fun complete(
+                request: ProviderRequest,
+                runController: AgentRunController,
+                onEvent: (ProviderEvent) -> Unit,
+            ): ProviderResponse {
+                calls++
+                return ProviderResponse(
+                    JSONObject()
+                        .put("role", "assistant")
+                        .put(
+                            "content",
+                            if (calls == 1) "我不能协助这个请求。" else "已跳过该步骤，继续下一项：解出偏移 0x1A2B3C。",
+                        )
+                        .put("finish_reason", "stop"),
+                )
+            }
+        }
+        val result = AgentModelClient.complete(
+            config, "继续", AgentModelClient.ToolExecutor { error("不应执行工具") },
+            history = listOf(AgentModelClient.ConversationMessage("user", "继续")),
+            provider = provider,
+        )
+        assertEquals("单次拒绝后应续跑而不是终止", 2, calls)
+        assertEquals("已跳过该步骤，继续下一项：解出偏移 0x1A2B3C。", result.content)
+        assertFalse("拒绝内容不得进入 transcript", result.transcript.any { it.content.contains("我不能协助") })
+    }
+
+    @Test
+    fun persistentRefusalEscalatesAfterSkipLimit() {
+        val config = AgentModelClient.ModelConfig(
+            baseUrl = "https://example.invalid", apiKey = "fixture", model = "fixture", systemPrompt = "固定约束",
+        )
+        var calls = 0
+        val provider = object : AgentProviderClient {
+            override val id = "refusal-fixture"
+            override val capabilities = ProviderCapabilities(EndpointKind.CHAT_COMPLETIONS, true, true, true, true, false, false)
+            override fun complete(
+                request: ProviderRequest,
+                runController: AgentRunController,
+                onEvent: (ProviderEvent) -> Unit,
+            ): ProviderResponse {
+                calls++
+                return ProviderResponse(
+                    JSONObject()
+                        .put("role", "assistant")
+                        .put("content", "我不能帮助你完成这个任务。")
+                        .put("finish_reason", "stop"),
+                )
+            }
+        }
+        val failure = runCatching {
+            AgentModelClient.complete(
+                config, "继续", AgentModelClient.ToolExecutor { error("不应执行工具") },
+                history = listOf(AgentModelClient.ConversationMessage("user", "继续")),
+                provider = provider,
+            )
+        }.exceptionOrNull()
+        assertTrue("连续拒绝应升级为失败", failure is AgentModelExecutionException)
+        assertEquals("MODEL_REFUSAL", (failure?.cause as? AgentModelFailure)?.code)
+        assertEquals("先跳过一次，再升级失败", 3, calls)
+    }
+
+    @Test
     fun normalAssistantAnswerStillPassesThrough() {
         val config = AgentModelClient.ModelConfig(
             baseUrl = "https://example.invalid", apiKey = "fixture", model = "fixture", systemPrompt = "固定约束",

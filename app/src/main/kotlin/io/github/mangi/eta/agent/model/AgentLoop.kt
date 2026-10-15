@@ -88,6 +88,9 @@ internal class AgentLoop(
         var round = 1
         var precedingTools: JSONArray? = null
 
+        // 单次拒绝只跳过当前子任务；连续拒绝达到上限才升级为失败，交给执行层换端 failover。
+        var consecutiveRefusals = 0
+
         while (true) {
             runController.throwIfCancelled()
             if (purpose.allowsTools) appendPendingSteeringMessage()
@@ -161,10 +164,25 @@ internal class AgentLoop(
             if (purpose.allowsTools && toolCalls.isEmpty() &&
                 AgentModelRefusal.isRefusal(assistantMessage.optString("content"))
             ) {
-                // 口头拒绝与 CONTENT_FILTER 同权：拒绝内容不入上下文（否则后续轮次被带偏），
-                // 同时给执行层的 failover 一个确定信号。
-                throw AgentModelRefusal.failure(assistantMessage.optString("content"))
+                // 拒绝内容不入上下文（否则后续轮次被「我不能…」带偏）。单次拒绝只跳过这个子任务：
+                // 追加中性的续跑指令，让既定计划继续推进；连续拒绝才升级为失败交由 failover。
+                if (consecutiveRefusals >= REFUSAL_SKIP_LIMIT) {
+                    throw AgentModelRefusal.failure(assistantMessage.optString("content"))
+                }
+                consecutiveRefusals++
+                onEvent(
+                    AgentEvent.ModelRetryScheduled(
+                        round = round,
+                        attempt = consecutiveRefusals,
+                        maxAttempts = REFUSAL_SKIP_LIMIT + 1,
+                        delayMs = 0,
+                        reasonCode = "MODEL_REFUSAL_SKIPPED",
+                    ),
+                )
+                appendMessage(AgentConversationCodec.userTextMessage(AgentModelRefusal.continuationNote()))
+                continue
             }
+            consecutiveRefusals = 0
             val assistantReasoning = assistantMessage.optString("reasoning_content")
             if (
                 assistantReasoning.isNotBlank() &&
@@ -487,3 +505,6 @@ internal class AgentLoop(
         }
 
 }
+
+/** 连续被拒多少个子任务后升级为失败（此前每次仅跳过当前子任务并续跑）。 */
+private const val REFUSAL_SKIP_LIMIT = 2
