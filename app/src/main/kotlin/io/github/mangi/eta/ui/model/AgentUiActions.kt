@@ -1,5 +1,6 @@
 package io.github.mangi.eta.ui.model
 
+import android.net.Uri
 import io.github.mangi.eta.data.model.ReasoningEffort
 import io.github.mangi.eta.data.repository.AgentUserPromptMode
 
@@ -83,4 +84,14 @@ internal sealed interface AgentUserPromptAction {
     data object Clear : AgentUserPromptAction
 
     data object DismissNotice : AgentUserPromptAction
+
+    /** 从系统文件选择器拿到 uri——先读进来待确认，不直接落盘。 */
+    data class Import(val uri: Uri) : AgentUserPromptAction
+
+    data object ConfirmImport : AgentUserPromptAction
+
+    data object CancelImport : AgentUserPromptAction
+
+    /** 内容太长被降级成只读预览后，显式要求把全文放进编辑区。 */
+    data object OpenEditor : AgentUserPromptAction
 }

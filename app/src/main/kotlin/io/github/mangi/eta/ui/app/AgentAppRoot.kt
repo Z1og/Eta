@@ -687,6 +687,10 @@ fun AgentAppRoot(
                             AgentUserPromptAction.Reload -> userPrompt.refreshPrompt()
                             AgentUserPromptAction.Clear -> userPrompt.clearPrompt()
                             AgentUserPromptAction.DismissNotice -> userPrompt.dismissNotice()
+                            is AgentUserPromptAction.Import -> userPrompt.prepareImport(action.uri)
+                            AgentUserPromptAction.ConfirmImport -> userPrompt.confirmImport()
+                            AgentUserPromptAction.CancelImport -> userPrompt.cancelImport()
+                            AgentUserPromptAction.OpenEditor -> userPrompt.openEditor()
                         }
                     },
                 )

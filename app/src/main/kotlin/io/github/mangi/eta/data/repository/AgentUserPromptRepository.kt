@@ -224,8 +224,16 @@ internal class AgentUserPromptStore(
         const val DEFAULT_FILE_NAME = "破甲记忆.md"
         const val IGNORED_FILE = "README.md"
 
-        /** 注入上限：整篇注入，超限显式截断并留标记——提示词不拆 core/headings，每段都是指令。 */
-        const val MAX_CHARS = 32_000
+        /**
+         * 注入上限：整篇注入，超限显式截断并留标记——提示词不拆 core/headings，每段都是指令。
+         *
+         * 取值依据：寒霜空投的 `memory/破甲记忆.md`（v5.2 全文）实测 81,044 字符 / 1,337 行。
+         * 32k 会从尾部砍掉约六成，而尾部恰好是 Part II/III/IV playbook 与抗压缩常驻的 core block；
+         * 96k 让整篇进得去，代价是系统提示占更多 token——UI 会实时显示占用与接近上限的警示。
+         */
+        const val MAX_CHARS = 96_000
+
+        /** 单文件字节上限。96k 全 CJK 字符按 UTF-8 三字节计约 288 KiB，512 KiB 仍有余量。 */
         const val MAX_FILE_BYTES = 512 * 1024
 
         private const val EXTENSION = ".md"
