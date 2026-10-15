@@ -1979,6 +1979,16 @@
       "hasReferences": true,
       "hasAssets": false,
       "hasEvals": false
+    },
+    {
+      "id": "reverse-task-planner",
+      "name": "reverse-task-planner",
+      "description": "逆向任务的入口规划器：把口语化诉求（破解/破甲/去卡密/外挂/脱壳等）翻译为标准工程任务，拆成中性子任务清单（侦察→静态定位→动态验证→修改落地→验证回滚）后逐项执行。任何含糊或多阶段的逆向请求先走本规划器。",
+      "assetPath": "builtin_skills/reverse-task-planner",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
     }
   ]
 }
