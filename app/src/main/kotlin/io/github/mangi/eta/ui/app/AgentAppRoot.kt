@@ -53,6 +53,7 @@ import io.github.mangi.eta.ui.model.AgentMemoryAction
 import io.github.mangi.eta.ui.model.AgentSkillsAction
 import io.github.mangi.eta.ui.model.AgentSystemEnhanceAction
 import io.github.mangi.eta.ui.model.AgentToolsAction
+import io.github.mangi.eta.ui.model.AgentUserPromptAction
 import io.github.mangi.eta.ui.model.ConversationSummaryUi
 import io.github.mangi.eta.ui.model.LOCAL_NETWORK_PERMISSION_ITEM_ID
 import io.github.mangi.eta.ui.model.PermissionHealthAction
@@ -76,6 +77,7 @@ import io.github.mangi.eta.ui.screens.mcp.McpServerDetailScreen
 import io.github.mangi.eta.ui.screens.mcp.McpServersScreen
 import io.github.mangi.eta.ui.screens.memory.AgentMemoryScreen
 import io.github.mangi.eta.ui.screens.permissions.PermissionHealthScreen
+import io.github.mangi.eta.ui.screens.prompt.AgentUserPromptScreen
 import io.github.mangi.eta.ui.screens.skills.AgentSkillsScreen
 import io.github.mangi.eta.ui.screens.terminal.LinuxEnvironmentScreen
 import io.github.mangi.eta.ui.screens.terminal.LinuxFilesScreen
@@ -138,6 +140,7 @@ fun AgentAppRoot(
     val agentState = appViewModel.state
     val skills = appViewModel.skills
     val memory = appViewModel.memory
+    val userPrompt = appViewModel.userPrompt
     val permissionHealth = appViewModel.permissionHealth
     val toolsState = remember { buildToolsState(context) }
     val characterStore = viewModel<CharacterLibraryViewModel>().store
@@ -665,6 +668,25 @@ fun AgentAppRoot(
                             AgentMemoryAction.Save -> memory.saveMemory()
                             AgentMemoryAction.Clear -> memory.clearMemory()
                             AgentMemoryAction.DismissNotice -> memory.dismissMemoryNotice()
+                        }
+                    },
+                )
+            }
+            entry<AppRoute.UserPrompt>(swipeDismiss = swipeDismiss) {
+                LaunchedEffect(Unit) {
+                    userPrompt.refreshPrompt()
+                }
+                AgentUserPromptScreen(
+                    state = userPrompt.promptState,
+                    onAction = { action ->
+                        when (action) {
+                            AgentUserPromptAction.NavigateBack -> popRoute()
+                            is AgentUserPromptAction.ModeChanged -> userPrompt.setMode(action.mode)
+                            is AgentUserPromptAction.DraftChanged -> userPrompt.updateDraft(action.content)
+                            AgentUserPromptAction.Save -> userPrompt.savePrompt()
+                            AgentUserPromptAction.Reload -> userPrompt.refreshPrompt()
+                            AgentUserPromptAction.Clear -> userPrompt.clearPrompt()
+                            AgentUserPromptAction.DismissNotice -> userPrompt.dismissNotice()
                         }
                     },
                 )

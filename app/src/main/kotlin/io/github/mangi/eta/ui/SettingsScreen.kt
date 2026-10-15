@@ -306,6 +306,18 @@ private fun SettingsPageContent(
 
                     EtaPreferenceDivider()
                     EtaArrowPreference(
+                        title = "作战协议",
+                        startAction = {
+                            EtaPreferenceIcon(
+                                icon = Icons.Rounded.Description,
+                                tint = EtaPreferenceColors.Blue,
+                            )
+                        },
+                        onClick = { onNavigate(AppRoute.UserPrompt) },
+                    )
+
+                    EtaPreferenceDivider()
+                    EtaArrowPreference(
                         title = stringResource(R.string.route_skills),
                         startAction = {
                             EtaPreferenceIcon(

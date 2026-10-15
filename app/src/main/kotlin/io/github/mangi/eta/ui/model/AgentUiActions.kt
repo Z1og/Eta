@@ -1,6 +1,7 @@
 package io.github.mangi.eta.ui.model
 
 import io.github.mangi.eta.data.model.ReasoningEffort
+import io.github.mangi.eta.data.repository.AgentUserPromptMode
 
 sealed interface AgentHomeAction {
     data object CompactContext : AgentHomeAction
@@ -65,4 +66,21 @@ sealed interface AgentMemoryAction {
     data object Save : AgentMemoryAction
     data object Clear : AgentMemoryAction
     data object DismissNotice : AgentMemoryAction
+}
+
+internal sealed interface AgentUserPromptAction {
+    data object NavigateBack : AgentUserPromptAction
+
+    data class ModeChanged(val mode: AgentUserPromptMode) : AgentUserPromptAction
+
+    data class DraftChanged(val content: String) : AgentUserPromptAction
+
+    data object Save : AgentUserPromptAction
+
+    /** 重新读取磁盘上的文件（会话中途改过文件时用来刷新预览）。 */
+    data object Reload : AgentUserPromptAction
+
+    data object Clear : AgentUserPromptAction
+
+    data object DismissNotice : AgentUserPromptAction
 }

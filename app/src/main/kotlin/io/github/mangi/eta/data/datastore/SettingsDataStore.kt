@@ -50,6 +50,7 @@ internal object SettingsDataStore {
     private val SELECTED_MODEL_ID = stringPreferencesKey("selected_model_id")
     private val OFFICIAL_MODEL_CATALOG_REVISION = intPreferencesKey("official_model_catalog_revision")
     private val MEMORY_ENABLED = booleanPreferencesKey("memory_enabled")
+    private val USER_PROMPT_MODE = stringPreferencesKey("user_prompt_mode")
     private val LINUX_DISTRIBUTION = stringPreferencesKey("linux_distribution")
     private val APPEARANCE_THEME_MODE = stringPreferencesKey("appearance_theme_mode")
     private val APPEARANCE_MONET_ENABLED = booleanPreferencesKey("appearance_monet_enabled")
@@ -199,6 +200,30 @@ internal object SettingsDataStore {
 
     suspend fun setMemoryEnabled(enabled: Boolean) {
         updateSettings { it.copy(memoryEnabled = enabled) }
+    }
+
+    /**
+     * 用户自备作战协议的生效范围；持久化为字符串，缺省/非法值由调用方映射回关闭。
+     * 独立于 [Settings]，避免为一个附加开关改动被广泛序列化的设置模型。
+     */
+    fun userPromptModeFlow(): Flow<String> {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause ->
+                if (cause is IOException) {
+                    emit(emptyPreferences())
+                } else {
+                    throw cause
+                }
+            }
+            .map { preferences -> preferences[USER_PROMPT_MODE] ?: "" }
+    }
+
+    suspend fun userPromptMode(): String = userPromptModeFlow().first()
+
+    suspend fun setUserPromptMode(value: String) {
+        ensureInitialized()
+        dataStore.edit { preferences -> preferences[USER_PROMPT_MODE] = value }
     }
 
     suspend fun setLinuxDistribution(value: String?) {

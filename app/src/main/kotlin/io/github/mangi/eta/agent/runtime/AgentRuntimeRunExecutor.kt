@@ -42,6 +42,8 @@ import io.github.mangi.eta.agent.voice.EtaAssistantOverlayService
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.safeLogType
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
+import io.github.mangi.eta.data.repository.AgentUserPromptRepository
+import io.github.mangi.eta.data.repository.AgentUserPromptSnapshot
 import io.github.mangi.eta.data.repository.ModelRepository
 import io.github.mangi.eta.data.repository.ProviderRepository
 import io.github.mangi.eta.config.Prefs
@@ -271,6 +273,22 @@ internal class AgentRuntimeRunExecutor(
             } else {
                 AgentMemoryContext.DISABLED
             }
+            // 用户自备作战协议（filesDir/prompts/ 下第一个非空 .md）。
+            // 会话开始时读取一次并冻结：中途改文件只影响下个会话，避免系统提示抖动废掉请求前缀缓存。
+            // 未开启（默认关闭）或文件为空 → EMPTY，不注入、不产生空 system 消息；任何失败静默降级。
+            val userPrompt = runBlocking {
+                runCatching {
+                    AgentUserPromptRepository.loadFor(
+                        mode = AgentUserPromptRepository.mode(),
+                        reverseModeEnabled = reverseModeEnabled,
+                    )
+                }.getOrElse { throwable ->
+                    AndroidAgentLogger.warnThrottled("agent_user_prompt_unavailable") {
+                        "User prompt unavailable: type=${throwable.safeLogType()}"
+                    }
+                    AgentUserPromptSnapshot.EMPTY
+                }
+            }
             if (request.config.terminalTools) {
                 // 启动探测由 App 拥有；模型首轮等待其结果，避免把检测中的授权当成普通设备。
                 runBlocking {
@@ -417,6 +435,7 @@ internal class AgentRuntimeRunExecutor(
                     runController = runController,
                     skillContext = skillContext,
                     memoryContext = memoryContext,
+                    userPrompt = userPrompt,
                     additionalTools = runTools,
                     executionContext = executor.terminalExecutionContext,
                 ) { event ->

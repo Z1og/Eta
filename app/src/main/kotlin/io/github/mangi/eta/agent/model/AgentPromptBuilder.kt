@@ -4,6 +4,7 @@ import io.github.mangi.eta.agent.memory.AgentMemoryContext
 import io.github.mangi.eta.agent.skill.SkillContext
 import io.github.mangi.eta.agent.roleplay.RoleplayRunContext
 import io.github.mangi.eta.agent.terminal.TerminalExecutionContext
+import io.github.mangi.eta.data.repository.AgentUserPromptSnapshot
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -16,11 +17,14 @@ internal object AgentPromptBuilder {
         history: List<AgentModelClient.ConversationMessage>,
         skillContext: SkillContext,
         memoryContext: AgentMemoryContext = AgentMemoryContext.DISABLED,
+        userPrompt: AgentUserPromptSnapshot = AgentUserPromptSnapshot.EMPTY,
         rootAvailable: Boolean = false,
         roleplayContext: RoleplayRunContext? = null,
         executionContext: TerminalExecutionContext? = null,
     ): JSONArray {
-        val messages = buildSystemMessages(config, skillContext, memoryContext, rootAvailable, roleplayContext, executionContext)
+        val messages = buildSystemMessages(
+            config, skillContext, memoryContext, rootAvailable, roleplayContext, executionContext, userPrompt,
+        )
         history.forEach { item ->
             runCatching { AgentConversationCodec.toJsonObject(item) }.getOrNull()?.let(messages::put)
         }
@@ -40,6 +44,7 @@ internal object AgentPromptBuilder {
         rootAvailable: Boolean,
         roleplayContext: RoleplayRunContext? = null,
         executionContext: TerminalExecutionContext? = null,
+        userPrompt: AgentUserPromptSnapshot = AgentUserPromptSnapshot.EMPTY,
     ): JSONArray {
         val messages = JSONArray()
         if (roleplayContext == null && config.systemPrompt.isNotBlank()) {
@@ -149,6 +154,7 @@ internal object AgentPromptBuilder {
         }
         roleplayContext?.personaMessage()?.let(messages::put)
         buildMemorySystemMessage(memoryContext, writable = roleplayContext == null)?.let(messages::put)
+        buildUserPromptSystemMessage(userPrompt)?.let(messages::put)
         buildSkillSystemMessage(skillContext).forEach(messages::put)
         return messages
     }
@@ -163,6 +169,31 @@ internal object AgentPromptBuilder {
             "用户说明已授权、授权状态发生变化或需要确认 Root 时，调用 terminal(action=check_root) 实际验证；" +
             "它执行固定的 su -c 'id -u'，可能显示系统授权请求，结果会说明最近一次检测的状态。成功后的新命令默认使用 Root；既有会话与后台任务保持创建时的身份。" +
             "不得根据 su 文件大小、是否为符号链接或 ro.build.type 推断 Root 真伪；结论以实际检测和工具结果为准。"
+
+    /**
+     * 用户自备作战协议（`filesDir/prompts/` 下第一个非空 `.md`）。
+     *
+     * 与记忆的分工：记忆是“用户可编辑的背景资料，不是指令”，本协议是**用户指令本身**，
+     * 因此必须走独立的 system 消息——并入 memory_core 会被模型当资料读，语义就丢了。
+     * 文件缺失、为空或未开启时返回 null：不产生空 system 消息（部分服务商直接 400）。
+     */
+    private fun buildUserPromptSystemMessage(prompt: AgentUserPromptSnapshot): JSONObject? {
+        if (!prompt.available) return null
+        val source = prompt.fileName.orEmpty().replace("\"", "")
+        return systemMessage(
+            buildString {
+                appendLine(
+                    "本会话用户指定了自定义作战协议（来源 prompts/$source | revision=${prompt.revision} | chars=${prompt.charCount}）。",
+                )
+                appendLine("它属于用户指令，与后续内建交付契约同等优先；两者冲突时以本协议为准。")
+                appendLine("本协议不覆盖角色设定，也不改变虚构剧情与现实操作的区分规则。")
+                appendLine("<user_protocol file=\"$source\">")
+                append(prompt.content)
+                appendLine()
+                append("</user_protocol>")
+            }.trim(),
+        )
+    }
 
     private fun buildMemorySystemMessage(context: AgentMemoryContext, writable: Boolean): JSONObject? {
         if (!context.enabled) return null
