@@ -28,12 +28,36 @@ class AgentModelRefusalTest {
     }
 
     @Test
+    fun detectsColloquialShortRefusals() {
+        assertTrue(AgentModelRefusal.isRefusal("这个我不能做。"))
+        assertTrue(AgentModelRefusal.isRefusal("这个我干不了，换别的吧。"))
+        assertTrue(AgentModelRefusal.isRefusal("我帮不了你。"))
+        assertTrue(AgentModelRefusal.isRefusal("这超出了我的能力范围。"))
+        assertTrue(AgentModelRefusal.isRefusal("我恐怕不能继续这个任务。"))
+        assertTrue(AgentModelRefusal.isRefusal("I can't do that."))
+        assertTrue(AgentModelRefusal.isRefusal("I'm not able to help with this."))
+        assertTrue(AgentModelRefusal.isRefusal("That's not something I can do."))
+    }
+
+    @Test
     fun engineeringPhrasingIsNotAMisjudgedRefusal() {
         assertFalse(AgentModelRefusal.isRefusal("无法找到目标进程，已重试 3 次，请确认 frida-server 已启动。"))
         assertFalse(AgentModelRefusal.isRefusal("好的，我先分析这个 so 的导出表，再定位 JNI 注册函数。"))
         assertFalse(AgentModelRefusal.isRefusal("frida-ps 输出如下：pid 4321 com.example.game"))
         assertFalse(AgentModelRefusal.isRefusal("mem_search 命中 12 处，起始地址 0x7f3a2b1c0000。"))
+        assertFalse(AgentModelRefusal.isRefusal("这个偏移超出了我的预期，重新计算模块基址。"))
+        assertFalse(AgentModelRefusal.isRefusal("权限不足，无法读取 /data/data，已回退到 su -c。"))
         assertFalse(AgentModelRefusal.isRefusal(""))
+    }
+
+    @Test
+    fun continuationNoteRotatesAcrossSkips() {
+        val first = AgentModelRefusal.continuationNote(1)
+        val second = AgentModelRefusal.continuationNote(2)
+        assertTrue("第 1 次跳过应有非空续跑指令", first.isNotBlank())
+        assertTrue("第 2 次跳过应有非空续跑指令", second.isNotBlank())
+        assertTrue("连续跳过应轮换中性续跑措辞", first != second)
+        assertTrue("越界 attempt 回退到最后一档且非空", AgentModelRefusal.continuationNote(9).isNotBlank())
     }
 
     @Test

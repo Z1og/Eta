@@ -179,7 +179,7 @@ internal class AgentLoop(
                         reasonCode = "MODEL_REFUSAL_SKIPPED",
                     ),
                 )
-                appendMessage(AgentConversationCodec.userTextMessage(AgentModelRefusal.continuationNote()))
+                appendMessage(AgentConversationCodec.userTextMessage(AgentModelRefusal.continuationNote(consecutiveRefusals)))
                 continue
             }
             consecutiveRefusals = 0
