@@ -51,6 +51,9 @@ internal object SettingsDataStore {
     private val OFFICIAL_MODEL_CATALOG_REVISION = intPreferencesKey("official_model_catalog_revision")
     private val MEMORY_ENABLED = booleanPreferencesKey("memory_enabled")
     private val USER_PROMPT_MODE = stringPreferencesKey("user_prompt_mode")
+
+    /** 随包内置破甲记忆是否已自动装配过一次；置位后不再自动重建，尊重用户的删除。 */
+    private val USER_PROMPT_BUILTIN_SEEDED = booleanPreferencesKey("user_prompt_builtin_seeded")
     private val LINUX_DISTRIBUTION = stringPreferencesKey("linux_distribution")
     private val APPEARANCE_THEME_MODE = stringPreferencesKey("appearance_theme_mode")
     private val APPEARANCE_MONET_ENABLED = booleanPreferencesKey("appearance_monet_enabled")
@@ -224,6 +227,26 @@ internal object SettingsDataStore {
     suspend fun setUserPromptMode(value: String) {
         ensureInitialized()
         dataStore.edit { preferences -> preferences[USER_PROMPT_MODE] = value }
+    }
+
+    /** 内置破甲记忆是否已装配过。读取失败按「未装配」处理：宁可多装一次，也不要静默不装。 */
+    suspend fun userPromptBuiltinSeeded(): Boolean {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause ->
+                if (cause is IOException) {
+                    emit(emptyPreferences())
+                } else {
+                    throw cause
+                }
+            }
+            .map { preferences -> preferences[USER_PROMPT_BUILTIN_SEEDED] ?: false }
+            .first()
+    }
+
+    suspend fun setUserPromptBuiltinSeeded(value: Boolean) {
+        ensureInitialized()
+        dataStore.edit { preferences -> preferences[USER_PROMPT_BUILTIN_SEEDED] = value }
     }
 
     suspend fun setLinuxDistribution(value: String?) {

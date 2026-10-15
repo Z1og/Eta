@@ -94,4 +94,7 @@ internal sealed interface AgentUserPromptAction {
 
     /** 内容太长被降级成只读预览后，显式要求把全文放进编辑区。 */
     data object OpenEditor : AgentUserPromptAction
+
+    /** 把随包内置的破甲记忆装配成效文件（覆盖当前，旧文件先备份）。 */
+    data object InstallBuiltin : AgentUserPromptAction
 }

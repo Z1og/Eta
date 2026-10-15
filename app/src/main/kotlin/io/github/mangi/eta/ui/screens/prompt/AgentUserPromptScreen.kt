@@ -84,6 +84,11 @@ internal fun AgentUserPromptScreen(
                     title = "当前文件",
                     summary = fileSummary(state),
                 )
+                EtaPreferenceDivider()
+                EtaPreference(
+                    title = "内置版本",
+                    summary = builtinSummary(state),
+                )
             }
         }
 
@@ -147,13 +152,25 @@ internal fun AgentUserPromptScreen(
             )
         }
 
-        item(key = "import") {
-            EtaTextButton(
-                text = "从文件导入",
-                onClick = { importLauncher.launch(arrayOf("*/*")) },
-                enabled = !state.isLoading && !state.isSaving,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-            )
+        item(key = "sources-title") { EtaPreferenceGroupTitle("正文来源") }
+        item(key = "sources") {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                EtaTextButton(
+                    text = "从文件导入",
+                    onClick = { importLauncher.launch(arrayOf("*/*")) },
+                    enabled = !state.isLoading && !state.isSaving,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (state.builtinAvailable) {
+                    Spacer(Modifier.height(4.dp))
+                    EtaTextButton(
+                        text = if (state.builtinInstalled) "重新装配内置版本" else "装配内置版本",
+                        onClick = { onAction(AgentUserPromptAction.InstallBuiltin) },
+                        enabled = !state.isLoading && !state.isSaving,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
         }
 
         item(key = "actions") {
@@ -292,6 +309,17 @@ private fun LargeContentPreview(
             enabled = !state.isLoading && !state.isSaving && !state.editingLocked,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+/** 内置版本状态：随包多少字符、是否就是当前生效文件——换版或手改过会显示「与当前不同」。 */
+private fun builtinSummary(state: AgentUserPromptUiState): String {
+    val chars = state.builtinCharCount ?: return "未随包内置；只能手动粘贴或从文件导入"
+    val size = "${formatNumber(chars)} 字符"
+    return when {
+        state.builtinInstalled -> "随包 $size · 已装配为当前生效文件"
+        state.sourceFileName.isNullOrBlank() -> "随包 $size · 尚未装配"
+        else -> "随包 $size · 与当前生效文件不同（可点下方覆盖）"
     }
 }
 

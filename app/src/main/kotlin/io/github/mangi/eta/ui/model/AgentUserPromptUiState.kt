@@ -32,11 +32,14 @@ internal data class AgentUserPromptUiState(
     val savedContent: String = "",
     val sourceFileName: String? = null,
     val charCount: Int = 0,
+    val revision: String? = null,
     val truncated: Boolean = false,
     val reverseModeEnabled: Boolean = false,
     val contextWindow: Int? = null,
     val editorExpanded: Boolean = false,
     val pendingImport: PendingImport? = null,
+    val builtinCharCount: Int? = null,
+    val builtinRevision: String? = null,
     val notice: String? = null,
 ) {
     val hasUnsavedChanges: Boolean get() = draft != savedContent
@@ -81,6 +84,16 @@ internal data class AgentUserPromptUiState(
     val previewText: String get() = draft.take(PREVIEW_CHARS)
 
     val previewTruncated: Boolean get() = draft.length > PREVIEW_CHARS
+
+    /** 随包内置了一份破甲记忆（asset 读得到）。 */
+    val builtinAvailable: Boolean get() = builtinCharCount != null
+
+    /**
+     * 当前生效文件就是随包内置那一份（按 SHA-256 比对）。
+     * App 升级换掉内置版本、或用户手改过，都会让这个变成 false——UI 据此提示可重新装配。
+     */
+    val builtinInstalled: Boolean
+        get() = builtinRevision != null && revision != null && builtinRevision == revision
 
     companion object {
         /** 超过这个长度就不再默认渲染可编辑文本框。 */

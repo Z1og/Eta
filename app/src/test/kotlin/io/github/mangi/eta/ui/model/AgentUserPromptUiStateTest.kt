@@ -76,6 +76,27 @@ class AgentUserPromptUiStateTest {
         assertFalse(truncated.canSave)
     }
 
+    @Test
+    fun builtinIsOnlyCountedAsInstalledWhenRevisionsMatch() {
+        val none = AgentUserPromptUiState(isLoading = false)
+        assertFalse(none.builtinAvailable)
+        assertFalse(none.builtinInstalled)
+
+        val matched = AgentUserPromptUiState(
+            isLoading = false,
+            revision = "aaa",
+            builtinCharCount = 81_044,
+            builtinRevision = "aaa",
+        )
+        assertTrue(matched.builtinAvailable)
+        assertTrue(matched.builtinInstalled)
+
+        // 用户手改过正文，或 App 升级换了内置版本：字符数还在，但 revision 对不上，应提示可重新装配。
+        assertFalse(matched.copy(revision = "bbb").builtinInstalled)
+        // 磁盘上还没有文件：EMPTY 快照的 revision 是空串，不能算"已装配"。
+        assertFalse(matched.copy(revision = "").builtinInstalled)
+    }
+
     private fun stateOf(length: Int) = AgentUserPromptUiState(
         isLoading = false,
         draft = "a".repeat(length),

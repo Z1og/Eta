@@ -1,6 +1,7 @@
 package io.github.mangi.eta.data.repository
 
 import android.content.Context
+import android.content.res.AssetManager
 import android.util.AtomicFile
 import io.github.mangi.eta.data.datastore.SettingsDataStore
 import java.io.File
@@ -78,10 +79,14 @@ internal class AgentUserPromptException(
  */
 internal class AgentUserPromptStore(
     rootDir: File,
+    private val assets: AssetManager? = null,
 ) {
     private val promptDir = File(rootDir, DIRECTORY_NAME)
     private val backupDir = File(promptDir, BACKUP_DIRECTORY_NAME)
     private val lock = Any()
+
+    @Volatile
+    private var cachedBuiltin: AgentUserPromptSnapshot? = null
 
     fun snapshot(): AgentUserPromptSnapshot = synchronized(lock) { snapshotLocked() }
 
@@ -92,7 +97,40 @@ internal class AgentUserPromptStore(
     }
 
     /** 清空当前生效的那份文件；清空前先在同一目录的备份子目录留一份副本。 */
-    fun clearActive(): AgentUserPromptSnapshot = synchronized(lock) {
+    fun clearActive(): AgentUserPromptSnapshot = synchronized(lock) { clearActiveLocked() }
+
+    /**
+     * 随包的破甲记忆（[BUILTIN_ASSET_PATH]）。
+     *
+     * 没接 [AssetManager]（如单测）或 asset 缺失时返回 null——内置缺失不该让整个页面崩掉，
+     * 只是不显示「装配内置版本」这个入口。asset 在同一次安装内不会变，读一次即缓存。
+     */
+    fun builtinSnapshot(): AgentUserPromptSnapshot? {
+        cachedBuiltin?.let { return it }
+        val manager = assets ?: return null
+        val bytes = runCatching {
+            manager.open(BUILTIN_ASSET_PATH).use { stream -> stream.readBytes() }
+        }.getOrNull() ?: return null
+        if (bytes.isEmpty()) return null
+        return snapshotOf(bytes, DEFAULT_FILE_NAME).also { cachedBuiltin = it }
+    }
+
+    /**
+     * 把内置版本写成效文件。已有文件**先备份**到 prompts/.backup/——装配是替换，
+     * 不能把用户手上那份悄悄抹掉，所以复用「清空」的备份路径。
+     */
+    fun installBuiltin(): AgentUserPromptSnapshot = synchronized(lock) {
+        val builtin = builtinSnapshot()
+            ?: throw AgentUserPromptException(
+                code = "PROMPT_BUILTIN_MISSING",
+                message = "应用内置的破甲记忆缺失，无法装配",
+            )
+        clearActiveLocked()
+        writeLocked(builtin.content, DEFAULT_FILE_NAME)
+        snapshotLocked()
+    }
+
+    private fun clearActiveLocked(): AgentUserPromptSnapshot {
         resolveFile()?.let { active ->
             runCatching {
                 if (!backupDir.exists() && !backupDir.mkdirs() && !backupDir.isDirectory) {
@@ -114,7 +152,7 @@ internal class AgentUserPromptStore(
                 )
             }
         }
-        snapshotLocked()
+        return snapshotLocked()
     }
 
     private fun snapshotLocked(): AgentUserPromptSnapshot {
@@ -128,6 +166,11 @@ internal class AgentUserPromptStore(
                 cause = throwable,
             )
         }
+        return snapshotOf(bytes, file.name)
+    }
+
+    /** 截断与哈希的唯一实现：磁盘文件与内置 asset 共用，避免两边口径漂移。 */
+    private fun snapshotOf(bytes: ByteArray, fileName: String?): AgentUserPromptSnapshot {
         val raw = bytes.toString(Charsets.UTF_8)
         val truncated = raw.length > MAX_CHARS
         val content = if (truncated) {
@@ -141,7 +184,7 @@ internal class AgentUserPromptStore(
             revision = sha256(bytes),
             byteSize = bytes.size,
             charCount = raw.length,
-            fileName = file.name,
+            fileName = fileName,
             truncated = truncated,
         )
     }
@@ -225,6 +268,18 @@ internal class AgentUserPromptStore(
         const val IGNORED_FILE = "README.md"
 
         /**
+         * 随包内置破甲记忆的 asset 路径（寒霜空投的 `memory/破甲记忆.md`）。
+         *
+         * 刻意用 ASCII 文件名：非 ASCII 的 asset 名在打包与 Robolectric 资源查找下都不可靠
+         * （实测中文名 asset 读不到）。**装配后落盘的文件名仍是 `破甲记忆.md`**，
+         * 中文只出现在用户看得见的那一层。
+         *
+         * 改这里必须同步 `app/src/main/assets/user_protocol/` 下的实际文件名，
+         * 否则「装配内置版本」入口会静默消失（有单测盯着）。
+         */
+        const val BUILTIN_ASSET_PATH = "user_protocol/pojia-memory.md"
+
+        /**
          * 注入上限：整篇注入，超限显式截断并留标记——提示词不拆 core/headings，每段都是指令。
          *
          * 取值依据：寒霜空投的 `memory/破甲记忆.md`（v5.2 全文）实测 81,044 字符 / 1,337 行。
@@ -255,7 +310,8 @@ internal object AgentUserPromptRepository {
 
     fun init(context: Context) {
         if (!::store.isInitialized) {
-            store = AgentUserPromptStore(context.applicationContext.filesDir)
+            val app = context.applicationContext
+            store = AgentUserPromptStore(app.filesDir, app.assets)
         }
     }
 
@@ -274,6 +330,37 @@ internal object AgentUserPromptRepository {
         return store.clearActive()
     }
 
+    /** 随包内置的破甲记忆；asset 缺失时返回 null。 */
+    fun builtinSnapshot(): AgentUserPromptSnapshot? {
+        ensureInitialized()
+        return store.builtinSnapshot()
+    }
+
+    /** 手动装配内置版本（覆盖当前生效文件，旧文件先备份）。 */
+    fun installBuiltin(): AgentUserPromptSnapshot {
+        ensureInitialized()
+        return store.installBuiltin()
+    }
+
+    /**
+     * 首次启动装配一次随包内置的破甲记忆。
+     *
+     * **只装一次**：用户之后删掉不会再被写回来（想恢复用页面上的「装配内置版本」）。
+     * 已经有文件（导入过 / 手写过）时不覆盖用户的内容，但同样落标记——免得用户清空后
+     * 下次启动又被自动装回来，把「清空」变成清不掉。
+     *
+     * 装配**不等于生效**：是否注入仍由 [AgentUserPromptMode] 决定，默认关闭。
+     *
+     * @return 本次是否真的写了文件。
+     */
+    suspend fun seedBuiltinIfNeeded(): Boolean {
+        ensureInitialized()
+        if (SettingsDataStore.userPromptBuiltinSeeded()) return false
+        val alreadyConfigured = runCatching { store.snapshot().available }.getOrDefault(false)
+        if (!alreadyConfigured) store.installBuiltin()
+        SettingsDataStore.setUserPromptBuiltinSeeded(true)
+        return !alreadyConfigured
+    }
     fun modeFlow(): Flow<AgentUserPromptMode> =
         SettingsDataStore.userPromptModeFlow().map { AgentUserPromptMode.fromPersistedValue(it) }
 

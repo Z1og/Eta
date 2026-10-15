@@ -52,6 +52,9 @@ internal class AgentUserPromptStore(
         promptState = promptState.copy(isLoading = true, notice = null)
         scope.launch(Dispatchers.IO) {
             runCatching {
+                // Application.onCreate 的播种协程可能还没跑完，这里补一次。
+                // seedBuiltinIfNeeded 有标记位 + 已有文件时不覆盖，重复调用是幂等的。
+                runCatching { AgentUserPromptRepository.seedBuiltinIfNeeded() }
                 val snapshot = AgentUserPromptRepository.snapshot()
                 val mode = AgentUserPromptRepository.mode()
                 val reverseMode = runCatching {
@@ -71,7 +74,7 @@ internal class AgentUserPromptStore(
                         "Context window lookup failed: type=${throwable.safeLogType()}"
                     }
                 }.getOrNull()
-                Loaded(snapshot, mode, reverseMode, contextWindow)
+                Loaded(snapshot, mode, reverseMode, contextWindow, AgentUserPromptRepository.builtinSnapshot())
             }.fold(
                 onSuccess = { loaded ->
                     pendingImportContent = null
@@ -83,9 +86,12 @@ internal class AgentUserPromptStore(
                             savedContent = loaded.snapshot.content,
                             sourceFileName = loaded.snapshot.fileName,
                             charCount = loaded.snapshot.charCount,
+                            revision = loaded.snapshot.revision,
                             truncated = loaded.snapshot.truncated,
                             reverseModeEnabled = loaded.reverseMode,
                             contextWindow = loaded.contextWindow,
+                            builtinCharCount = loaded.builtin?.charCount,
+                            builtinRevision = loaded.builtin?.revision,
                         )
                     }
                 },
@@ -146,6 +152,7 @@ internal class AgentUserPromptStore(
                                 draft = if (promptState.draft == target) snapshot.content else promptState.draft,
                                 sourceFileName = snapshot.fileName,
                                 charCount = snapshot.charCount,
+                                revision = snapshot.revision,
                                 truncated = snapshot.truncated,
                                 editorExpanded = false,
                                 notice = "已保存；下个会话生效。",
@@ -181,6 +188,7 @@ internal class AgentUserPromptStore(
                                 savedContent = snapshot.content,
                                 sourceFileName = snapshot.fileName,
                                 charCount = snapshot.charCount,
+                                revision = snapshot.revision,
                                 truncated = snapshot.truncated,
                                 editorExpanded = false,
                                 notice = "已清空（原文件已备份到 prompts/.backup/）。",
@@ -271,6 +279,7 @@ internal class AgentUserPromptStore(
                             savedContent = snapshot.content,
                             sourceFileName = snapshot.fileName,
                             charCount = snapshot.charCount,
+                            revision = snapshot.revision,
                             truncated = snapshot.truncated,
                             editorExpanded = false,
                             pendingImport = null,
@@ -301,6 +310,43 @@ internal class AgentUserPromptStore(
     fun cancelImport() {
         pendingImportContent = null
         promptState = promptState.copy(pendingImport = null)
+    }
+
+    /** 把随包内置的破甲记忆装配成效文件（覆盖当前生效文件，旧文件先备份到 prompts/.backup/）。 */
+    fun installBuiltin() {
+        if (promptState.isSaving || promptState.isLoading || !promptState.builtinAvailable) return
+        promptState = promptState.copy(isSaving = true, notice = null)
+        scope.launch(Dispatchers.IO) {
+            runCatching { AgentUserPromptRepository.installBuiltin() }
+                .fold(
+                    onSuccess = { snapshot ->
+                        withContext(Dispatchers.Main) {
+                            promptState = promptState.copy(
+                                isSaving = false,
+                                draft = snapshot.content,
+                                savedContent = snapshot.content,
+                                sourceFileName = snapshot.fileName,
+                                charCount = snapshot.charCount,
+                                revision = snapshot.revision,
+                                truncated = snapshot.truncated,
+                                editorExpanded = false,
+                                notice = "已装配内置破甲记忆（${snapshot.charCount} 字符）；下个会话生效。",
+                            )
+                        }
+                    },
+                    onFailure = { throwable ->
+                        AndroidAgentLogger.warnThrottled("user_prompt_builtin_install_failed") {
+                            "Builtin prompt install failed: type=${throwable.safeLogType()}"
+                        }
+                        withContext(Dispatchers.Main) {
+                            promptState = promptState.copy(
+                                isSaving = false,
+                                notice = throwable.message ?: "装配内置版本失败，请稍后重试。",
+                            )
+                        }
+                    },
+                )
+        }
     }
 
     /**
@@ -356,5 +402,6 @@ internal class AgentUserPromptStore(
         val mode: AgentUserPromptMode,
         val reverseMode: Boolean,
         val contextWindow: Int?,
+        val builtin: AgentUserPromptSnapshot?,
     )
 }
