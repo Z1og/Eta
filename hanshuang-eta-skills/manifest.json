@@ -1899,6 +1899,86 @@
       "hasReferences": false,
       "hasAssets": false,
       "hasEvals": false
+    },
+    {
+      "id": "anti-cheat",
+      "name": "anti-cheat",
+      "description": "Eta upstream builtin skill: anti-cheat",
+      "assetPath": "builtin_skills/anti-cheat",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "dma-attack",
+      "name": "dma-attack",
+      "description": "Eta upstream builtin skill: dma-attack",
+      "assetPath": "builtin_skills/dma-attack",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "game-engine",
+      "name": "game-engine",
+      "description": "Eta upstream builtin skill: game-engine",
+      "assetPath": "builtin_skills/game-engine",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "game-hacking",
+      "name": "game-hacking",
+      "description": "Eta upstream builtin skill: game-hacking",
+      "assetPath": "builtin_skills/game-hacking",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "graphics-api",
+      "name": "graphics-api",
+      "description": "Eta upstream builtin skill: graphics-api",
+      "assetPath": "builtin_skills/graphics-api",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "research-rigor",
+      "name": "research-rigor",
+      "description": "Eta upstream builtin skill: research-rigor",
+      "assetPath": "builtin_skills/research-rigor",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "windows-kernel",
+      "name": "windows-kernel",
+      "description": "Eta upstream builtin skill: windows-kernel",
+      "assetPath": "builtin_skills/windows-kernel",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "西宫影安老版本脱修",
+      "name": "西宫影安老版本脱修",
+      "description": "Eta upstream builtin skill: 西宫影安老版本脱修",
+      "assetPath": "builtin_skills/西宫影安老版本脱修",
+      "hasScripts": true,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
     }
   ]
 }
