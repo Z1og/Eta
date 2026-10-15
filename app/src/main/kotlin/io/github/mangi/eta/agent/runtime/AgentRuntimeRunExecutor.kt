@@ -41,11 +41,9 @@ import io.github.mangi.eta.agent.tool.ToolExecutionDecision
 import io.github.mangi.eta.agent.voice.EtaAssistantOverlayService
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.safeLogType
-import io.github.mangi.eta.data.model.selectedOrFirstModel
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
 import io.github.mangi.eta.data.repository.ModelRepository
 import io.github.mangi.eta.data.repository.ProviderRepository
-import io.github.mangi.eta.data.repository.RuntimeConfigRepository
 import io.github.mangi.eta.config.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,7 +51,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -433,15 +430,15 @@ internal class AgentRuntimeRunExecutor(
                     )
                 }
 
-            val completedResponse = withRefusalFailover(request, onFailover = { failoverAttempt ->
+            val completedResponse = withRefusalRetry(request, onRetry = { retryAttempt ->
                 acceptEvent(
                     session,
                     AgentEvent.ModelRetryScheduled(
                         round = 1,
-                        attempt = failoverAttempt,
-                        maxAttempts = REFUSAL_FAILOVER_MAX_ATTEMPTS + 1,
+                        attempt = retryAttempt,
+                        maxAttempts = REFUSAL_RETRY_MAX_ATTEMPTS + 1,
                         delayMs = 0,
-                        reasonCode = "MODEL_REFUSAL_FAILOVER",
+                        reasonCode = "MODEL_REFUSAL_RETRY",
                     ),
                     archivedEvents,
                     entrySurfaceGuard,
@@ -586,18 +583,18 @@ internal class AgentRuntimeRunExecutor(
     }
 
     /**
-     * 口头拒绝 failover：当前模型拒绝配合（MODEL_REFUSAL）时，自动切到下一个启用的
-     * provider 的当前模型重发同一请求；备用也全部拒绝才把失败交给上层。
-     * 仅对话类操作启用；改写/压缩/手动压缩不换端。拒绝内容不入上下文（Loop 层已保证），
-     * 因此换端重试是干净的全量重跑。
+     * 口头拒绝重试：当前模型拒绝配合（MODEL_REFUSAL）时，**用当前 provider 当前模型**
+     * 原样重发同一请求（不换端），最多 [REFUSAL_RETRY_MAX_ATTEMPTS] 次，仍拒绝才把失败
+     * 交给上层。仅对话类操作启用；改写/压缩/手动压缩不重试。拒绝内容不入上下文
+     * （Loop 层已保证），因此重试是干净的全量重跑；采样随机性让重试有实际通过率。
      */
-    private fun withRefusalFailover(
+    private fun withRefusalRetry(
         request: AgentRuntimeWire.RunRequest,
-        onFailover: (attempt: Int) -> Unit,
+        onRetry: (attempt: Int) -> Unit,
         attempt: (AgentModelClient.ModelConfig) -> AgentModelClient.ModelResponse.Text,
     ): AgentModelClient.ModelResponse.Text {
-        var modelConfig = request.config
-        var failoverAttempt = 0
+        val modelConfig = request.config
+        var retryAttempt = 0
         while (true) {
             try {
                 return attempt(modelConfig)
@@ -605,33 +602,20 @@ internal class AgentRuntimeRunExecutor(
                 val cause = failure.cause as? AgentModelFailure
                 if (
                     cause?.code != AgentModelRefusal.FAILURE_CODE ||
-                    failoverAttempt >= REFUSAL_FAILOVER_MAX_ATTEMPTS ||
+                    retryAttempt >= REFUSAL_RETRY_MAX_ATTEMPTS ||
                     request.operation != AgentRuntimeWire.OP_CHAT ||
                     !Prefs.isEnabled(Prefs.Keys.AGENT_REFUSAL_FAILOVER_ENABLED)
                 ) {
                     throw failure
                 }
-                failoverAttempt++
-                val next = runBlocking { refusalFailoverConfig(modelConfig.providerId) } ?: throw failure
+                retryAttempt++
                 AndroidAgentLogger.warn(
-                    "Agent refusal failover: attempt=$failoverAttempt " +
-                        "nextProvider=${next.providerId} nextModel=${next.model}",
+                    "Agent refusal retry (same provider): attempt=$retryAttempt " +
+                        "provider=${modelConfig.providerId} model=${modelConfig.model}",
                 )
-                onFailover(failoverAttempt)
-                modelConfig = next
+                onRetry(retryAttempt)
             }
         }
-    }
-
-    private suspend fun refusalFailoverConfig(currentProviderId: String): AgentModelClient.ModelConfig? {
-        val candidates = ProviderRepository.allProviders()
-            .filter { it.isEnabled && it.id != currentProviderId }
-        for (provider in candidates) {
-            val model = provider.selectedOrFirstModel(null)?.takeIf { it.isEnabled } ?: continue
-            val config = runCatching { RuntimeConfigRepository.buildRuntimeConfig(provider, model) }.getOrNull()
-            if (config != null) return config
-        }
-        return null
     }
 
     /**
@@ -670,5 +654,5 @@ internal class AgentRuntimeRunExecutor(
 /** 学习窗口的落库超时：宁可不学，也不要拖住失败呈现。 */
 private const val LEARN_WINDOW_TIMEOUT_MS = 10_000L
 
-/** 口头拒绝后自动换端重试的备用数量上限（不含当前 provider）。 */
-private const val REFUSAL_FAILOVER_MAX_ATTEMPTS = 2
+/** 口头拒绝后用当前 provider 原样重试的次数上限。 */
+private const val REFUSAL_RETRY_MAX_ATTEMPTS = 2
