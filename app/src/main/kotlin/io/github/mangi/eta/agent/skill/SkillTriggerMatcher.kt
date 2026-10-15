@@ -97,6 +97,10 @@ internal object SkillTriggerMatcher {
     ): List<Scored> {
         if (input.text.isBlank() || skills.isEmpty() || maxResults <= 0) return emptyList()
         val haystack = input.text.lowercase()
+        // 去空白副本：中文用户输入常在拉丁词与中文之间夹空格（"frida 检测"），
+        // 而触发词是连写（"frida检测"）。含 CJK 的触发词额外做一次去空白匹配，
+        // 纯拉丁触发词不做——去空白会把 "admit my" 桥接成 "mitm" 这类误命中。
+        val haystackCompact = haystack.filterNot { it.isWhitespace() }
         val extensions = input.extensions
         val total = skills.size
 
@@ -119,7 +123,10 @@ internal object SkillTriggerMatcher {
             var aggregate = 0.0
             for (raw in skill.triggers) {
                 val trigger = raw.trim().lowercase()
-                if (trigger.isEmpty() || !haystack.contains(trigger)) continue
+                if (trigger.isEmpty()) continue
+                val matched = haystack.contains(trigger) ||
+                    (containsCjk(trigger) && haystackCompact.contains(trigger.filterNot { it.isWhitespace() }))
+                if (!matched) continue
                 val contribution = trigger.length * idf(trigger)
                 aggregate += contribution
                 if (contribution > specificity) specificity = contribution
@@ -146,6 +153,9 @@ internal object SkillTriggerMatcher {
 
     private fun familyOf(id: String): String? =
         id.substringBefore('-', "").takeIf { it in FAMILY_PREFIXES }
+
+    /** 触发词里是否含 CJK 字符——决定是否启用去空白匹配。 */
+    private fun containsCjk(text: String): Boolean = text.any { it in '\u4e00'..'\u9fff' }
 
     private fun selectWithFamilyDiversity(
         ordered: List<SkillIndexEntry>,

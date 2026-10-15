@@ -2,6 +2,7 @@ package io.github.mangi.eta.agent.skill
 
 import android.content.Context
 import android.content.res.AssetManager
+import android.util.Log
 import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.data.db.SkillRegistryEntity
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 
@@ -193,11 +195,19 @@ private class BuiltinSkillAssetStore(
     }
 
     private fun copyAssetRecursively(assetManager: AssetManager, assetPath: String, target: File) {
-        val children = assetManager.list(assetPath).orEmpty()
+        // list 失败按空目录处理，落到下面的单文件分支再试 open。
+        val children = runCatching { assetManager.list(assetPath).orEmpty() }
+            .getOrDefault(emptyArray())
         if (children.isEmpty()) {
             target.parentFile?.mkdirs()
-            assetManager.open(assetPath).use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
+            try {
+                assetManager.open(assetPath).use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+            } catch (error: IOException) {
+                // 单个 asset 打不开（部分环境对非 ASCII 文件名的 asset 有兼容差异）只跳过该文件，
+                // 不让 199 个内置技能的整体安装链路失败；缺失文件由索引层按缺文件处理。
+                Log.w("SkillRuntime", "skip unreadable builtin asset: $assetPath", error)
             }
             return
         }

@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeNoException
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -127,6 +128,13 @@ class SkillRuntimeTest {
         } catch (error: Exception) {
             assumeNoException(error)
         }
+        // 前提：平台必须能识别自己刚创建的符号链接。个别 Windows 主机的 JDK
+        // 创建成功但 isSymbolicLink 恒为 false，本用例守护的「检测到即拒绝」
+        // 属性只能在符号链接语义正常的平台上验证，此时跳过而非误报。
+        assumeTrue(
+            "symlink detection is broken on this host",
+            Files.isSymbolicLink(File(linkedRoot, "SKILL.md").toPath()),
+        )
         val normalRoot = File(skillsRoot, "normal-user").also { it.mkdirs() }
         File(normalRoot, "SKILL.md").writeText(
             "---\nname: normal-user\ndescription: Delete this user Skill.\n---\n"

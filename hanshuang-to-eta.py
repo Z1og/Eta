@@ -119,7 +119,7 @@ TRIGGER_MAP = {
     "binary-diff": "bindiff,二进制对比,补丁对比,补丁差分,符号迁移",
     "dotnet-reverse": "dnSpy,.NET逆向,C#反编译,ILSpy,dotnet反编译,IL反编译",
     "js-reverse": "js逆向,JavaScript逆向,混淆还原,前端加密,webpack解密,JS解密,抓包,接口加密",
-    "apk-reverse": "apk逆向,反编译apk,apk分析,smali,apktool,jadx,脱壳,重打包,去广告,签名校验,apk破解",
+    "apk-reverse": "apk逆向,反编译apk,反编译,apk分析,smali,apktool,jadx,脱壳,重打包,去广告,签名校验,apk破解",
     "mobile-reverse": "移动逆向,ios逆向,ipa逆向,frida脚本,hook框架",
     "dsl-vm-reverse": "虚拟机保护,VM保护,vmp,自定义虚拟机,opcode还原",
     "reverse-engineering": "逆向工程,reverse engineering,静态分析,逆向入门,逆向",
