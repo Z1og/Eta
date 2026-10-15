@@ -11,6 +11,8 @@ object ReverseSkillCatalog {
     val REVERSE_SKILL_IDS: Set<String> = setOf(
         // 逆向核心（reverse-delivery 为 dsh-infinite-gen-4 融合的交付契约技能，随主开关统一启停）
         "reverse-delivery",
+        // 入口规划器：口语诉求 → 中性子任务分解 SOP（reverse-task-planner）
+        "reverse-task-planner",
         "apk-reverse", "ida-reverse", "radare2", "binary-analysis", "binary-diff",
         "dotnet-reverse", "js-reverse", "mobile-reverse", "dsl-vm-reverse",
         "reverse-engineering", "reverse-engineering-api",
