@@ -8,6 +8,7 @@ import io.github.mangi.eta.agent.tool.ConversationHistoryTool
 import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.agent.model.AgentModelCapabilityProbe
 import io.github.mangi.eta.agent.model.AgentModelClient
+import io.github.mangi.eta.agent.model.AgentModelRefusal
 import io.github.mangi.eta.agent.model.AgentModelExecutionException
 import io.github.mangi.eta.agent.model.AgentModelFailure
 import io.github.mangi.eta.agent.model.AgentHttpClient
@@ -40,13 +41,17 @@ import io.github.mangi.eta.agent.tool.ToolExecutionDecision
 import io.github.mangi.eta.agent.voice.EtaAssistantOverlayService
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.safeLogType
+import io.github.mangi.eta.data.model.selectedOrFirstModel
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
 import io.github.mangi.eta.data.repository.ModelRepository
 import io.github.mangi.eta.data.repository.ProviderRepository
+import io.github.mangi.eta.data.repository.RuntimeConfigRepository
+import io.github.mangi.eta.config.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -385,46 +390,65 @@ internal class AgentRuntimeRunExecutor(
                     }
                 }
             }
-            val completedResponse = AgentModelClient.complete(
-                config = request.config,
-                sessionId = request.effectiveModelSessionId,
-                operationId = request.runId,
-                initialUserMessageId = uiPayload?.promptMessageId(request.runId) ?: "user-${request.runId}",
-                initialSupplementIndex = uiPayload?.lastSupplementIndex ?: 0,
-                roleplayContext = roleplayContext,
-                rewriteReply = request.operation == AgentRuntimeWire.OP_REWRITE_REPLY,
-                compactOnly = request.operation == AgentRuntimeWire.OP_COMPACT,
-                onContextSnapshot = { snapshot ->
-                    // 压缩会把历史里的记忆写入摘要掉，下一轮需要重新注入最新记忆。
-                    ConversationMemoryPins.forget(conversationId)
-                    val committed = snapshot.copy(operationId = request.runId)
-                    AgentRunCheckpointStore.saveContext(appContext, request.runId, committed)
-                    session.updateContext(committed)
-                },
-                onTranscript = { transcript ->
-                    AgentRunCheckpointStore.saveTranscript(appContext, request.runId, transcript)
-                    session.updateTranscript(transcript)
-                },
-                capabilitiesProvider = { AgentToolCapabilities.capture(appContext) },
-                prompt = request.prompt,
-                assistantScreenContext = request.assistantScreenContext,
-                toolExecutor = runToolExecutor,
-                images = request.images,
-                history = request.history,
-                runController = runController,
-                skillContext = skillContext,
-                memoryContext = memoryContext,
-                additionalTools = runTools,
-                executionContext = executor.terminalExecutionContext,
-            ) { event ->
-                timing.accept(event)
+            fun runModelAttempt(modelConfig: AgentModelClient.ModelConfig): AgentModelClient.ModelResponse.Text =
+                AgentModelClient.complete(
+                    config = modelConfig,
+                    sessionId = request.effectiveModelSessionId,
+                    operationId = request.runId,
+                    initialUserMessageId = uiPayload?.promptMessageId(request.runId) ?: "user-${request.runId}",
+                    initialSupplementIndex = uiPayload?.lastSupplementIndex ?: 0,
+                    roleplayContext = roleplayContext,
+                    rewriteReply = request.operation == AgentRuntimeWire.OP_REWRITE_REPLY,
+                    compactOnly = request.operation == AgentRuntimeWire.OP_COMPACT,
+                    onContextSnapshot = { snapshot ->
+                        // 压缩会把历史里的记忆写入摘要掉，下一轮需要重新注入最新记忆。
+                        ConversationMemoryPins.forget(conversationId)
+                        val committed = snapshot.copy(operationId = request.runId)
+                        AgentRunCheckpointStore.saveContext(appContext, request.runId, committed)
+                        session.updateContext(committed)
+                    },
+                    onTranscript = { transcript ->
+                        AgentRunCheckpointStore.saveTranscript(appContext, request.runId, transcript)
+                        session.updateTranscript(transcript)
+                    },
+                    capabilitiesProvider = { AgentToolCapabilities.capture(appContext) },
+                    prompt = request.prompt,
+                    assistantScreenContext = request.assistantScreenContext,
+                    toolExecutor = runToolExecutor,
+                    images = request.images,
+                    history = request.history,
+                    runController = runController,
+                    skillContext = skillContext,
+                    memoryContext = memoryContext,
+                    additionalTools = runTools,
+                    executionContext = executor.terminalExecutionContext,
+                ) { event ->
+                    timing.accept(event)
+                    acceptEvent(
+                        session,
+                        event,
+                        archivedEvents,
+                        entrySurfaceGuard,
+                        checkpointRecorder,
+                    )
+                }
+
+            val completedResponse = withRefusalFailover(request, onFailover = { failoverAttempt ->
                 acceptEvent(
                     session,
-                    event,
+                    AgentEvent.ModelRetryScheduled(
+                        round = 1,
+                        attempt = failoverAttempt,
+                        maxAttempts = REFUSAL_FAILOVER_MAX_ATTEMPTS + 1,
+                        delayMs = 0,
+                        reasonCode = "MODEL_REFUSAL_FAILOVER",
+                    ),
                     archivedEvents,
                     entrySurfaceGuard,
                     checkpointRecorder,
                 )
+            }) { modelConfig ->
+                runModelAttempt(modelConfig)
             }
             response = completedResponse
             AgentRuntimeWire.RunResult(
@@ -562,6 +586,55 @@ internal class AgentRuntimeRunExecutor(
     }
 
     /**
+     * 口头拒绝 failover：当前模型拒绝配合（MODEL_REFUSAL）时，自动切到下一个启用的
+     * provider 的当前模型重发同一请求；备用也全部拒绝才把失败交给上层。
+     * 仅对话类操作启用；改写/压缩/手动压缩不换端。拒绝内容不入上下文（Loop 层已保证），
+     * 因此换端重试是干净的全量重跑。
+     */
+    private fun withRefusalFailover(
+        request: AgentRuntimeWire.RunRequest,
+        onFailover: (attempt: Int) -> Unit,
+        attempt: (AgentModelClient.ModelConfig) -> AgentModelClient.ModelResponse.Text,
+    ): AgentModelClient.ModelResponse.Text {
+        var modelConfig = request.config
+        var failoverAttempt = 0
+        while (true) {
+            try {
+                return attempt(modelConfig)
+            } catch (failure: AgentModelExecutionException) {
+                val cause = failure.cause as? AgentModelFailure
+                if (
+                    cause?.code != AgentModelRefusal.FAILURE_CODE ||
+                    failoverAttempt >= REFUSAL_FAILOVER_MAX_ATTEMPTS ||
+                    request.operation != AgentRuntimeWire.OP_CHAT ||
+                    !Prefs.isEnabled(Prefs.Keys.AGENT_REFUSAL_FAILOVER_ENABLED)
+                ) {
+                    throw failure
+                }
+                failoverAttempt++
+                val next = runBlocking { refusalFailoverConfig(modelConfig.providerId) } ?: throw failure
+                AndroidAgentLogger.warn(
+                    "Agent refusal failover: attempt=$failoverAttempt " +
+                        "nextProvider=${next.providerId} nextModel=${next.model}",
+                )
+                onFailover(failoverAttempt)
+                modelConfig = next
+            }
+        }
+    }
+
+    private suspend fun refusalFailoverConfig(currentProviderId: String): AgentModelClient.ModelConfig? {
+        val candidates = ProviderRepository.allProviders()
+            .filter { it.isEnabled && it.id != currentProviderId }
+        for (provider in candidates) {
+            val model = provider.selectedOrFirstModel(null)?.takeIf { it.isEnabled } ?: continue
+            val config = runCatching { RuntimeConfigRepository.buildRuntimeConfig(provider, model) }.getOrNull()
+            if (config != null) return config
+        }
+        return null
+    }
+
+    /**
      * 超限报错里常带服务商写明的上下文上限——这是**权威**数字，直接学下来写进模型覆盖值，
      * 下次换回该模型时自动压缩就能按真实上限触发（不必等用户手填或探测）。
      * 失败静默：学习只是锦上添花，绝不影响本次失败的呈现。
@@ -596,3 +669,6 @@ internal class AgentRuntimeRunExecutor(
 
 /** 学习窗口的落库超时：宁可不学，也不要拖住失败呈现。 */
 private const val LEARN_WINDOW_TIMEOUT_MS = 10_000L
+
+/** 口头拒绝后自动换端重试的备用数量上限（不含当前 provider）。 */
+private const val REFUSAL_FAILOVER_MAX_ATTEMPTS = 2

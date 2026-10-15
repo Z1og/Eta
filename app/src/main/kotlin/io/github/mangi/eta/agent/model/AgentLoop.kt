@@ -158,6 +158,13 @@ internal class AgentLoop(
             if (purpose == ProviderRequestPurpose.REPLY_REWRITE && providerResponse.stopReason != AssistantStopReason.END_TURN) {
                 throw AgentModelFailure("REPLY_REWRITE_INCOMPLETE", false, "模型未返回完整的改写回复；原回复未改变。")
             }
+            if (purpose.allowsTools && toolCalls.isEmpty() &&
+                AgentModelRefusal.isRefusal(assistantMessage.optString("content"))
+            ) {
+                // 口头拒绝与 CONTENT_FILTER 同权：拒绝内容不入上下文（否则后续轮次被带偏），
+                // 同时给执行层的 failover 一个确定信号。
+                throw AgentModelRefusal.failure(assistantMessage.optString("content"))
+            }
             val assistantReasoning = assistantMessage.optString("reasoning_content")
             if (
                 assistantReasoning.isNotBlank() &&
