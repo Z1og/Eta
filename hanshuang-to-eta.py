@@ -808,10 +808,23 @@ def main():
             src = builtin_dir / entry["assetPath"].rsplit("/", 1)[-1]
             dst = output_dir / src.name
             if (src.name == entry["id"] and src.exists()
-                    and (src / "SKILL.md").exists() and not dst.exists()
-                    and src.name not in hanshuang_dir_names):
+                    and (src / "SKILL.md").exists() and src.name not in hanshuang_dir_names):
+                # 非寒霜来源（第一方/上游）skill：builtin_dir 是唯一事实源。
+                # 镜像副本必须每次刷新——若保留旧副本，--builtin 部署时会把镜像里的
+                # 过期内容回写覆盖 builtin_dir 的新改动（实际发生过：意图改写表扩充被回滚）。
+                if dst.exists():
+                    shutil.rmtree(dst)
                 shutil.copytree(src, dst)
-                print(f"  [镜像] 补充孤儿 skill: {src.name}")
+                print(f"  [镜像] 刷新 skill: {src.name}")
+
+        # 清理镜像中的孤儿目录：builtin_dir 已不存在、且不属于寒霜来源的镜像副本
+        # 继续留着会在部署时复活已删除的 skill
+        deployed_names = {e["assetPath"].rsplit("/", 1)[-1] for e in unique}
+        for sd in sorted(output_dir.iterdir()):
+            if (sd.is_dir() and sd.name not in hanshuang_dir_names
+                    and sd.name not in deployed_names):
+                shutil.rmtree(sd)
+                print(f"  [镜像] 清理孤儿镜像: {sd.name}")
 
         if args.builtin and builtin_dir.exists():
             write_lf(builtin_dir / "manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
