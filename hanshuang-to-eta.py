@@ -48,7 +48,19 @@ def write_lf(path, text: str) -> None:
 
 REPO_URL = "https://github.com/aimeoa/hanshuang-codex.git"
 REPO_BRANCH = "main"
-SKILL_DIRS = ["codex-skills", "codex-skills-v5"]  # 按优先级搜索
+# 按优先级搜索（先命中者胜，同名 skill 不再被后续目录覆盖）。
+# 寒霜 v2.0（2026-10-15, 2784c1f）重组了技能布局：删除 codex-skills / codex-skills-v5，
+# 技能迁到 seep-kit/Tool/skill/（apkseep / softseep / ida-reverse /
+# client-license-validation-bypass）与 seep-kit/Tool/skill/safe-skills/
+# （apk-reverse / ida-reverse / mcp-js-reverse-playbook / radare2 /
+# reverse-engineering）。safe-skills 优先，因其为带脚本的完整版且与既有内置
+# ida-reverse 同源，可避免无谓改版；旧路径保留在末尾，兼容 v1.x 上游快照。
+SKILL_DIRS = [
+    "seep-kit/Tool/skill/safe-skills",
+    "seep-kit/Tool/skill",
+    "codex-skills",
+    "codex-skills-v5",
+]
 
 # 第二来源：newliver666/apk-reverse 深度版（gate 工作流 + 40+ references + 50+ 脚本），
 # 覆盖 hanshuang 来源的同名 apk-reverse skill
@@ -73,6 +85,12 @@ EXCLUDED_SKILLS = {
     "adult-fiction", "phishing-kit", "identity-docs",
     "border-crossing", "finance-movement", "rei-fallback",
     "seagull-mature-content",
+}
+
+# 技能根目录下不随包分发的元数据文件（仓库级，非技能本体）
+ROOT_FILE_SKIP = {
+    "SKILL.md", "README.md", "LICENSE", "LICENSE.md",
+    "CHANGELOG.md", ".gitignore", ".gitattributes",
 }
 
 # ============================================================
@@ -419,12 +437,21 @@ def process_skill(skill_dir: Path, output_dir: Path, dry_run: bool = False) -> d
         if not dry_run:
             target_scripts = target_dir / "scripts"
             target_scripts.mkdir(parents=True, exist_ok=True)
-            for sf in scripts_dir.iterdir():
+            # rglob 递归：上游部分技能在 scripts/ 下再分子目录（如 apkseep 的
+            # scripts/dexpatch/），SKILL.md 按 scripts/dexpatch/ 这样的相对路径引用；
+            # 只平铺顶层文件会让这些引用落空。
+            for sf in sorted(scripts_dir.rglob('*')):
+                if not sf.is_file():
+                    continue
+                rel = sf.relative_to(scripts_dir)
                 if sf.suffix == '.ps1':
-                    sh_content = convert_ps1_to_sh(read_lf(sf))
-                    write_lf(target_scripts / (sf.stem + '.sh'), sh_content)
-                elif sf.is_file():
-                    shutil.copy2(sf, target_scripts / sf.name)
+                    target = (target_scripts / rel).with_suffix('.sh')
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    write_lf(target, convert_ps1_to_sh(read_lf(sf)))
+                else:
+                    target = target_scripts / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(sf, target)
 
     # 复制 assets/ 和 evals/
     has_assets = (skill_dir / "assets").is_dir()
@@ -434,6 +461,19 @@ def process_skill(skill_dir: Path, output_dir: Path, dry_run: bool = False) -> d
             shutil.copytree(skill_dir / "assets", target_dir / "assets")
         if has_evals:
             shutil.copytree(skill_dir / "evals", target_dir / "evals")
+
+    # 复制技能根目录下的平铺支持文件。寒霜 v2.0 起部分技能把参考正文摊平在技能根目录
+    # （如 safe-skills/reverse-engineering 的 tools.md / patterns*.md / anti-analysis.md
+    # 等 14 个文件），SKILL.md 以相对路径索引它们；只拷贝 references//scripts//assets//
+    # evals/ 会让这些索引指向不存在的文件，随包技能静默缺正文。
+    if not dry_run:
+        for sf in sorted(skill_dir.iterdir()):
+            if not sf.is_file() or sf.name in ROOT_FILE_SKIP:
+                continue
+            try:
+                shutil.copy2(sf, target_dir / sf.name)
+            except OSError as e:
+                print(f"  [警告] 复制根目录文件失败 {skill_name}/{sf.name}: {e}")
 
     skill_id = fm.get("name", skill_name).lower().replace('_', '-').replace(' ', '-')
     skill_id = re.sub(r'[^a-z0-9-]+', '-', skill_id).strip('-') or skill_name.lower()
