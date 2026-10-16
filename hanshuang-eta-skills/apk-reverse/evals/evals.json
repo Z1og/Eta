@@ -51,6 +51,19 @@
         "At least one cross-check with an independent decoder is performed or explicitly flagged as not done."
       ],
       "_targets_reference": "scripts/dex_strings.py, scripts/dexutil.py, scripts/find_refs.py, references/byte-level-patching.md"
+    },
+    {
+      "id": 4,
+      "prompt": "A hardened .so kills the process whenever I attach frida or set any inline hook; it also checksums its own code pages. I need to know which code writes the plaintext key buffer right before encryption. What route do I use?",
+      "expected_output": "The answer routes to the hardware layer with its honesty ledger, not to a harder hook. It names the hardware watchpoint as the observation that modifies no code, states plainly that the ptrace delivery leaves TracerPid visible (and that a target reading /proc over raw svc needs the kernel-armed route instead), requires the control run before any hit is trusted, and refuses to present the kernel template as a working weapon.",
+      "_assertions": [
+        "Names hardware watchpoints (debug registers) as the route that survives page checksums because no code byte changes.",
+        "States the TracerPid trade-off of the ptrace route explicitly rather than calling it invisible.",
+        "Requires a control run (a deliberately touched watched address producing one HIT) before trusting hits.",
+        "Does not recommend building a kernel module as the first move, and labels kernel-side templates unverified.",
+        "Routes to references/hardware-watchpoints.md and scripts/hw_watch.py rather than re-deriving the mechanism."
+      ],
+      "_targets_reference": "references/hardware-watchpoints.md, references/kernel-event-injection.md"
     }
   ]
 }

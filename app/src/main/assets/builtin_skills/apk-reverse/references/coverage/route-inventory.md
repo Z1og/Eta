@@ -18,6 +18,7 @@ the evidence record condensed in `references/evidence-summary.md` §Where the fu
 | Client-side ads, promos, splash/popup/tab config | includes server-issued UI config that has no SDK to find | `ad-removal.md`, `server-config-and-updates.md` |
 | Membership / paywall / feature gates | decide whether it is *client-enforceable* at all, and say so when it is not | `membership-and-limits.md`, `account-gates.md` |
 | dex-level surgical patching | equal-length byte edits, dexlib2 method rewrite, header/verifier/alignment rules | `dex-patching.md`, `byte-level-patching.md`, `patch-audit.md` |
+| Whole-APK dex indexing and query | locate classes and references **before** reading code: `rasc`/`droidasc` for `findrefs`, `dexsql` for SQL joins and aggregates (callers, field accesses, numeric constants, debug lines, annotations) — all four indexers cross-checked for identical class-definition sets on four archives | `rasc-and-droidsaw.md`, `dexsql-sql-query-layer.md` |
 | Repack, sign, install | including the install refusals that look like a broken build | `repack-and-sign.md` |
 | Packers, custom loaders, code virtualization | identification, the validation boundary, the routes that survive it | `packers.md`, `code-virtualization-and-custom-linkers.md` |
 | Java2C vs extraction shell vs JNI sinking | the misdiagnosis that sends you hunting a decrypted DEX that never exists | `java2c-and-jni-sinking.md`, `scripts/java2c_probe.py` |
@@ -42,6 +43,11 @@ route was not measured on this repository's evidence**. Treat them as leads with
 | Split APK / App Bundle sets | reading a set, merge versus unified re-signing, the install refusal each mistake produces — `split-apk.md` |
 | Dex-VMP differential analysis | the known-plaintext route, what it can and cannot automate — `vmp-differential-analysis.md` |
 | Kernel-module templates | a scaffold **and** its version gate; a userspace module cannot change a syscall return value — `kernelsu_syscall_mask.py` |
+| Hardware watchpoints (ptrace) | who reads/writes one address with zero code change, the encoders host-tested and the helper compiled — never armed on a device here — `hardware-watchpoints.md` |
+| ETE differential tracing | two one-bit-different runs into the input-dependent block set; gates probed by script, producer unverified — `ete-diff-tracing.md` |
+| SPE/BRBE sampling and crash forensics | data flow without a known address, branch records past an untrustworthy stack, addresses→symbols — `hardware-sampling-and-crash.md` |
+| Interpreter-trace de-virtualization | handler slicing + guest-opcode trajectory, calibrated on an open IR-VM's source — `vm_handler_slice.py` |
+| Kernel-side event injection | watchpoints and register rewrites from a driver, as gated templates — `kernel-event-injection.md` |
 | Working from the phone itself | MT Manager edit/repack/sign and its APK MCP, LSPosed Manager, Termux — `on-device-tooling.md` |
 | Publishing without publishing the target | the leak scanner, the do-not-anonymize list, and the graded precedent library — `desensitization-and-leak-scans.md`, `scripts/scan_leaks.py`, `precedents/` |
 
@@ -57,7 +63,11 @@ dependency yourself.
 - **Device work needs `adb` plus a device the app does not object to**; dynamic work additionally needs
   a `frida-server` matching the host version.
 - **A kernel-side answer needs a module and a kernel that accepts it** — the version gate is in
-  `kernel-and-environment-hardening.md`.
+  `kernel-and-environment-hardening.md`; the instrumentation templates add their own
+  (the kernel's perf breakpoint layer must exist — `kernel-event-injection.md`).
+- **The ETE route needs coresight hardware this skill cannot conjure** — an ETE/TRBE-capable core,
+  a kernel with the drivers, and a perf built against OpenCSD; without them the route is closed,
+  not expensive (`ete-diff-tracing.md`).
 
 ## Not covered — say so rather than improvise
 

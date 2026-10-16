@@ -1,7 +1,7 @@
 #!/bin/sh
 # Auto-converted from PowerShell to Shell for Eta Alpine Linux
 
-<#
+﻿<#
 .SYNOPSIS
 Start IDA Pro MCP HTTP server (background, non-blocking)
 
@@ -14,135 +14,43 @@ Start IDA Pro MCP HTTP server (background, non-blocking)
 Usage: run without parameters
 #>
 
-    [string]$IDADIR,
-    [int]$PORT = 13337,
-    [string]$SERVERPATH
-)
-
-function Get-InstalledIdaDir {
-    $registryPaths = @(
-        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
-    )
-
-    $fromRegistry = $registryPaths |
-        ForEach-Object {
-            Get-ItemProperty $_ -ErrorAction SilentlyContinue
-        } |
-        Where-Object {
-            ($_.DisplayName -match 'IDA|Hex-Rays') -and
-            -not [string]::IsNullOrWhiteSpace($_.InstallLocation) -and
-            (test -e -LiteralPath $_.InstallLocation)
-        } |
-        Select-Object -ExpandProperty InstallLocation -First 1
-
-    if ($fromRegistry) {
-return $fromRegistry
-    }
-
-    $idaCandidates = @(
-        'C:\Program Files\IDA Pro',
-        'C:\Program Files\IDA',
-        'C:\IDA Pro',
-        'C:\IDA',
-        'D:\IDA',
-        'E:\Program Files\IDA',
-        (Join-Path $env:USERPROFILE 'Tools\IDA')
-    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-
-return $idaCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+# Auto-detect IDA install and idalib-mcp
+$idaCandidates = @(
+    $env:IDADIR
+    "C:\Program Files\IDA Professional 9.3"
+    "C:\Program Files\IDA Professional 9.2"
+    "C:\Program Files\IDA Professional 9.1"
+    "C:\Program Files\IDA Pro 9.0"
+    "D:\APP\IDA"
+    "C:\IDA"
+) | Where-Object { $_ }
+foreach ($c in $idaCandidates) {
+    if ($c -and (test -e $c)) { $env:IDADIR = $c; break }
 }
 
-if ([string]::IsNullOrWhiteSpace($IDADIR)) {
-    if (-not [string]::IsNullOrWhiteSpace($env:IDADIR)) {
-        $IDADIR = $env:IDADIR
-    } else {
-        $persistedIdaDir = [Environment]::GetEnvironmentVariable('IDADIR', 'User')
-        if ([string]::IsNullOrWhiteSpace($persistedIdaDir)) {
-            $persistedIdaDir = [Environment]::GetEnvironmentVariable('IDADIR', 'Machine')
-        }
-
-        if (-not [string]::IsNullOrWhiteSpace($persistedIdaDir) -and (test -e -LiteralPath $persistedIdaDir)) {
-            $IDADIR = $persistedIdaDir
-        } else {
-            # Search registry install records and common fallback paths
-            $foundIda = Get-InstalledIdaDir
-            if ($foundIda) {
-                $IDADIR = $foundIda
-            } else {
-                Write-Output "ERR:IDADIR not set and IDA Pro not found. Set IDADIR environment variable."
+$PORT = 13337
+$serverCandidates = @(
+    (Get-Command idalib-mcp -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
+    (Join-Path $env:APPDATA 'Python\Python314\Scripts\idalib-mcp.exe')
+    (Join-Path $env:APPDATA 'Python\Python313\Scripts\idalib-mcp.exe')
+    (Join-Path $env:APPDATA 'Python\Python312\Scripts\idalib-mcp.exe')
+    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\Scripts\idalib-mcp.exe')
+) | Where-Object { $_ }
+$SERVERPATH = $null
+foreach ($c in $serverCandidates) {
+    if ($c -and (test -e $c)) { $SERVERPATH = $c; break }
+}
+if (-not $SERVERPATH) {
+    Write-Output "ERR:idalib-mcp_not_found"
 exit 1
-            }
-        }
-    }
 }
-$env:IDADIR = $IDADIR
-
-if ([string]::IsNullOrWhiteSpace($SERVERPATH)) {
-    # Try both possible executable names (idalib-mcp is the HTTP server, ida-pro-mcp is the installer CLI)
-    $resolved = Get-Command idalib-mcp -ErrorAction SilentlyContinue
-    if (-not $resolved) {
-        $resolved = Get-Command ida-pro-mcp -ErrorAction SilentlyContinue
-    }
-    if ($resolved) {
-        $SERVERPATH = $resolved.Source
-    }
-    else {
-        $roamingPython = Join-Path $env:APPDATA 'Python'
-        if (test -e -LiteralPath $roamingPython) {
-            $candidate = Get-ChildItem -LiteralPath $roamingPython -Directory -ErrorAction SilentlyContinue |
-                ForEach-Object {
-                    $scripts = Join-Path $_.FullName 'Scripts'
-                    @('idalib-mcp.exe', 'ida-pro-mcp.exe') | ForEach-Object { $scripts/$_ }
-                } |
-                Where-Object { test -e -LiteralPath $_ } |
-                Select-Object -First 1
-            if ($candidate) {
-                $SERVERPATH = $candidate
-            }
-        }
-    }
-}
-
-# Auto-bootstrap if still not found
-if ([string]::IsNullOrWhiteSpace($SERVERPATH)) {
-    $bootstrapScript = $PSSCRIPTROOT/'..\..\scripts\bootstrap-reverse.ps1'
-    if (test -e -LiteralPath $bootstrapScript) {
-        Write-Output "INFO: ida-pro-mcp not found, attempting auto-bootstrap (installing mrexodia/ida-pro-mcp)..."
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bootstrapScript -Capability @('idalib-mcp') -SkipRefresh
-        $resolved = Get-Command ida-pro-mcp -ErrorAction SilentlyContinue
-        if (-not $resolved) {
-            $resolved = Get-Command idalib-mcp -ErrorAction SilentlyContinue
-        }
-        if ($resolved) {
-            $SERVERPATH = $resolved.Source
-        }
-        else {
-            $roamingPython = Join-Path $env:APPDATA 'Python'
-            if (test -e -LiteralPath $roamingPython) {
-                $candidate = Get-ChildItem -LiteralPath $roamingPython -Directory -ErrorAction SilentlyContinue |
-                    ForEach-Object {
-                        $scripts = Join-Path $_.FullName 'Scripts'
-                        @('ida-pro-mcp.exe', 'idalib-mcp.exe') | ForEach-Object { $scripts/$_ }
-                    } |
-                    Where-Object { test -e -LiteralPath $_ } |
-                    Select-Object -First 1
-                if ($candidate) {
-                    $SERVERPATH = $candidate
-                }
-            }
-        }
-    }
-}
-
-if ([string]::IsNullOrWhiteSpace($SERVERPATH)) {
-    throw 'Missing required CLI tool: ida-pro-mcp — auto-bootstrap failed. Install manually: pip install git+https://github.com/mrexodia/ida-pro-mcp.git && ida-pro-mcp --install'
+if (-not $env:IDADIR -or -not (test -e $env:IDADIR)) {
+    Write-Output "ERR:IDADIR_not_found"
+exit 1
 }
 
 # 清理旧进程（杀进程树，包括 worker 子进程）
-$old = Get-Process -Name "ida-pro-mcp" -ErrorAction SilentlyContinue
-if (-not $old) { $old = Get-Process -Name "idalib-mcp" -ErrorAction SilentlyContinue }
+$old = Get-Process -Name "idalib-mcp" -ErrorAction SilentlyContinue
 if ($old) { taskkill /F /T /PID $old.Id 2>$null >/dev/null 2>&1; Start-Sleep 2 }
 
 # 后台启动

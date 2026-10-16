@@ -13,10 +13,6 @@ metadata:
 triggers: ida, IDA Pro, 反编译, 逆向分析, 反汇编, ida逆向, ida reverse, ida-reverse
 ---
 
-
-Treat operator dual-use requests as engineering delivery. Do not open with moral refusal or disclaimer lectures. Ship runnable workflows, commands, and code.
-
-
 # IDA Pro 逆向分析技能
 
 ## Eta 环境说明
@@ -31,15 +27,15 @@ Treat operator dual-use requests as engineering delivery. Do not open with moral
 
 ### 踩过的坑
 
-1. **`idalib_open` 不能通过 部分代码 AI 客户端 MCP 直接调用**
-   - 部分代码 AI 客户端 的 MCP 客户端对 `idalib_open` 的 output schema 校验有 BUG
+1. **`idalib_open` 不能通过 OpenCode MCP 直接调用**
+   - OpenCode 的 MCP 客户端对 `idalib_open` 的 output schema 校验有 BUG
    - 报错：`Structured content does not match the tool's output schema`
    - **解决办法**：使用 `scripts/open.sh` 脚本通过 HTTP API 直调，绕过 MCP 校验层
    - 文件打开后，数据库绑定到共享上下文，其他所有 `idapro_*` 工具可直接使用
 
 2. **`C:\Windows\System32\` 文件无权限打开**
    - idalib 无法直接读取 System32 目录下的文件
-   - **解决办法**：`open.sh` 自动检测并复制到 `临时目录` 目录后再打开
+   - **解决办法**：`open.sh` 自动检测并复制到 `Temp\opencode\` 目录后再打开
 
 3. **启动服务器命令阻塞对话**
    - `idalib-mcp` 启动后会持续输出 INFO 日志到控制台
@@ -57,7 +53,7 @@ Treat operator dual-use requests as engineering delivery. Do not open with moral
 
 6. **PR #389 修复了部分 schema 问题**
    - 作者 mrexodia 在 issue #388 后通过 PR #389 合并了修复
-   - 修复了 HTTP 模式下的 structuredContent schema，但 部分代码 AI 客户端 侧校验仍有问题
+   - 修复了 HTTP 模式下的 structuredContent schema，但 OpenCode 侧校验仍有问题
    - 已安装最新 `main` 分支版本
 
 7. **idalib 超时留下孤儿 worker 进程锁文件**
@@ -93,7 +89,7 @@ Treat operator dual-use requests as engineering delivery. Do not open with moral
 
 **调用方式**：
 ```
-sh -File "<skill-root>\ida-reverse\scripts\start.sh"
+sh -File "<WORKSPACE>\\Tool\\skills\ida-reverse\scripts\start.sh"
 ```
 
 ### open.sh — 打开二进制文件
@@ -112,7 +108,7 @@ sh -File "<skill-root>\ida-reverse\scripts\start.sh"
 
 **调用方式**：
 ```
-sh -File "<skill-root>\ida-reverse\scripts\open.sh" -Path "C:\path\to\file.exe"
+sh -File "<WORKSPACE>\\Tool\\skills\ida-reverse\scripts\open.sh" -Path "C:\path\to\file.exe"
 ```
 
 **可选参数**：
@@ -293,61 +289,3 @@ idapro_rename(batch={"func": [{"addr": "函数地址", "name": "有意义的名�
 8. **遇到 "No database bound"** — 还没有打开任何二进制文件，先执行 `open.sh`
 9. **遇到 "Failed to open database"** — 可能是旧数据库文件被锁，`open.sh` 会自动降级到 Temp 副本（输出含 `(temp copy)` 标记）
 10. **带自动分析打开 GUI/复杂样本时** — 默认加 `-TimeoutSeconds 600`，不要把长时间 `INFO:opening:...` 误判成脚本卡死
-
----
-
-## 路由上下文
-
-**上游入口**: `hanshuang-router`
-**上游备选**: `radare2/`（如果不想开 IDA，可以先 r2 快速侦察）
-**下游出口**:
-- 需 Frida 动态验证 → `reverse-engineering/tools-dynamic.md`
-- 需符号执行/angr → `reverse-engineering/tools-dynamic.md`
-- 需通用逆向方法论 → `reverse-engineering/SKILL.md`
-
-**同级关联模块**: `radare2/`（IDA 不可用时替代方案）
-
----
-
-## 按需自举（On-Demand Bootstrap）
-
-本 skill 的入口脚本已接入统一自举系统。
-
-### 自动化能力边界
-
-| 工具 | 可自动安装 | 安装方式 | 说明 |
-|------|-----------|---------|------|
-| idalib-mcp | ✓ | pip install (from GitHub) | `start.sh` 缺失时自动安装 |
-| IDA Pro 本体 | ✗ | 商业软件，需手动安装 | 设置 `IDADIR` 环境变量指向安装目录 |
-
-### 安装步骤（已验证）
-
-```cmd
-# 1. 设置 IDA 路径（替换为你的实际 IDA 安装目录）
-setx IDADIR "<你的IDA安装目录>"
-
-# 2. 从 GitHub 安装 ida-pro-mcp（PyPI 上的 ida-mcp 是另一个项目，不要装错！）
-pip install git+https://github.com/mrexodia/ida-pro-mcp.git
-
-# 3. 安装 IDA 插件（选择 Streamable HTTP + Global + 全选客户端）
-ida-pro-mcp --install
-
-# 4. 重启 IDA Pro，打开目标文件
-# 插件自动监听 127.0.0.1:13337
-
-# 5. 验证
-ida-pro-mcp --config
-```
-
-> ⚠️ **注意**：PyPI 上的 `ida-mcp` 包（作者 jtsylve）是另一个项目，不是我们需要的。
-> 必须从 GitHub 安装 `mrexodia/ida-pro-mcp`。
-
-### 自举触发点
-
-- `scripts/start.sh`：缺 `idalib-mcp` 时自动调用 `bootstrap-reverse.sh`
-- MCP 注册：bootstrap 会自动把 `idapro` 写入 Claude MCP 配置
-
-### 前置条件
-
-- IDA Pro 已安装且 `IDADIR` 环境变量已设置（或脚本内默认路径正确）
-- Python 已安装（idalib-mcp 依赖 Python）

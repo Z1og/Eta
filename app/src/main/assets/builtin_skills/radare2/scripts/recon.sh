@@ -1,6 +1,7 @@
 #!/bin/sh
 # Auto-converted from PowerShell to Shell for Eta Alpine Linux
 
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$TARGETPATH,
 
@@ -17,28 +18,15 @@
 $OUTPUTENCODING = [System.Text.UTF8Encoding]::new($false)
 
 
-. ($PSSCRIPTROOT/'..\..\scripts\lib\ToolDiscovery.ps1')
-
-$bootstrapScript = $PSSCRIPTROOT/'..\..\scripts\bootstrap-reverse.ps1'
-
-function Get-RequiredToolSpec {
+function Test-Tool {
         [Parameter(Mandatory = $true)]
         [string]$NAME
     )
 
-    $spec = Resolve-ReverseToolSpec -Name $NAME
-    if (-not $spec.Available) {
-        # Attempt auto-bootstrap
-        if (test -e -LiteralPath $bootstrapScript) {
-            Write-Output "INFO: $NAME not found, attempting auto-bootstrap..."
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bootstrapScript -Capability @($NAME) -SkipRefresh
-            $spec = Resolve-ReverseToolSpec -Name $NAME
-        }
-        if (-not $spec.Available) {
-            throw "缺少命令：$NAME — 自动安装失败，请手动安装。参考: https://github.com/radareorg/radare2"
-        }
+    # 先确认 radare2 相关命令可用，避免执行到中途才失败。
+    if (-not (Get-Command -Name $NAME -ErrorAction SilentlyContinue)) {
+        throw "缺少命令：$NAME"
     }
-return $spec
 }
 
 function Write-Section {
@@ -51,10 +39,9 @@ function Write-Section {
     "=== $TITLE ==="
 }
 
-$rabin2 = Get-RequiredToolSpec -Name 'rabin2'
-$r2 = $null
+Test-Tool -Name 'rabin2'
 if ($RUNANALYSIS) {
-    $r2 = Get-RequiredToolSpec -Name 'r2'
+    Test-Tool -Name 'r2'
 }
 
 # 将输入路径规范化成绝对路径，避免 r2/rabin2 在相对路径下歧义解析。
@@ -64,21 +51,21 @@ $target = $resolvedPath.Path
 "目标文件: $target"
 
 Write-Section -Title '基本信息'
-& $rabin2.Command @($rabin2.PrefixArgs + @('-I', '--', $target))
+& rabin2 -I -- "$target"
 
 Write-Section -Title '节区'
-& $rabin2.Command @($rabin2.PrefixArgs + @('-S', '--', $target))
+& rabin2 -S -- "$target"
 
 Write-Section -Title '导入'
-& $rabin2.Command @($rabin2.PrefixArgs + @('-i', '--', $target)) | Select-Object -First $IMPORTSLIMIT
+& rabin2 -i -- "$target" | Select-Object -First $IMPORTSLIMIT
 
 Write-Section -Title '导出'
-& $rabin2.Command @($rabin2.PrefixArgs + @('-E', '--', $target))
+& rabin2 -E -- "$target"
 
 Write-Section -Title '字符串'
-& $rabin2.Command @($rabin2.PrefixArgs + @('-zz', '--', $target)) | Select-Object -First $STRINGSLIMIT
+& rabin2 -zz -- "$target" | Select-Object -First $STRINGSLIMIT
 
 if ($RUNANALYSIS) {
     Write-Section -Title '函数与入口分析'
-    & $r2.Command @($r2.PrefixArgs + @('-A', '-q', '-c', 's entry0;afl;iz;ii;q', '--', $target))
+    & r2 -A -q -c 's entry0;afl;iz;ii;q' -- "$target"
 }

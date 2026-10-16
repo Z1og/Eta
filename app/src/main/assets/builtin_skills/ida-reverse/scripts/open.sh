@@ -21,32 +21,20 @@ Open timeout in seconds, returns timeout instead of blocking forever
     [int]$TIMEOUTSECONDS = 120
 )
 
-Set-StrictMode -Version Latest
-
-if (-not [string]::IsNullOrWhiteSpace($env:IDADIR)) {
-    $env:IDADIR = $env:IDADIR
-}
-else {
-    # Fallback: check common IDA installation paths
-    $idaCandidates = @(
-        'C:\Program Files\IDA Pro',
-        'C:\IDA Pro',
-        'D:\IDA',
-        (Join-Path $env:USERPROFILE 'Tools\IDA')
-    )
-    $foundIda = $idaCandidates | Where-Object { test -e -LiteralPath $_ } | Select-Object -First 1
-    if ($foundIda) {
-        $env:IDADIR = $foundIda
-    } else {
-        Write-Error "ERR:IDADIR not set and IDA Pro not found at common paths. Set IDADIR environment variable to your IDA installation directory."
-exit 1
-    }
+$idaCandidates = @(
+    $env:IDADIR
+    "C:\Program Files\IDA Professional 9.3"
+    "C:\Program Files\IDA Professional 9.2"
+    "C:\Program Files\IDA Professional 9.1"
+    "C:\Program Files\IDA Pro 9.0"
+    "D:\APP\IDA"
+    "C:\IDA"
+) | Where-Object { $_ }
+foreach ($c in $idaCandidates) {
+    if ($c -and (test -e $c)) { $env:IDADIR = $c; break }
 }
 $PORT = 13337
-$TEMPDIR = Join-Path $env:TEMP 'reverse-skill'
-if (-not (test -e -LiteralPath $TEMPDIR)) {
-    New-Item -ItemType Directory -Path $TEMPDIR -Force >/dev/null 2>&1
-}
+$TEMPDIR = Join-Path $env:TEMP 'nx-ida'
 $POLLINTERVALMS = 2000
 $PROGRESSINTERVALSECONDS = 10
 

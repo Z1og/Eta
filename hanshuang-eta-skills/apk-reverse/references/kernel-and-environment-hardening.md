@@ -17,7 +17,10 @@ Division of labour, so the two files never duplicate:
 **This repository does not do kernel development.** Everything in the kernel section is a map of
 externally documented mechanisms with sources, labelled `inferred` — none of it was executed here.
 That is deliberate: the purpose is to stop you from spending a day rediscovering the version
-gate () or the conflict (), not to teach kernel hacking.
+gate () or the conflict (), not to teach kernel hacking. When the goal is not *hiding from a
+detector* but *instrumenting or altering the target from the kernel* — invisible watchpoints,
+register rewrites at a trap — that is a different activity with its own primitive map and recipes:
+`references/kernel-event-injection.md`. The two files share the §4a gate table and the stop rules.
 
 **Extension pass, read the next paragraph before relying on it.** This file now has a companion
 generator — `scripts/kernelsu_syscall_mask.py` — which emits a loadable userspace module skeleton

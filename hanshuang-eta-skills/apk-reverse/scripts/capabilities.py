@@ -211,6 +211,17 @@ ATOMS = {
         'est_minutes': 1,
         'basis': 'measured',
     },
+    'tool:dexsql': {
+        'name': 'dexsql (SQL over dex and APK resources)',
+        'kind': 'tool',
+        'tool': 'dexsql',
+        'install': 'download the release binary for this platform from '
+                   'https://github.com/LSPosed/dexsql-release/releases and put it on PATH '
+                   'or on APKREV_TOOLS (no Python, no JVM, no crate, no build step)',
+        'est_minutes': 2,
+        # Measured here: release download plus first query, on the Windows amd64 asset.
+        'basis': 'observed',
+    },
     'tool:apktool': {
         'name': 'apktool (resource round-trip)',
         'kind': 'tool',
@@ -355,6 +366,19 @@ CAPABILITIES = {
         'optional': [],
         'note': 'one `pip install droidasc` away, and the cross-check for the Rust one: '
                 'their class-definition sets are compared in scripts/rasc_build.py --verify',
+    },
+    'dex_query_sql': {
+        'name': 'Whole-APK SQL query layer over dex and APK resources (dexsql)',
+        'required': ['tool:dexsql'],
+        'optional': [],
+        'note': 'one self-contained binary: no Python, no JVM, no index build. Its '
+                'class-definition set matched rasc, droidasc and ddc exactly on four archives '
+                '(1,396 / 647 / 4 / 30,768 classes, zero differences either way). What it adds '
+                'is the relational model -- method_calls, method_field_accesses, method_strings, '
+                'method_numbers, debug_positions, hiddenapi_flags, annotation_elements_resolved '
+                '-- plus APK resource queries and an MCP server. It is a third indexer at the '
+                'same stage as ASC, not a replacement for it: rasc is still the fastest for a '
+                'plain class list. See references/dexsql-sql-query-layer.md',
     },
     'static_dex': {
         'name': 'Static dex / zip / strings analysis',
@@ -535,6 +559,24 @@ def extra_tool_dirs():
     return [d for d in dirs if d and os.path.isdir(d)]
 
 
+# Tools whose *documented install step in this kit* lands somewhere PATH does not know about.
+# A machine that followed those instructions has the tool, and reporting it BLOCKED would make
+# the capability table lie in the pessimistic direction -- the same reasoning as APKREV_TOOLS,
+# applied to the tools acquired by a build or a release download rather than a package manager.
+INSTALL_HINTS = {
+    'rasc': [
+        os.path.join(REPO_ROOT, 'tools', '_work', 'rust', 'target', 'release',
+                     'rasc' + ('.exe' if os.name == 'nt' else '')),
+        os.environ.get('RASC', ''),
+    ],
+    'dexsql': [
+        os.path.join(REPO_ROOT, 'tools', '_work', 'bin',
+                     'dexsql' + ('.exe' if os.name == 'nt' else '')),
+        os.environ.get('DEXSQL', ''),
+    ],
+}
+
+
 class Probe:
     """Host facts, probed once per process and cached.
 
@@ -559,15 +601,12 @@ class Probe:
         if name in self._tool_cache:
             return self._tool_cache[name]
         hit = shutil.which(name)
-        if not hit and name == 'rasc':
-            # rasc ships no artifact, so a machine that followed this kit's own build step has it
-            # under the repository's ignored work area rather than on PATH. Accepting that location
+        if not hit:
+            # The kit's own install step for this tool lands outside PATH (rasc is built into the
+            # ignored work area, dexsql is a downloaded release binary). Accepting that location
             # keeps the capability table from reporting BLOCKED at an agent that already did the
-            # work -- the same reasoning as APKREV_TOOLS, for the one tool whose install step is a
-            # build (scripts/rasc_build.py).
-            for cand in (os.path.join(REPO_ROOT, 'tools', '_work', 'rust', 'target', 'release',
-                                      'rasc' + ('.exe' if os.name == 'nt' else '')),
-                         os.environ.get('RASC', '')):
+            # work -- see INSTALL_HINTS.
+            for cand in INSTALL_HINTS.get(name, []):
                 if cand and os.path.isfile(cand):
                     hit = cand
                     break

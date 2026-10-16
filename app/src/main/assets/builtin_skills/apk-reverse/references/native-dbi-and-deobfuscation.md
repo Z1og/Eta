@@ -53,6 +53,7 @@ script header in `scripts/stalker_trace.js`.
 | Question | Observation | Tool |
 |---|---|---|
 | Which blocks executed, and how often? | Block-level trace with execution counts | `scripts/stalker_trace.js` + `scripts/stalker_report.py` |
+| Where did two runs of the same operation diverge? | Differential reduction of two block streams — the input-dependent set | `scripts/trace_diff.py` (works on Stalker logs and decoded cs_etm alike; the hardware producer and its gates are `references/ete-diff-tracing.md`) |
 | Which functions inside the module call each other? | Call edges from the same trace | same pair (`call` events) |
 | Which imported function does this stub reach? | Relocation table, not trace | `scripts/elf_plt.py` |
 | Where did the process die, and did it look arranged? | Crash record, signal, fault address, backtrace split by owner | `scripts/native_crash.py` |
@@ -221,7 +222,10 @@ zero-event trace survived the treatment arm unchanged. Treat those as two proble
 **arm64 also raises the floor.** PAC/BTI-bearing code gives a translator more ways to mis-handle a
 block than armv7 did, which is one more reason a trace that works on an emulator is not evidence
 about a device. Treat any arm64 result as needing a control run (a followed thread executing a known
-loop, nonzero `BLK` lines) before it is interpreted.
+loop, nonzero `BLK` lines) before it is interpreted. When the device itself carries ETE/TRBE
+(`references/ete-diff-tracing.md` — probe with `scripts/ete_capture.py gates --device`), the
+hardware trace replaces Stalker for this question with no code modification and no DBI cache; keep
+this file's Stalker route for the devices without it.
 
 **Emulation is a legitimate alternative, not a consolation prize.** When the target is a pure
 computation inside a `.so` and its environment can be faked, a Unidbg/Unicorn trace can be both

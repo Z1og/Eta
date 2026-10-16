@@ -401,16 +401,6 @@
       "hasEvals": false
     },
     {
-      "id": "apk-reverse",
-      "name": "apk-reverse",
-      "description": "Reverse engineer, debloat, de-ad, patch, or re-sign Android APKs, and analyze their runtime and server-side behaviour. Use for an .apk/.aab/.dex/.so sample, smali or dex patching, Frida hooking, repac",
-      "assetPath": "builtin_skills/apk-reverse",
-      "hasScripts": true,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": true
-    },
-    {
       "id": "attack-chain",
       "name": "attack-chain",
       "description": "Multi-stage attack-path orchestration for CTF/red-team lab chains: recon to foothold to privilege to lateral to evidence packaging.",
@@ -571,16 +561,6 @@
       "hasEvals": false
     },
     {
-      "id": "ida-reverse",
-      "name": "ida-reverse",
-      "description": "|",
-      "assetPath": "builtin_skills/ida-reverse",
-      "hasScripts": true,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
       "id": "js-reverse",
       "name": "js-reverse",
       "description": "JavaScript reverse engineering: obfuscation recovery, signature/HMAC location, browser environment patching, and frontend crypto extraction.",
@@ -681,32 +661,12 @@
       "hasEvals": false
     },
     {
-      "id": "radare2",
-      "name": "radare2",
-      "description": "|",
-      "assetPath": "builtin_skills/radare2",
-      "hasScripts": true,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
       "id": "game-security-research-rigor",
       "name": "game-security-research-rigor",
       "description": "Guide for evidence-grounded game-security research, citation verification, uncertainty, reproducible analysis, and detector evaluation. Use when validating technical claims, synthesizing README or wik",
       "assetPath": "builtin_skills/research-rigor",
       "hasScripts": false,
       "hasReferences": false,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "reverse-engineering",
-      "name": "reverse-engineering",
-      "description": "Provides reverse engineering techniques. Use when the main job is to understand how a compiled, obfuscated, packed, or virtualized target works before exploiting or solving it, including binaries, APK",
-      "assetPath": "builtin_skills/reverse-engineering",
-      "hasScripts": false,
-      "hasReferences": true,
       "hasAssets": false,
       "hasEvals": false
     },
@@ -1987,6 +1947,86 @@
       "assetPath": "builtin_skills/reverse-task-planner",
       "hasScripts": false,
       "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "apk-reverse",
+      "name": "apk-reverse",
+      "description": "Reverse engineer, debloat, de-ad, patch, or re-sign Android APKs, and analyze their runtime and server-side behaviour. Use for an .apk/.aab/.dex/.so sample, smali or dex patching, Frida hooking, repac",
+      "assetPath": "builtin_skills/apk-reverse",
+      "hasScripts": true,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": true
+    },
+    {
+      "id": "ida-reverse",
+      "name": "ida-reverse",
+      "description": "|",
+      "assetPath": "builtin_skills/ida-reverse",
+      "hasScripts": true,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "mcp-js-reverse-playbook",
+      "name": "mcp-js-reverse-playbook",
+      "description": "在使用 js-reverse-mcp 做前端 JavaScript 逆向时使用，适用于签名链路定位、页面观察取证、运行时采样、本地补环境复现与证据化输出。优先适配当前环境里的 js-reverse_* 工具。",
+      "assetPath": "builtin_skills/mcp-js-reverse-playbook",
+      "hasScripts": false,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "radare2",
+      "name": "radare2",
+      "description": "|",
+      "assetPath": "builtin_skills/radare2",
+      "hasScripts": true,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "reverse-engineering",
+      "name": "reverse-engineering",
+      "description": "Provides reverse engineering techniques. Use when the main job is to understand how a compiled, obfuscated, packed, or virtualized target works before exploiting or solving it, including binaries, APK",
+      "assetPath": "builtin_skills/reverse-engineering",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "apkseep",
+      "name": "apkseep",
+      "description": "Android APK/AAB/DEX/SO 逆向工程、客户端鉴权脆弱性走查（CWE-602）、DEX/SO 底层二进制微创补丁、动态 Frida/RPC 探测插桩、脱壳/Java2C/VMP 差分分析及重打包签名的全链路一体化作战技能。覆盖 Recon 资产画像、四大硬性质量门禁（G1-G4）、Anti-Tamper/Anti-Hook 对抗、双击失败熔断纪律与端到端闭环安全审计交付。",
+      "assetPath": "builtin_skills/apkseep",
+      "hasScripts": true,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": true
+    },
+    {
+      "id": "client-license-validation-bypass",
+      "name": "client-license-validation-bypass",
+      "description": ">-",
+      "assetPath": "builtin_skills/client-license-validation-bypass",
+      "hasScripts": false,
+      "hasReferences": false,
+      "hasAssets": false,
+      "hasEvals": false
+    },
+    {
+      "id": "softseep",
+      "name": "softseep",
+      "description": "【逆向工程总控入口 / Orchestrator】本 Skill 是整个工作体系的**唯一入口与总调度**。**用户只需输入大白话，softseep 自动完成两步判型**：① 平台（Windows/Android/Linux/Web/Flutter）② 逆向类型（授权许可 / 补丁本地化 / 脱壳解包 / 算法还原 / 协议分析 / 样本研判 / UI 伪造 / 加固对抗 / 测绘报告），随后自动",
+      "assetPath": "builtin_skills/softseep",
+      "hasScripts": false,
+      "hasReferences": true,
       "hasAssets": false,
       "hasEvals": false
     }
