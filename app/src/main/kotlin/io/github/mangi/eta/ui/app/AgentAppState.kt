@@ -1682,7 +1682,13 @@ internal class AgentAppState(
 
     /** 保存目标。空正文等于取消目标——两种状态在存储层是同一件事。 */
     fun saveGoal(text: String) {
-        val conversationId = selectedConversationId ?: return
+        // 新会话还没有 id。以前这里直接 return，用户点「保存」什么都不会发生，
+        // 表现出来就是"目标模式没反应"。先落一个会话 id，再存。
+        val conversationId = selectedConversationId ?: newConversationId().also { id ->
+            selectedConversationId = id
+            conversationPaneState = conversationPaneState.copy(selectedConversationId = id)
+            updateConversation(id, homeState)
+        }
         scope.launch(Dispatchers.IO) {
             val saved = runCatching { AgentGoalRepository.save(conversationId, text) }
                 .getOrElse { throwable ->
@@ -1694,11 +1700,20 @@ internal class AgentAppState(
                     return@launch
                 }
             withContext(Dispatchers.Main) {
-                val state = conversationsById[conversationId] ?: return@withContext
+                val state = conversationsById[conversationId] ?: homeState
                 updateConversation(
                     conversationId,
                     state.copy(goal = saved.takeIf { it.isNotBlank() }, goalPaused = false),
                 )
+                Toast.makeText(
+                    appContext,
+                    if (saved.isBlank()) {
+                        "已取消目标"
+                    } else {
+                        "目标已设置，下一条消息开始生效（会先拆解成子任务）"
+                    },
+                    Toast.LENGTH_SHORT,
+                ).show()
             }
         }
     }

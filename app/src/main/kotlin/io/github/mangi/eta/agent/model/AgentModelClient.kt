@@ -215,7 +215,7 @@ internal object AgentModelClient {
             val capabilities = capabilitiesProvider()
             if (capabilities.rootAvailable != promptRootAvailable) {
                 val systemMessages = AgentPromptBuilder.buildSystemMessages(
-                    config, skillContext, memoryContext, capabilities.rootAvailable, roleplayContext, executionContext, userPrompt,
+                    config, skillContext, memoryContext, capabilities.rootAvailable, roleplayContext, executionContext, userPrompt, goal,
                 )
                 for (index in 0 until systemMessages.length()) {
                     messages.put(index, systemMessages.getJSONObject(index))
