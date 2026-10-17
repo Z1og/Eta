@@ -35,6 +35,8 @@ internal data class AgentUserPromptUiState(
     val revision: String? = null,
     val truncated: Boolean = false,
     val reverseModeEnabled: Boolean = false,
+    /** 破甲记忆注入开关：与逆向能力开关平级，只看这一个值。 */
+    val enabled: Boolean = false,
     val contextWindow: Int? = null,
     val editorExpanded: Boolean = false,
     val pendingImport: PendingImport? = null,

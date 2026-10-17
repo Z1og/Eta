@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,7 @@ import io.github.mangi.eta.ui.components.EtaPreferenceColors
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
+import io.github.mangi.eta.ui.components.EtaSwitch
 import io.github.mangi.eta.ui.components.EtaRadioButtonPreference
 import io.github.mangi.eta.ui.components.EtaTextButton
 import io.github.mangi.eta.ui.components.EtaWindowDialog
@@ -92,32 +94,20 @@ internal fun AgentUserPromptScreen(
             }
         }
 
-        item(key = "mode-title") { EtaPreferenceGroupTitle("生效范围") }
-        item(key = "mode") {
+        item(key = "inject-title") { EtaPreferenceGroupTitle("注入") }
+        item(key = "inject") {
             EtaPreferenceGroup {
-                EtaRadioButtonPreference(
-                    title = "关闭",
-                    summary = "不注入；文件存在也不影响任何行为（默认）",
-                    selected = state.mode == AgentUserPromptMode.Off,
-                    onClick = { onAction(AgentUserPromptAction.ModeChanged(AgentUserPromptMode.Off)) },
-                )
-                EtaPreferenceDivider()
-                EtaRadioButtonPreference(
-                    title = "全局常驻",
-                    summary = "所有会话都注入这份作战协议",
-                    selected = state.mode == AgentUserPromptMode.Global,
-                    onClick = { onAction(AgentUserPromptAction.ModeChanged(AgentUserPromptMode.Global)) },
-                )
-                EtaPreferenceDivider()
-                EtaRadioButtonPreference(
-                    title = "仅逆向模式",
-                    summary = if (state.reverseModeEnabled) {
-                        "逆向总开关已开启，本档已生效"
-                    } else {
-                        "需要先在技能页打开「逆向能力总开关」"
+                EtaPreference(
+                    title = "注入破甲记忆",
+                    summary = injectSummary(state),
+                    endActions = {
+                        EtaSwitch(
+                            checked = state.enabled,
+                            onCheckedChange = { onAction(AgentUserPromptAction.EnabledChanged(it)) },
+                            enabled = !state.isLoading && !state.sourceFileName.isNullOrBlank(),
+                            modifier = Modifier.align(Alignment.CenterVertically),
+                        )
                     },
-                    selected = state.mode == AgentUserPromptMode.ReverseOnly,
-                    onClick = { onAction(AgentUserPromptAction.ModeChanged(AgentUserPromptMode.ReverseOnly)) },
                 )
             }
         }
@@ -323,14 +313,19 @@ private fun builtinSummary(state: AgentUserPromptUiState): String {
     }
 }
 
+private fun injectSummary(state: AgentUserPromptUiState): String = when {
+    state.sourceFileName.isNullOrBlank() -> "没有可用正文——先装配内置版本或从文件导入"
+    state.enabled -> "已开启 · 每个会话都会注入"
+    else -> "已关闭 · 不会注入"
+}
+
 private fun modeSummary(state: AgentUserPromptUiState): String = when {
-    // 总开关优先：打开时本节无条件生效，档位不再参与判定。
-    state.reverseModeEnabled -> "逆向总开关已开启 · 强制注入（档位不再生效）"
+    state.enabled -> "注入中"
     state.mode == AgentUserPromptMode.Off && state.pendingActivation ->
-        "已检测到正文，但当前关闭——不会注入"
+        "已检测到正文，但注入开关关闭——不会注入"
     state.mode == AgentUserPromptMode.Off -> "关闭"
-    state.mode == AgentUserPromptMode.Global -> "全局常驻"
-    else -> "仅逆向模式（总开关未开启，未注入）"
+    state.mode == AgentUserPromptMode.Global -> "已关闭注入"
+    else -> "已关闭注入"
 }
 
 private fun fileSummary(state: AgentUserPromptUiState): String {

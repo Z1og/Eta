@@ -1080,8 +1080,8 @@
   <string name="skills_installing_package">正在驗證並安裝，請稍候</string>
   <string name="skills_choose_package">選擇包含 SKILL.md 的 Skill 包</string>
   <string name="skills_reverse_mode">逆向模式</string>
-  <string name="skills_reverse_mode_toggle">逆向能力總開關</string>
-  <string name="skills_reverse_mode_summary">一個開關管三件事：啟用全部逆向技能（除 eta 原生三個）、常駐注入破甲記憶、思考前自動預讀相關技能</string>
+  <string name="skills_reverse_mode_toggle">逆向能力開關</string>
+  <string name="skills_reverse_mode_summary">只管兩件事：啟用全部逆向技能（除 eta 原生三個）、思考前自動預讀相關技能。破甲記憶注入在作戰協議頁單獨控制。</string>
   <string name="skills_choose_zip">選擇 ZIP Skill 包</string>
   <string name="skills_replace_summary">已有使用者 Skill「%1$s」（%2$s）。取代後會覆寫其目前的所有檔案。</string>
   <string name="settings_context_extensions">上下文與擴充</string>

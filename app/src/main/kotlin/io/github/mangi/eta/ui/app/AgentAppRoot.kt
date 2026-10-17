@@ -702,6 +702,7 @@ fun AgentAppRoot(
                             AgentUserPromptAction.CancelImport -> userPrompt.cancelImport()
                             AgentUserPromptAction.OpenEditor -> userPrompt.openEditor()
                             AgentUserPromptAction.InstallBuiltin -> userPrompt.installBuiltin()
+                            is AgentUserPromptAction.EnabledChanged -> userPrompt.setEnabled(action.enabled)
                         }
                     },
                 )

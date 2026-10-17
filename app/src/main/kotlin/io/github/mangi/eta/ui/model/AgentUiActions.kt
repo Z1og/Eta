@@ -103,4 +103,6 @@ internal sealed interface AgentUserPromptAction {
 
     /** 把随包内置的破甲记忆装配成效文件（覆盖当前，旧文件先备份）。 */
     data object InstallBuiltin : AgentUserPromptAction
+    /** 破甲记忆注入开关：与逆向能力开关平级，各管各的。 */
+    data class EnabledChanged(val enabled: Boolean) : AgentUserPromptAction
 }

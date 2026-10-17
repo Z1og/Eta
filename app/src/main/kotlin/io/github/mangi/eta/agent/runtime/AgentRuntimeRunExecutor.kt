@@ -286,12 +286,11 @@ internal class AgentRuntimeRunExecutor(
             }
             // 用户自备作战协议（filesDir/prompts/ 下第一个非空 .md）。
             // 会话开始时读取一次并冻结：中途改文件只影响下个会话，避免系统提示抖动废掉请求前缀缓存。
-            // 未开启（默认关闭）或文件为空 → EMPTY，不注入、不产生空 system 消息；任何失败静默降级。
+            // 只看作战协议自己的开关：与逆向能力开关平级，关掉逆向不影响这里，反之亦然。
             val userPrompt = runBlocking {
                 runCatching {
                     AgentUserPromptRepository.loadFor(
-                        mode = AgentUserPromptRepository.mode(),
-                        reverseModeEnabled = reverseModeEnabled,
+                        enabled = AgentUserPromptRepository.enabled(),
                     )
                 }.getOrElse { throwable ->
                     AndroidAgentLogger.warnThrottled("agent_user_prompt_unavailable") {

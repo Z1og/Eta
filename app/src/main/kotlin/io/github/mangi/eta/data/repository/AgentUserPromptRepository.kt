@@ -371,22 +371,20 @@ internal object AgentUserPromptRepository {
         SettingsDataStore.setUserPromptMode(mode.persistedValue)
 
     /**
-     * 纯判定。
+     * 注入开关。
      *
-     * 逆向总开关是总闸：打开就无条件注入破甲记忆，用户不必再回本页调档位。
-     * 关掉总开关后，只有显式选过「全局常驻」的会话仍注入——那是用户明确表达过的意图，
-     * 不该被一个后来加的开关静默废掉。默认档位（关闭）下，关总开关就是三样全关。
+     * 与逆向能力开关平级、互不牵连：技能与预读归逆向开关管，破甲记忆归这个开关管。
+     * 判定只看这一个布尔值——不再叠加档位或逆向状态，否则会出现"开关关了但还在注入"。
      */
-    fun isActive(mode: AgentUserPromptMode, reverseModeEnabled: Boolean): Boolean =
-        reverseModeEnabled || when (mode) {
-            AgentUserPromptMode.Off -> false
-            AgentUserPromptMode.Global -> true
-            AgentUserPromptMode.ReverseOnly -> false
-        }
+    suspend fun enabled(): Boolean = SettingsDataStore.userPromptEnabled()
+
+    suspend fun setEnabled(value: Boolean) = SettingsDataStore.setUserPromptEnabled(value)
+
+    fun isActive(enabled: Boolean): Boolean = enabled
 
     /** 运行期装载：未开启或文件为空时返回 [AgentUserPromptSnapshot.EMPTY]，调用方据此不注入。 */
-    fun loadFor(mode: AgentUserPromptMode, reverseModeEnabled: Boolean): AgentUserPromptSnapshot =
-        if (isActive(mode, reverseModeEnabled)) {
+    fun loadFor(enabled: Boolean): AgentUserPromptSnapshot =
+        if (isActive(enabled)) {
             runCatching { snapshot() }.getOrDefault(AgentUserPromptSnapshot.EMPTY)
         } else {
             AgentUserPromptSnapshot.EMPTY

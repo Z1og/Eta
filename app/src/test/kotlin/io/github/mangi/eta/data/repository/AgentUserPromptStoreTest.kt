@@ -160,16 +160,8 @@ class AgentUserPromptStoreTest {
             assertEquals(mode, AgentUserPromptMode.fromPersistedValue(mode.persistedValue))
         }
 
-        assertFalse(AgentUserPromptRepository.isActive(AgentUserPromptMode.Off, reverseModeEnabled = false))
-        // 总开关是总闸：打开后无视档位强制注入，用户不必再去另一个页面调档位。
-        assertTrue(AgentUserPromptRepository.isActive(AgentUserPromptMode.Off, reverseModeEnabled = true))
-        assertTrue(AgentUserPromptRepository.isActive(AgentUserPromptMode.Global, reverseModeEnabled = false))
-        assertTrue(AgentUserPromptRepository.isActive(AgentUserPromptMode.Global, reverseModeEnabled = true))
-        assertFalse(
-            AgentUserPromptRepository.isActive(AgentUserPromptMode.ReverseOnly, reverseModeEnabled = false),
-        )
-        assertTrue(
-            AgentUserPromptRepository.isActive(AgentUserPromptMode.ReverseOnly, reverseModeEnabled = true),
-        )
+        // 注入只看自己的开关：与逆向能力开关平级，档位不再参与判定。
+        assertFalse(AgentUserPromptRepository.isActive(enabled = false))
+        assertTrue(AgentUserPromptRepository.isActive(enabled = true))
     }
 }

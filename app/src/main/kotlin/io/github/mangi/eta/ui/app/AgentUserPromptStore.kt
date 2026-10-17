@@ -58,13 +58,12 @@ internal class AgentUserPromptStore(
                 runCatching { AgentUserPromptRepository.seedBuiltinIfNeeded() }
                 val snapshot = AgentUserPromptRepository.snapshot()
                 val mode = AgentUserPromptRepository.mode()
-                val reverseMode = runCatching {
-                    // 总开关是显式持久化的状态，不再从"逆向技能是否全部启用"反推：
-                    // 逆向集合有 200 个且每天增加，反推只要差一个就永远是 false。
-                    SettingsDataStore.reverseBundleEnabled()
+                // 作战协议自己的开关，与逆向能力开关平级；关掉逆向不影响这里。
+                val enabled = runCatching {
+                    AgentUserPromptRepository.enabled()
                 }.onFailure { throwable ->
-                    AndroidAgentLogger.warnThrottled("user_prompt_reverse_state_failed") {
-                        "Reverse bundle state read failed: type=${throwable.safeLogType()}"
+                    AndroidAgentLogger.warnThrottled("user_prompt_switch_read_failed") {
+                        "User prompt switch read failed: type=${throwable.safeLogType()}"
                     }
                 }.getOrDefault(false)
                 val contextWindow = runCatching {
@@ -74,7 +73,7 @@ internal class AgentUserPromptStore(
                         "Context window lookup failed: type=${throwable.safeLogType()}"
                     }
                 }.getOrNull()
-                Loaded(snapshot, mode, reverseMode, contextWindow, AgentUserPromptRepository.builtinSnapshot())
+                Loaded(snapshot, mode, enabled, contextWindow, AgentUserPromptRepository.builtinSnapshot())
             }.fold(
                 onSuccess = { loaded ->
                     pendingImportContent = null
@@ -88,7 +87,7 @@ internal class AgentUserPromptStore(
                             charCount = loaded.snapshot.charCount,
                             revision = loaded.snapshot.revision,
                             truncated = loaded.snapshot.truncated,
-                            reverseModeEnabled = loaded.reverseMode,
+                            enabled = loaded.enabled,
                             contextWindow = loaded.contextWindow,
                             builtinCharCount = loaded.builtin?.charCount,
                             builtinRevision = loaded.builtin?.revision,
@@ -107,6 +106,29 @@ internal class AgentUserPromptStore(
                     }
                 },
             )
+        }
+    }
+
+    /** 破甲记忆注入开关。与逆向能力开关平级：关掉它不影响技能与预读。 */
+    fun setEnabled(enabled: Boolean) {
+        if (promptState.enabled == enabled) return
+        scope.launch(Dispatchers.IO) {
+            runCatching { AgentUserPromptRepository.setEnabled(enabled) }
+                .fold(
+                    onSuccess = {
+                        withContext(Dispatchers.Main) {
+                            promptState = promptState.copy(enabled = enabled, notice = null)
+                        }
+                    },
+                    onFailure = { throwable ->
+                        AndroidAgentLogger.warnThrottled("user_prompt_switch_failed") {
+                            "User prompt switch update failed: type=${throwable.safeLogType()}"
+                        }
+                        withContext(Dispatchers.Main) {
+                            promptState = promptState.copy(notice = "注入开关保存失败，请稍后重试。")
+                        }
+                    },
+                )
         }
     }
 
@@ -400,7 +422,7 @@ internal class AgentUserPromptStore(
     private data class Loaded(
         val snapshot: AgentUserPromptSnapshot,
         val mode: AgentUserPromptMode,
-        val reverseMode: Boolean,
+        val enabled: Boolean,
         val contextWindow: Int?,
         val builtin: AgentUserPromptSnapshot?,
     )
