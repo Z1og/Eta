@@ -112,9 +112,9 @@ internal fun AgentUserPromptScreen(
                 EtaRadioButtonPreference(
                     title = "仅逆向模式",
                     summary = if (state.reverseModeEnabled) {
-                        "当前已是逆向模式，会注入"
+                        "逆向总开关已开启，本档已生效"
                     } else {
-                        "所有已安装逆向技能均启用时才注入（当前未处于逆向模式）"
+                        "需要先在技能页打开「逆向能力总开关」"
                     },
                     selected = state.mode == AgentUserPromptMode.ReverseOnly,
                     onClick = { onAction(AgentUserPromptAction.ModeChanged(AgentUserPromptMode.ReverseOnly)) },
@@ -324,12 +324,13 @@ private fun builtinSummary(state: AgentUserPromptUiState): String {
 }
 
 private fun modeSummary(state: AgentUserPromptUiState): String = when {
+    // 总开关优先：打开时本节无条件生效，档位不再参与判定。
+    state.reverseModeEnabled -> "逆向总开关已开启 · 强制注入（档位不再生效）"
     state.mode == AgentUserPromptMode.Off && state.pendingActivation ->
         "已检测到正文，但当前关闭——不会注入"
     state.mode == AgentUserPromptMode.Off -> "关闭"
     state.mode == AgentUserPromptMode.Global -> "全局常驻"
-    state.reverseModeEnabled -> "仅逆向模式（当前生效中）"
-    else -> "仅逆向模式（当前不在逆向模式，未注入）"
+    else -> "仅逆向模式（总开关未开启，未注入）"
 }
 
 private fun fileSummary(state: AgentUserPromptUiState): String {

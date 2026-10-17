@@ -309,7 +309,7 @@ internal object AgentPromptBuilder {
         val autoLoadedIds = skillContext.autoLoadedSkills.mapTo(mutableSetOf()) { it.skillId }
         // 逆向模式开启时索引只列逆向技能，折叠其余，减少上下文占用（仍可 skills_list 全量查询）。
         val indexed = if (skillContext.reverseModeEnabled) {
-            installed.filter { it.id in io.github.mangi.eta.agent.skill.ReverseSkillCatalog.REVERSE_SKILL_IDS }
+            installed.filter { it.id in skillContext.reverseSkillIds }
         } else {
             installed
         }

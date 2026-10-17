@@ -52,6 +52,9 @@ internal object SettingsDataStore {
     private val MEMORY_ENABLED = booleanPreferencesKey("memory_enabled")
     private val USER_PROMPT_MODE = stringPreferencesKey("user_prompt_mode")
 
+    /** 逆向能力总开关；缺省关闭，与既有默认值一致。 */
+    private val REVERSE_BUNDLE_ENABLED = booleanPreferencesKey("reverse_bundle_enabled")
+
     /** 随包内置破甲记忆是否已自动装配过一次；置位后不再自动重建，尊重用户的删除。 */
     private val USER_PROMPT_BUILTIN_SEEDED = booleanPreferencesKey("user_prompt_builtin_seeded")
     private val LINUX_DISTRIBUTION = stringPreferencesKey("linux_distribution")
@@ -227,6 +230,32 @@ internal object SettingsDataStore {
     suspend fun setUserPromptMode(value: String) {
         ensureInitialized()
         dataStore.edit { preferences -> preferences[USER_PROMPT_MODE] = value }
+    }
+
+    /**
+     * 逆向能力总开关。
+     *
+     * 一个开关统管三件事：批量启停逆向技能、常驻注入作战协议（破甲记忆）、
+     * 技能预读偏置。刻意持久化而不是"全部逆向技能都启用"反推——
+     * 逆向集合有 200 个且每天增加，反推永远差几个，开关就会看起来是失效的。
+     */
+    suspend fun reverseBundleEnabled(): Boolean {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause ->
+                if (cause is IOException) {
+                    emit(emptyPreferences())
+                } else {
+                    throw cause
+                }
+            }
+            .map { preferences -> preferences[REVERSE_BUNDLE_ENABLED] ?: false }
+            .first()
+    }
+
+    suspend fun setReverseBundleEnabled(value: Boolean) {
+        ensureInitialized()
+        dataStore.edit { preferences -> preferences[REVERSE_BUNDLE_ENABLED] = value }
     }
 
     /** 内置破甲记忆是否已装配过。读取失败按「未装配」处理：宁可多装一次，也不要静默不装。 */

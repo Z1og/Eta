@@ -370,12 +370,19 @@ internal object AgentUserPromptRepository {
     suspend fun setMode(mode: AgentUserPromptMode) =
         SettingsDataStore.setUserPromptMode(mode.persistedValue)
 
-    /** 纯判定：关闭 → 否；仅逆向模式 → 取决于当前是否逆向模式；全局 → 是。 */
-    fun isActive(mode: AgentUserPromptMode, reverseModeEnabled: Boolean): Boolean = when (mode) {
-        AgentUserPromptMode.Off -> false
-        AgentUserPromptMode.Global -> true
-        AgentUserPromptMode.ReverseOnly -> reverseModeEnabled
-    }
+    /**
+     * 纯判定。
+     *
+     * 逆向总开关是总闸：打开就无条件注入破甲记忆，用户不必再回本页调档位。
+     * 关掉总开关后，只有显式选过「全局常驻」的会话仍注入——那是用户明确表达过的意图，
+     * 不该被一个后来加的开关静默废掉。默认档位（关闭）下，关总开关就是三样全关。
+     */
+    fun isActive(mode: AgentUserPromptMode, reverseModeEnabled: Boolean): Boolean =
+        reverseModeEnabled || when (mode) {
+            AgentUserPromptMode.Off -> false
+            AgentUserPromptMode.Global -> true
+            AgentUserPromptMode.ReverseOnly -> false
+        }
 
     /** 运行期装载：未开启或文件为空时返回 [AgentUserPromptSnapshot.EMPTY]，调用方据此不注入。 */
     fun loadFor(mode: AgentUserPromptMode, reverseModeEnabled: Boolean): AgentUserPromptSnapshot =

@@ -10,6 +10,7 @@ import io.github.mangi.eta.agent.skill.ReverseSkillCatalog
 import io.github.mangi.eta.agent.skill.SkillRuntime
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.safeLogType
+import io.github.mangi.eta.data.datastore.SettingsDataStore
 import io.github.mangi.eta.data.repository.AgentUserPromptException
 import io.github.mangi.eta.data.repository.AgentUserPromptMode
 import io.github.mangi.eta.data.repository.AgentUserPromptRepository
@@ -58,13 +59,12 @@ internal class AgentUserPromptStore(
                 val snapshot = AgentUserPromptRepository.snapshot()
                 val mode = AgentUserPromptRepository.mode()
                 val reverseMode = runCatching {
-                    val reverseInstalled = SkillRuntime.createIndexService(appContext)
-                        .listSkillsForManagement()
-                        .filter { it.installed && it.id in ReverseSkillCatalog.REVERSE_SKILL_IDS }
-                    reverseInstalled.isNotEmpty() && reverseInstalled.all { it.enabled }
+                    // 总开关是显式持久化的状态，不再从"逆向技能是否全部启用"反推：
+                    // 逆向集合有 200 个且每天增加，反推只要差一个就永远是 false。
+                    SettingsDataStore.reverseBundleEnabled()
                 }.onFailure { throwable ->
                     AndroidAgentLogger.warnThrottled("user_prompt_reverse_state_failed") {
-                        "Reverse mode state detection failed: type=${throwable.safeLogType()}"
+                        "Reverse bundle state read failed: type=${throwable.safeLogType()}"
                     }
                 }.getOrDefault(false)
                 val contextWindow = runCatching {

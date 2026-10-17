@@ -73,6 +73,13 @@ data class SkillContext(
     val projectSpecs: ProjectSpecIndex? = null,
     /** 逆向模式是否开启（融合 dsh-infinite-gen-4 交付契约）——开启时常驻注入逆向交付契约系统消息。 */
     val reverseModeEnabled: Boolean = false,
+    /**
+     * 本次运行认定的逆向技能 id 集合（= 全部技能 − eta 原生三个）。
+     *
+     * 由执行层按当前技能索引算出来传下来，而不是用硬编码常量：
+     * 随包技能每天都在增加，任何写死的名单都会漏。
+     */
+    val reverseSkillIds: Set<String> = emptySet(),
 ) {
     companion object {
         val EMPTY = SkillContext()

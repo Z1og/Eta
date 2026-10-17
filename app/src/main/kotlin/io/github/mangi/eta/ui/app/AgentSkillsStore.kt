@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.skill.ReverseSkillCatalog
+import io.github.mangi.eta.data.datastore.SettingsDataStore
 import io.github.mangi.eta.agent.skill.SkillRuntime
 import io.github.mangi.eta.ui.model.AgentSkillsUiState
 import io.github.mangi.eta.ui.model.SkillItemUi
@@ -70,11 +71,14 @@ internal class AgentSkillsStore(
                 )
             }
             withContext(Dispatchers.Main) {
-                val reverseInstalled = items.filter { it.id in ReverseSkillCatalog.REVERSE_SKILL_IDS }
+                // 开关是持久化状态，不从"是否全部启用"反推：逆向集合有两百个且每天增加，
+                // 反推只要差一个就永远显示关闭，用户会以为开关坏了。
+                val bundleEnabled = runCatching { SettingsDataStore.reverseBundleEnabled() }
+                    .getOrDefault(false)
                 skillsState = skillsState.copy(
                     skills = items,
                     isLoading = false,
-                    reverseModeEnabled = reverseInstalled.isNotEmpty() && reverseInstalled.all { it.enabled },
+                    reverseModeEnabled = bundleEnabled,
                 )
             }
         }
@@ -111,8 +115,10 @@ internal class AgentSkillsStore(
         skillsState = skillsState.copy(busySkillId = REVERSE_MODE_BUSY_ID)
         scope.launch(Dispatchers.IO) {
             val indexService = SkillRuntime.createIndexService(appContext)
+            // 先落开关状态，再批量启停：中途失败也不会出现"技能改了、开关没改"的错位。
+            runCatching { SettingsDataStore.setReverseBundleEnabled(enabled) }
             val targets = skillsState.skills.filter {
-                it.installed && it.id in ReverseSkillCatalog.REVERSE_SKILL_IDS
+                it.installed && ReverseSkillCatalog.isReverse(it.id)
             }
             var allSucceeded = true
             for (skill in targets) {

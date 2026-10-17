@@ -194,7 +194,7 @@ internal object AgentModelClient {
                 input = input,
                 skills = skillContext.installedSkills,
                 maxResults = SkillTriggerMatcher.MAX_CANDIDATES,
-                reverseSkillIds = ReverseSkillCatalog.REVERSE_SKILL_IDS,
+                reverseSkillIds = skillContext.reverseSkillIds,
                 reverseBias = skillContext.reverseModeEnabled,
             ).filter {
                 it.specificity >= 4.0 &&
