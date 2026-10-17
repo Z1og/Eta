@@ -257,6 +257,28 @@ class AgentPromptBuilderTest {
         assertEquals("现在改用英文回答", messages.getJSONObject(messages.length() - 1).getString("content"))
     }
 
+    @Test
+    fun goalBecomesItsOwnSystemMessageAndVanishesWhenBlank() {
+        fun systemContents(goal: String) = AgentPromptBuilder.buildSystemMessages(
+            config = modelConfig("", terminalTools = false, browserTools = false),
+            skillContext = SkillContext.EMPTY,
+            memoryContext = AgentMemoryContext.DISABLED,
+            rootAvailable = false,
+            goal = goal,
+        ).systemContents()
+
+        val withGoal = systemContents("把首页的排队引导做完")
+        val goalMessage = withGoal.single { it.contains("<goal>") }
+        assertTrue(goalMessage.contains("把首页的排队引导做完"))
+        // 完成信号必须写进提示词，否则循环无法判断什么时候该停。
+        assertTrue(goalMessage.contains("<goal_status>done</goal_status>"))
+        assertTrue(goalMessage.contains("<goal_status>blocked</goal_status>"))
+
+        // 没有目标时不能凭空多出一条 system 消息（部分服务商对空 system 直接 400）。
+        assertEquals(withGoal.size - 1, systemContents("").size)
+        assertTrue(systemContents("   \n ").none { it.contains("<goal>") })
+    }
+
     private fun modelConfig(
         systemPrompt: String,
         terminalTools: Boolean,

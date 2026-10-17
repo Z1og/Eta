@@ -21,6 +21,9 @@ internal class AgentRunController {
     private val pauseCondition = lock.newCondition()
     private val steeringMessages = ArrayDeque<String>()
     private var acceptingSteering = true
+
+    @Volatile
+    private var goalCancelled = false
     @Volatile
     private var paused = false
 
@@ -48,6 +51,26 @@ internal class AgentRunController {
             steeringMessages.addLast(prompt)
         }
         return true
+    }
+
+    /**
+     * 放弃本 run 的持续目标：只是不再自动续跑，已产出的回答与上下文全部保留。
+     * 与 [cancel] 的区别是 run 还能正常收尾，用户能拿到当前进度。
+     */
+    fun cancelGoal() {
+        lock.withLock { goalCancelled = true }
+    }
+
+    /** 目标是否已被用户放弃（循环据此停止续跑）。 */
+    val isGoalCancelled: Boolean
+        get() = goalCancelled
+
+    /**
+     * 永久关闭本 run 的接收入口。目标模式让 loop 比普通 turn 活得更久，
+     * 所以封闭时机必须由 loop 在真正收尾时决定，而不是每次自然结束都封。
+     */
+    fun sealSteering() {
+        lock.withLock { acceptingSteering = false }
     }
 
     /** 默认逐条消费，避免后来的补充指令越过前一条的模型回合。 */

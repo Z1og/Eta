@@ -129,6 +129,7 @@ internal fun AgentChatInputBar(
     onAttachFilePath: (String) -> Unit,
     onRemoveFileReference: (String) -> Unit,
     onCancelMessageEdit: () -> Unit,
+    onOpenGoal: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
@@ -316,6 +317,7 @@ internal fun AgentChatInputBar(
                                 onAttachFiles = onAttachFiles,
                                 onAttachFolder = onAttachFolder,
                                 onAttachFilePath = onAttachFilePath,
+                                onOpenGoal = onOpenGoal,
                             )
 
                             Spacer(modifier = Modifier.width(2.dp))

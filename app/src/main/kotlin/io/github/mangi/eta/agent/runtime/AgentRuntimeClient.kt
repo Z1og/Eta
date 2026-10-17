@@ -120,6 +120,53 @@ internal class AgentRuntimeClient(
         }
     }
 
+    /**
+     * 向正在运行的 run 排入一条补充指令。
+     *
+     * 返回 false 有两种正常情况：run 已自然收尾（接入口已封闭），或者服务不可用。
+     * 调用方必须把 false 当作"留到下一轮再发"，不能当作失败丢弃。
+     */
+    fun steer(runId: String, text: String): Boolean {
+        if (runId.isBlank() || text.isBlank()) return false
+        val received = CountDownLatch(1)
+        val accepted = AtomicReference(false)
+        val receiver = Messenger(
+            SteerHandler { value ->
+                accepted.set(value)
+                received.countDown()
+            }
+        )
+        return withRuntimeMessenger(false) { serviceMessenger ->
+            val msg = Message.obtain(null, AgentRuntimeWire.MSG_STEER)
+            msg.data = AgentRuntimeWire.steerBundle(runId, text)
+            msg.replyTo = receiver
+            serviceMessenger.send(msg)
+            if (received.await(RESPONSE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) accepted.get() else false
+        }
+    }
+
+    fun pauseRun(runId: String) {
+        sendRunControl(AgentRuntimeWire.MSG_PAUSE, runId)
+    }
+
+    fun resumeRun(runId: String) {
+        sendRunControl(AgentRuntimeWire.MSG_RESUME, runId)
+    }
+
+    /** 放弃当前 run 的持续目标：不再自动续跑，但让本轮正常收尾。 */
+    fun cancelGoal(runId: String) {
+        sendRunControl(AgentRuntimeWire.MSG_CANCEL_GOAL, runId)
+    }
+
+    private fun sendRunControl(what: Int, runId: String) {
+        if (runId.isBlank()) return
+        withRuntimeMessenger(Unit) { serviceMessenger ->
+            val msg = Message.obtain(null, what)
+            msg.data = AgentRuntimeWire.ackBundle(runId)
+            serviceMessenger.send(msg)
+        }
+    }
+
     fun ackResult(runId: String): Boolean {
         if (runId.isBlank()) return false
         return withRuntimeMessenger(false) { serviceMessenger ->
@@ -305,6 +352,16 @@ internal class AgentRuntimeClient(
                 }
 
                 AgentRuntimeWire.MSG_REQUEST_INGESTED -> onRequestIngested()
+            }
+        }
+    }
+
+    private class SteerHandler(
+        private val onResponse: (Boolean) -> Unit,
+    ) : Handler(Looper.getMainLooper()) {
+        override fun handleMessage(msg: Message) {
+            if (msg.what == AgentRuntimeWire.MSG_STEER_RESPONSE) {
+                onResponse(AgentRuntimeWire.steerAcceptedFromBundle(msg.data ?: return))
             }
         }
     }

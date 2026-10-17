@@ -110,6 +110,7 @@ internal object AgentModelClient {
         rewriteReply: Boolean = false,
         assistantScreenContext: String = "",
         userPrompt: AgentUserPromptSnapshot = AgentUserPromptSnapshot.EMPTY,
+        goal: String = "",
         onContextSnapshot: (AgentContextSnapshot) -> Unit = {},
         onTranscript: (List<ConversationMessage>) -> Unit = {},
         onEvent: (AgentEvent) -> Unit = {}
@@ -124,6 +125,7 @@ internal object AgentModelClient {
             skillContext,
             memoryContext,
             userPrompt = userPrompt,
+            goal = goal,
             rootAvailable = initialCapabilities.rootAvailable,
             roleplayContext = roleplayContext,
             executionContext = executionContext,
@@ -257,6 +259,7 @@ internal object AgentModelClient {
             purpose = if (rewriteReply) ProviderRequestPurpose.REPLY_REWRITE else ProviderRequestPurpose.CHAT,
             roleplayContext = roleplayContext,
             initialSupplementIndex = initialSupplementIndex,
+            goal = goal,
             toolsForRound = ::toolsForRound,
             onToolResultsHint = if (rewriteReply) null else ::midRunSkillHint,
         )

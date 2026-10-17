@@ -356,6 +356,10 @@ fun AgentAppRoot(
         ) {
             entry<AppRoute.Home>(swipeDismiss = swipeDismiss) {
                 RoutedShell(route = AppRoute.Home) {
+                    // 目标按会话存储：切换会话后必须重读，否则会把上一个会话的目标显示在新会话上。
+                    LaunchedEffect(agentState.conversationPaneState.selectedConversationId) {
+                        agentState.refreshGoal()
+                    }
                     AgentHomeScreen(
                         state = agentState.homeState,
                         modelPickerState = agentState.modelPickerState,
@@ -367,6 +371,12 @@ fun AgentAppRoot(
                                 AgentHomeAction.CompactContext -> agentState.compactCurrentContext()
                                 is AgentHomeAction.ModelSelected -> agentState.selectModel(action.modelId)
                                 is AgentHomeAction.SubmitMessage -> { requestExecutionNotifications(); agentState.sendCurrentMessage(action.text) }
+                                is AgentHomeAction.SteerQueuedMessage -> agentState.steerQueuedMessage(action.id)
+                                is AgentHomeAction.RemoveQueuedMessage -> agentState.removeQueuedMessage(action.id)
+                                is AgentHomeAction.SaveGoal -> agentState.saveGoal(action.text)
+                                AgentHomeAction.ClearGoal -> agentState.clearGoal()
+                                AgentHomeAction.PauseGoal -> agentState.pauseGoal()
+                                AgentHomeAction.ResumeGoal -> agentState.resumeGoal()
                                 AgentHomeAction.StopRun -> agentState.stopCurrentRun()
                                 is AgentHomeAction.ImageAttached -> agentState.attachImage(action.uri)
                                 is AgentHomeAction.RemoveImage -> agentState.removePendingImage(action.id)

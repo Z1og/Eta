@@ -11,6 +11,7 @@ import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.safeLogType
 import io.github.mangi.eta.data.datastore.SettingsDataStore
+import io.github.mangi.eta.data.repository.AgentGoalRepository
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
 import io.github.mangi.eta.data.repository.AgentUserPromptRepository
 import io.github.mangi.eta.data.repository.AppearanceSettingsRepository
@@ -59,6 +60,7 @@ class EtaApp : Application(), XposedServiceHelper.OnServiceListener {
         PredictiveBackController.apply(applicationInfo, predictiveBackEnabled)
         AgentMemoryRepository.init(this)
         AgentUserPromptRepository.init(this)
+        AgentGoalRepository.init(this)
         // 首启装配随包破甲记忆。只装一次、失败静默：装配≠生效，是否注入仍看档位（默认关闭）。
         applicationScope.launch {
             runCatching { AgentUserPromptRepository.seedBuiltinIfNeeded() }

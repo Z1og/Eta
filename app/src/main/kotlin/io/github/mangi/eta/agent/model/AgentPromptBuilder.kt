@@ -18,12 +18,13 @@ internal object AgentPromptBuilder {
         skillContext: SkillContext,
         memoryContext: AgentMemoryContext = AgentMemoryContext.DISABLED,
         userPrompt: AgentUserPromptSnapshot = AgentUserPromptSnapshot.EMPTY,
+        goal: String = "",
         rootAvailable: Boolean = false,
         roleplayContext: RoleplayRunContext? = null,
         executionContext: TerminalExecutionContext? = null,
     ): JSONArray {
         val messages = buildSystemMessages(
-            config, skillContext, memoryContext, rootAvailable, roleplayContext, executionContext, userPrompt,
+            config, skillContext, memoryContext, rootAvailable, roleplayContext, executionContext, userPrompt, goal,
         )
         history.forEach { item ->
             runCatching { AgentConversationCodec.toJsonObject(item) }.getOrNull()?.let(messages::put)
@@ -45,6 +46,7 @@ internal object AgentPromptBuilder {
         roleplayContext: RoleplayRunContext? = null,
         executionContext: TerminalExecutionContext? = null,
         userPrompt: AgentUserPromptSnapshot = AgentUserPromptSnapshot.EMPTY,
+        goal: String = "",
     ): JSONArray {
         val messages = JSONArray()
         if (roleplayContext == null && config.systemPrompt.isNotBlank()) {
@@ -155,6 +157,7 @@ internal object AgentPromptBuilder {
         roleplayContext?.personaMessage()?.let(messages::put)
         buildMemorySystemMessage(memoryContext, writable = roleplayContext == null)?.let(messages::put)
         buildUserPromptSystemMessage(userPrompt)?.let(messages::put)
+        buildGoalSystemMessage(goal)?.let(messages::put)
         buildSkillSystemMessage(skillContext).forEach(messages::put)
         return messages
     }
@@ -191,6 +194,33 @@ internal object AgentPromptBuilder {
                 append(prompt.content)
                 appendLine()
                 append("</user_protocol>")
+            }.trim(),
+        )
+    }
+
+    /**
+     * 持续目标（用户设定，会话内常驻）。
+     *
+     * 与作战协议的分工：协议是"怎么做"的常驻规则，目标是"做到什么"的验收条件。
+     * 两者都是用户指令，但只有目标会驱动循环自动续跑——所以必须约定一个结构化的完成信号，
+     * 否则续跑只能靠猜什么时候该停。
+     */
+    private fun buildGoalSystemMessage(goal: String): JSONObject? {
+        val text = goal.trim()
+        if (text.isEmpty()) return null
+        return systemMessage(
+            buildString {
+                appendLine("本会话有一个持续目标，由用户设定。围绕它推进，直到它被达成或用户取消。")
+                appendLine("<goal>")
+                appendLine(text)
+                appendLine("</goal>")
+                appendLine("推进方式：")
+                appendLine("- 目标未达成就继续做；不要把中间进度当成完成，也不要等用户追问才继续。")
+                appendLine("- 已经完成或已经验证过的步骤不要重做；先确认现状，再处理剩余部分。")
+                appendLine("- 目标完全达成时，在回复最后单独输出一行 <goal_status>done</goal_status>，之后不再继续操作。")
+                appendLine("- 无法继续时（缺关键信息、需要用户授权、外部条件阻塞），在最后单独输出一行 <goal_status>blocked</goal_status>，并说明卡在哪。")
+                appendLine("- 这两个标记是给运行时的内部信号：不要向用户解释它们，只把实际结果讲清楚。")
+                appendLine("- 目标不等于额外授权：越权、破坏性或需要单独确认的操作仍按既有规则处理。")
             }.trim(),
         )
     }

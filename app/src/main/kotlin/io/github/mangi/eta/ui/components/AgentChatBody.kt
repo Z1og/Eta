@@ -35,8 +35,10 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DocumentScanner
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.RocketLaunch
@@ -57,6 +59,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.dropShadow
@@ -82,11 +85,13 @@ import io.github.mangi.eta.ui.app.LocalBlurEnabled
 import io.github.mangi.eta.ui.markdown.StreamingMarkdownState
 import io.github.mangi.eta.ui.model.AgentChatMessageUi
 import io.github.mangi.eta.ui.model.AgentContextUsageUi
+import io.github.mangi.eta.ui.model.AgentGoalControls
 import io.github.mangi.eta.ui.model.AgentMessageUi
 import io.github.mangi.eta.ui.model.AgentModelPickerUiState
 import io.github.mangi.eta.ui.model.MessageEditUiState
 import io.github.mangi.eta.ui.model.PendingFileReferenceUi
 import io.github.mangi.eta.ui.model.PendingImageUi
+import io.github.mangi.eta.ui.model.QueuedMessageUi
 import io.github.mangi.eta.ui.model.ThinkingMessageUi
 import io.github.mangi.eta.ui.model.ToolActivityMessageUi
 import io.github.mangi.eta.ui.model.ToolSummaryMessageUi
@@ -145,6 +150,9 @@ internal fun AgentChatBody(
     canCompactContext: Boolean,
     onModelSelected: (String) -> Unit,
     onSubmit: (String) -> Unit,
+    queuedMessages: List<QueuedMessageUi>,
+    onSteerQueuedMessage: (String) -> Unit,
+    onRemoveQueuedMessage: (String) -> Unit,
     onStop: () -> Unit,
     onAttachImage: (String) -> Unit,
     onRemoveImage: (String) -> Unit,
@@ -160,6 +168,7 @@ internal fun AgentChatBody(
     onSuggestionClick: (String) -> Unit,
     onRunTraceClick: () -> Unit,
     onOpenBrowser: () -> Unit,
+    goal: AgentGoalControls,
     isDrawerOpen: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -233,6 +242,7 @@ internal fun AgentChatBody(
             pendingFileReferences = pendingFileReferences,
             messageEdit = messageEdit,
             showEmptySuggestions = !isKeyboardVisible,
+            goal = goal,
             keepBottomAnchored = keepBottomAnchored,
             onBottomAnchorChanged = { keepBottomAnchored = it },
             onSubmit = { text ->
@@ -242,6 +252,9 @@ internal fun AgentChatBody(
                 keepBottomAnchored = true
                 onSubmit(text)
             },
+            queuedMessages = queuedMessages,
+            onSteerQueuedMessage = onSteerQueuedMessage,
+            onRemoveQueuedMessage = onRemoveQueuedMessage,
             onReasoningEffortChange = onReasoningEffortChange,
             onCompactContext = onCompactContext,
             canCompactContext = canCompactContext,
@@ -284,9 +297,13 @@ private fun AgentChatScaffold(
     pendingFileReferences: List<PendingFileReferenceUi>,
     messageEdit: MessageEditUiState?,
     showEmptySuggestions: Boolean,
+    goal: AgentGoalControls,
     keepBottomAnchored: Boolean,
     onBottomAnchorChanged: (Boolean) -> Unit,
     onSubmit: (String) -> Unit,
+    queuedMessages: List<QueuedMessageUi>,
+    onSteerQueuedMessage: (String) -> Unit,
+    onRemoveQueuedMessage: (String) -> Unit,
     onReasoningEffortChange: (ReasoningEffort) -> Unit,
     onCompactContext: () -> Unit,
     canCompactContext: Boolean,
@@ -341,6 +358,9 @@ private fun AgentChatScaffold(
                 pendingFileReferences = pendingFileReferences,
                 messageEdit = messageEdit,
                 onSubmit = onSubmit,
+                queuedMessages = queuedMessages,
+                onSteerQueuedMessage = onSteerQueuedMessage,
+                onRemoveQueuedMessage = onRemoveQueuedMessage,
                 onReasoningEffortChange = onReasoningEffortChange,
                 onCompactContext = onCompactContext,
                 canCompactContext = canCompactContext,
@@ -353,6 +373,7 @@ private fun AgentChatScaffold(
                 onAttachFilePath = onAttachFilePath,
                 onRemoveFileReference = onRemoveFileReference,
                 onCancelMessageEdit = onCancelMessageEdit,
+                goal = goal,
             )
         },
     ) { innerPadding ->
@@ -892,6 +913,9 @@ private fun AgentChatBottomBar(
     pendingFileReferences: List<PendingFileReferenceUi>,
     messageEdit: MessageEditUiState?,
     onSubmit: (String) -> Unit,
+    queuedMessages: List<QueuedMessageUi>,
+    onSteerQueuedMessage: (String) -> Unit,
+    onRemoveQueuedMessage: (String) -> Unit,
     onReasoningEffortChange: (ReasoningEffort) -> Unit,
     onCompactContext: () -> Unit,
     canCompactContext: Boolean,
@@ -904,7 +928,9 @@ private fun AgentChatBottomBar(
     onAttachFilePath: (String) -> Unit,
     onRemoveFileReference: (String) -> Unit,
     onCancelMessageEdit: () -> Unit,
+    goal: AgentGoalControls,
 ) {
+    var showGoalDialog by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -963,6 +989,12 @@ private fun AgentChatBottomBar(
                 .navigationBarsPadding()
                 .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
         ) {
+            AgentGoalRow(controls = goal, onEdit = { showGoalDialog = true })
+            QueuedMessagePanel(
+                queued = queuedMessages,
+                onSteer = onSteerQueuedMessage,
+                onRemove = onRemoveQueuedMessage,
+            )
             AgentChatInputBar(
                 input = input,
                 modelPickerState = modelPickerState,
@@ -990,8 +1022,83 @@ private fun AgentChatBottomBar(
                 onAttachFilePath = onAttachFilePath,
                 onRemoveFileReference = onRemoveFileReference,
                 onCancelMessageEdit = onCancelMessageEdit,
+                onOpenGoal = { showGoalDialog = true },
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+    }
+    if (showGoalDialog) {
+        AgentGoalDialog(
+            initial = goal.goal.orEmpty(),
+            onDismiss = { showGoalDialog = false },
+            onSave = { text ->
+                showGoalDialog = false
+                goal.onSave(text)
+            },
+            onClear = {
+                showGoalDialog = false
+                goal.onClear()
+            },
+        )
+    }
+}
+
+/**
+ * 运行中队列：把"再发一条"从丢弃改成等待。
+ *
+ * 「引导」把这条消息插进当前 run 的下一轮——在 turn 边界生效，不打断正在跑的模型请求；
+ * 不引导的话，本轮结束后队首会自动作为普通消息发出，不会静默丢失。
+ */
+@Composable
+private fun QueuedMessagePanel(
+    queued: List<QueuedMessageUi>,
+    onSteer: (String) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    if (queued.isEmpty()) return
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        queued.forEach { item ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MiuixTheme.colorScheme.surfaceContainerHigh)
+                    .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = item.preview,
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(R.string.chat_queue_steer),
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onSteer(item.id) }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = stringResource(R.string.chat_queue_remove),
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable { onRemove(item.id) }
+                        .padding(6.dp)
+                        .size(16.dp),
+                )
+            }
         }
     }
 }

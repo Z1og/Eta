@@ -259,6 +259,43 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
                     if (runId.isNotBlank()) cancelRun(runId)
                 }
 
+                AgentRuntimeWire.MSG_STEER -> {
+                    val data = msg.data
+                    val runId = data?.let(AgentRuntimeWire::runIdFromBundle).orEmpty()
+                    val text = data?.let(AgentRuntimeWire::steerTextFromBundle).orEmpty()
+                    val accepted = activeSession?.let { session ->
+                        !session.isTerminal &&
+                            (runId.isBlank() || runId == session.runId) &&
+                            session.controller.steer(text)
+                    } ?: false
+                    msg.replyTo?.let { target ->
+                        runCatching {
+                            target.send(
+                                Message.obtain(null, AgentRuntimeWire.MSG_STEER_RESPONSE).apply {
+                                    this.data = AgentRuntimeWire.steerResponseBundle(runId, accepted)
+                                },
+                            )
+                        }
+                    }
+                }
+
+                AgentRuntimeWire.MSG_PAUSE -> {
+                    val runId = msg.data?.let(AgentRuntimeWire::runIdFromBundle).orEmpty()
+                    if (runId.isBlank() || runId == activeSession?.runId) requestPause()
+                }
+
+                AgentRuntimeWire.MSG_RESUME -> {
+                    val runId = msg.data?.let(AgentRuntimeWire::runIdFromBundle).orEmpty()
+                    if (runId.isBlank() || runId == activeSession?.runId) requestResume()
+                }
+
+                AgentRuntimeWire.MSG_CANCEL_GOAL -> {
+                    val runId = msg.data?.let(AgentRuntimeWire::runIdFromBundle).orEmpty()
+                    if (runId.isBlank() || runId == activeSession?.runId) {
+                        activeSession?.controller?.cancelGoal()
+                    }
+                }
+
                 AgentRuntimeWire.MSG_ACK_RESULT -> {
                     val runId = AgentRuntimeWire.runIdFromBundle(msg.data ?: return)
                     dispatchResultIo { AgentRuntimeResultStore.remove(this@AgentRuntimeService, runId) }

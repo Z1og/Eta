@@ -436,6 +436,7 @@ internal class AgentRuntimeRunExecutor(
                     skillContext = skillContext,
                     memoryContext = memoryContext,
                     userPrompt = userPrompt,
+                    goal = request.goal,
                     additionalTools = runTools,
                     executionContext = executor.terminalExecutionContext,
                 ) { event ->

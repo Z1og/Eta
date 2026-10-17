@@ -8,6 +8,7 @@ import io.github.mangi.eta.ui.components.AgentChatBody
 import io.github.mangi.eta.ui.components.LocalRoleplayChat
 import io.github.mangi.eta.ui.components.chatConversationCompositionKey
 import io.github.mangi.eta.ui.model.AgentChatHomeUiState
+import io.github.mangi.eta.ui.model.AgentGoalControls
 import io.github.mangi.eta.ui.model.AgentHomeAction
 import io.github.mangi.eta.ui.model.AgentModelPickerUiState
 import io.github.mangi.eta.ui.model.roleplayChatUi
@@ -45,6 +46,18 @@ internal fun AgentHomeScreen(
             canCompactContext = state.canCompactContext,
             onModelSelected = { onAction(AgentHomeAction.ModelSelected(it)) },
             onSubmit = { text -> onAction(AgentHomeAction.SubmitMessage(text)) },
+            queuedMessages = state.queuedMessages,
+            onSteerQueuedMessage = { id -> onAction(AgentHomeAction.SteerQueuedMessage(id)) },
+            onRemoveQueuedMessage = { id -> onAction(AgentHomeAction.RemoveQueuedMessage(id)) },
+            goal = AgentGoalControls(
+                goal = state.goal,
+                paused = state.goalPaused,
+                running = state.isStreaming,
+                onSave = { text -> onAction(AgentHomeAction.SaveGoal(text)) },
+                onPause = { onAction(AgentHomeAction.PauseGoal) },
+                onResume = { onAction(AgentHomeAction.ResumeGoal) },
+                onClear = { onAction(AgentHomeAction.ClearGoal) },
+            ),
             onStop = { onAction(AgentHomeAction.StopRun) },
             onAttachImage = { uri -> onAction(AgentHomeAction.ImageAttached(uri)) },
             onRemoveImage = { id -> onAction(AgentHomeAction.RemoveImage(id)) },

@@ -83,6 +83,21 @@ internal object AgentRuntimeWire {
     /** service -> client：返回是否成功重新订阅指定 run。 */
     const val MSG_ATTACH_RUN_RESPONSE = 12
 
+    /** client -> service：向正在运行的 run 排入一条补充指令（steering）。 */
+    const val MSG_STEER = 13
+
+    /** service -> client：返回该补充指令是否被接受（run 已收尾时会拒绝）。 */
+    const val MSG_STEER_RESPONSE = 14
+
+    /** client -> service：暂停当前 run（在下一个检查点挂起）。 */
+    const val MSG_PAUSE = 15
+
+    /** client -> service：恢复被暂停的 run。 */
+    const val MSG_RESUME = 16
+
+    /** client -> service：放弃当前 run 的持续目标，不再自动续跑。 */
+    const val MSG_CANCEL_GOAL = 17
+
     private const val MODULE_PACKAGE = "io.github.mangi.eta"
     private const val SERVICE_CLASS = "io.github.mangi.eta.agent.runtime.AgentRuntimeService"
 
@@ -103,6 +118,12 @@ internal object AgentRuntimeWire {
     private const val KEY_DECLARED_CONTEXT_WINDOW = "declared_context_window"
     private const val KEY_AUTO_COMPACTION_ENABLED = "auto_compaction_enabled"
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
+
+    /** 跨进程传递的补充指令正文。 */
+    private const val KEY_STEER_TEXT = "steer_text"
+
+    /** 持续目标正文：随 run 请求一次性下发，不落 IPC 之外的任何全局状态。 */
+    private const val KEY_GOAL = "goal_text"
     private const val KEY_ANTHROPIC_VERSION = "anthropic_version"
     private const val KEY_OPENAI_ENDPOINT_MODE = "openai_endpoint_mode"
     private const val KEY_HOSTED_WEB_SEARCH_ENABLED = "hosted_web_search_enabled"
@@ -165,6 +186,11 @@ internal object AgentRuntimeWire {
         val operation: String = OP_CHAT,
         val rewriteTargetMessageId: String? = null,
         val assistantScreenContext: String = "",
+        /**
+         * 本次运行要持续追求的目标正文。为空表示没有目标模式；
+         * 非空时 [AgentPromptBuilder] 会把它注入成独立 system 消息，循环也会围绕它续跑。
+         */
+        val goal: String = "",
     ) {
         // 旧入口沿用会话 handoff；无持久会话的入口以首个 run 为会话起点。
         val effectiveModelSessionId: String
@@ -305,6 +331,7 @@ internal object AgentRuntimeWire {
         request.config.declaredContextWindow?.let { putInt(KEY_DECLARED_CONTEXT_WINDOW, it) }
         putBoolean(KEY_AUTO_COMPACTION_ENABLED, request.config.autoCompactionEnabled)
         AgentWireText.put(this, KEY_SYSTEM_PROMPT, request.config.systemPrompt, payloadDirectory)
+        AgentWireText.put(this, KEY_GOAL, request.goal, payloadDirectory)
         putString(KEY_ANTHROPIC_VERSION, request.config.anthropicVersion)
         putString(KEY_OPENAI_ENDPOINT_MODE, request.config.openAiEndpointMode)
         putBoolean(KEY_HOSTED_WEB_SEARCH_ENABLED, request.config.hostedWebSearchEnabled)
@@ -419,6 +446,7 @@ internal object AgentRuntimeWire {
             assistantScreenContext = bundle.getString(KEY_ASSISTANT_SCREEN_CONTEXT).orEmpty().also {
                 require(it.length <= AssistantScreenContextProjection.MAX_CHARS) { "助理屏幕上下文超过容量预算" }
             },
+            goal = if (readText) AgentWireText.read(bundle, KEY_GOAL).orEmpty() else "",
             operation = bundle.getString("operation")?.also { require(it in setOf(OP_CHAT, OP_COMPACT, OP_REWRITE_REPLY)) } ?: OP_CHAT,
             rewriteTargetMessageId = bundle.getString("rewrite_target_message_id")?.also {
                 require(it.isNotBlank() && it.length <= 256) { "Invalid rewrite target" }
@@ -597,6 +625,21 @@ internal object AgentRuntimeWire {
     fun ackBundle(runId: String): Bundle = Bundle().apply {
         putString(KEY_RUN_ID, runId)
     }
+
+    fun steerBundle(runId: String, text: String): Bundle = Bundle().apply {
+        putString(KEY_RUN_ID, runId)
+        putString(KEY_STEER_TEXT, text)
+    }
+
+    fun steerTextFromBundle(bundle: Bundle): String =
+        bundle.getString(KEY_STEER_TEXT).orEmpty()
+
+    fun steerResponseBundle(runId: String, accepted: Boolean): Bundle = Bundle().apply {
+        putString(KEY_RUN_ID, runId)
+        putBoolean(KEY_OK, accepted)
+    }
+
+    fun steerAcceptedFromBundle(bundle: Bundle): Boolean = bundle.getBoolean(KEY_OK)
 
     fun attachRunResponseBundle(runId: String, attached: Boolean): Bundle = Bundle().apply {
         putString(KEY_RUN_ID, runId)

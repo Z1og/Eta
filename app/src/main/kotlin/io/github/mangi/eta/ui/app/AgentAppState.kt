@@ -28,6 +28,7 @@ import io.github.mangi.eta.agent.roleplay.CharacterCardCodec
 import io.github.mangi.eta.agent.roleplay.RoleplayMessageLink
 import io.github.mangi.eta.agent.roleplay.RoleplayMessageState
 import io.github.mangi.eta.data.repository.CharacterRepository
+import io.github.mangi.eta.data.repository.AgentGoalRepository
 import io.github.mangi.eta.agent.runtime.AgentEvent
 import io.github.mangi.eta.agent.runtime.AgentExecutionService
 import io.github.mangi.eta.agent.runtime.AgentExternalArchivePayload
@@ -60,6 +61,7 @@ import io.github.mangi.eta.ui.model.ConversationSummaryUi
 import io.github.mangi.eta.ui.model.MessageEditUiState
 import io.github.mangi.eta.ui.model.PendingFileReferenceUi
 import io.github.mangi.eta.ui.model.PendingImageUi
+import io.github.mangi.eta.ui.model.QueuedMessageUi
 import io.github.mangi.eta.ui.model.SystemNoticeCode
 import io.github.mangi.eta.ui.model.SystemNoticeMessageUi
 import io.github.mangi.eta.ui.model.ThinkingMessageUi
@@ -825,9 +827,13 @@ internal class AgentAppState(
         val pendingImages = homeState.pendingImages
         val pendingFileReferences = homeState.pendingFileReferences
         if (
-            (prompt.isBlank() && pendingImages.isEmpty() && pendingFileReferences.isEmpty()) ||
-            homeState.isStreaming
+            prompt.isBlank() && pendingImages.isEmpty() && pendingFileReferences.isEmpty()
         ) {
+            return
+        }
+        if (homeState.isStreaming) {
+            // 运行中不再丢弃：入队后可以「引导」进当前这轮，或等本轮结束后自动发出。
+            enqueueWhileRunning(prompt, pendingImages, pendingFileReferences)
             return
         }
         homeState.messageEdit?.takeIf { it.preserveFollowingMessages }?.let { edit ->
@@ -1226,6 +1232,8 @@ internal class AgentAppState(
                         rewriteTargetMessageId = rewriteTargetMessageId,
                         runId = runId,
                         prompt = prompt,
+                        // 目标随请求跨进程下发：service 侧据此注入系统提示并决定是否续跑。
+                        goal = runCatching { AgentGoalRepository.goal(conversationId) }.getOrDefault(""),
                         config = config,
                         images = modelImages,
                         history = history,
@@ -1546,6 +1554,169 @@ internal class AgentAppState(
         }
     }
 
+    /**
+     * 运行中提交的消息进入队列：既不进本次上下文，也不会被丢掉。
+     *
+     * 附件不能排队——它们要在请求发出时随图传输，而这次请求已经在路上了；
+     * 硬塞进去只会让用户以为附件发出去了。
+     */
+    private fun enqueueWhileRunning(
+        prompt: String,
+        pendingImages: List<PendingImageUi>,
+        pendingFileReferences: List<PendingFileReferenceUi>,
+    ) {
+        if (prompt.isBlank()) return
+        if (pendingImages.isNotEmpty() || pendingFileReferences.isNotEmpty()) {
+            Toast.makeText(
+                appContext,
+                appContext.getString(R.string.chat_queue_blocked_attachment),
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val conversationId = selectedConversationId ?: return
+        val state = conversationsById[conversationId] ?: return
+        val item = QueuedMessageUi(id = "queued-${UUID.randomUUID()}", content = prompt)
+        updateConversation(
+            conversationId,
+            state.copy(queuedMessages = state.queuedMessages + item, input = ""),
+        )
+    }
+
+    /**
+     * 把排队消息「引导」进当前 run（在 turn 边界生效，不打断正在跑的请求）。
+     *
+     * 没有在跑的 run 时（例如用户刚按过停止），这条按钮等于「现在就发」；
+     * 服务端已收尾拒绝接收时保留在队列里，不会静默消失。
+     */
+    fun steerQueuedMessage(id: String) {
+        val conversationId = selectedConversationId ?: return
+        val state = conversationsById[conversationId] ?: return
+        val item = state.queuedMessages.firstOrNull { it.id == id } ?: return
+        val runId = currentRunId
+        if (runId == null) {
+            updateConversation(
+                conversationId,
+                state.copy(queuedMessages = state.queuedMessages.filterNot { it.id == id }),
+            )
+            sendCurrentMessage(item.content)
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            val accepted = AgentRuntimeClient(appContext, AndroidAgentLogger).steer(runId, item.content)
+            if (!accepted) return@launch
+            withContext(Dispatchers.Main) {
+                val latest = conversationsById[conversationId] ?: return@withContext
+                updateConversation(
+                    conversationId,
+                    latest.copy(queuedMessages = latest.queuedMessages.filterNot { it.id == id }),
+                )
+            }
+        }
+    }
+
+    fun removeQueuedMessage(id: String) {
+        val conversationId = selectedConversationId ?: return
+        val state = conversationsById[conversationId] ?: return
+        updateConversation(
+            conversationId,
+            state.copy(queuedMessages = state.queuedMessages.filterNot { it.id == id }),
+        )
+    }
+
+    /** 本轮正常结束后把队首当普通消息发出；只处理当前会话，后台会话的队列留着。 */
+    private fun flushQueuedMessage(conversationId: String) {
+        if (conversationId != selectedConversationId) return
+        val state = conversationsById[conversationId] ?: return
+        if (state.isStreaming || state.isCompacting) return
+        val next = state.queuedMessages.firstOrNull() ?: return
+        updateConversation(conversationId, state.copy(queuedMessages = state.queuedMessages.drop(1)))
+        sendCurrentMessage(next.content)
+    }
+
+    /** 把当前会话的目标读进 UI 状态；选中会话变化后调用。 */
+    fun refreshGoal() {
+        val conversationId = selectedConversationId
+        if (conversationId == null) {
+            if (homeState.goal != null || homeState.goalPaused) {
+                homeState = homeState.copy(goal = null, goalPaused = false)
+            }
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            val goal = runCatching { AgentGoalRepository.goal(conversationId) }.getOrDefault("")
+            withContext(Dispatchers.Main) {
+                if (selectedConversationId != conversationId) return@withContext
+                val state = conversationsById[conversationId] ?: return@withContext
+                val normalized = goal.takeIf { it.isNotBlank() }
+                if (state.goal == normalized) return@withContext
+                updateConversation(conversationId, state.copy(goal = normalized))
+            }
+        }
+    }
+
+    /** 保存目标。空正文等于取消目标——两种状态在存储层是同一件事。 */
+    fun saveGoal(text: String) {
+        val conversationId = selectedConversationId ?: return
+        scope.launch(Dispatchers.IO) {
+            val saved = runCatching { AgentGoalRepository.save(conversationId, text) }
+                .getOrElse { throwable ->
+                    Toast.makeText(
+                        appContext,
+                        throwable.message ?: "目标保存失败",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    return@launch
+                }
+            withContext(Dispatchers.Main) {
+                val state = conversationsById[conversationId] ?: return@withContext
+                updateConversation(
+                    conversationId,
+                    state.copy(goal = saved.takeIf { it.isNotBlank() }, goalPaused = false),
+                )
+            }
+        }
+    }
+
+    /**
+     * 取消目标：删文件 + 让当前 run 停止续跑。
+     *
+     * 只删文件不够——正在跑的 run 已经把目标注入上下文了，不通知它就会一直续跑到上限。
+     */
+    fun clearGoal() {
+        val conversationId = selectedConversationId ?: return
+        val runId = currentRunId
+        scope.launch(Dispatchers.IO) {
+            runCatching { AgentGoalRepository.clear(conversationId) }
+            if (runId != null) {
+                AgentRuntimeClient(appContext, AndroidAgentLogger).cancelGoal(runId)
+            }
+            withContext(Dispatchers.Main) {
+                val state = conversationsById[conversationId] ?: return@withContext
+                updateConversation(conversationId, state.copy(goal = null, goalPaused = false))
+            }
+        }
+    }
+
+    /** 暂停目标推进：挂在下一个检查点，不取消本轮已生成的内容。 */
+    fun pauseGoal() {
+        val runId = currentRunId ?: return
+        scope.launch(Dispatchers.IO) { AgentRuntimeClient(appContext, AndroidAgentLogger).pauseRun(runId) }
+        setGoalPaused(true)
+    }
+
+    fun resumeGoal() {
+        val runId = currentRunId ?: return
+        scope.launch(Dispatchers.IO) { AgentRuntimeClient(appContext, AndroidAgentLogger).resumeRun(runId) }
+        setGoalPaused(false)
+    }
+
+    private fun setGoalPaused(paused: Boolean) {
+        val conversationId = selectedConversationId ?: return
+        val state = conversationsById[conversationId] ?: return
+        updateConversation(conversationId, state.copy(goalPaused = paused))
+    }
+
     private fun applyRunResult(
         runId: String,
         result: AgentRuntimeWire.RunResult,
@@ -1610,6 +1781,14 @@ internal class AgentAppState(
         conversationIdForRun(runId)?.let { id -> conversationsById[id]?.let {
             updateConversation(id, RoleplayConversationReducer.linkRun(it, runId))
         } }
+        // 正常结束才续发排队消息：用户主动停止时队列原地保留，等他自己决定。
+        if (result.ok) conversationIdForRun(runId)?.let(::flushQueuedMessage)
+        // run 已经不在跑，暂停状态必须复位，否则目标行会一直显示「继续」。
+        conversationIdForRun(runId)?.let { id ->
+            conversationsById[id]?.takeIf { it.goalPaused }?.let { state ->
+                updateConversation(id, state.copy(goalPaused = false))
+            }
+        }
         runMessageProjector.clearRun(runId)
         runConversationIds.remove(runId)
         refreshConversationSummaries()

@@ -28,10 +28,30 @@ internal data class AgentChatUiState(
     val roleplayMessages: RoleplayMessageState = RoleplayMessageState(),
     /** 会话最近一次发送使用的本地 Model.id；null 表示尚未绑定，跟随默认模型。 */
     val modelId: String? = null,
+    /**
+     * 运行中提交的消息。它们还没进入模型上下文：可以「引导」进当前这轮，
+     * 也可以删掉；本轮结束后队首会自动作为普通消息发出。
+     */
+    val queuedMessages: List<QueuedMessageUi> = emptyList(),
+    /** 当前会话的持续目标；null 表示没有开启目标模式。 */
+    val goal: String? = null,
+    /** 目标模式被用户暂停：run 挂在下一个检查点，等继续。 */
+    val goalPaused: Boolean = false,
 ) {
     val canCompactContext: Boolean get() = !isStreaming && messageEdit == null && history.any {
         !it.contextSummary && (it.role == "assistant" || it.role == "tool")
     }
+}
+
+/** 一条等待发送的消息。[content] 是用户原始输入，不含任何内部前缀。 */
+@Immutable
+data class QueuedMessageUi(
+    val id: String,
+    val content: String,
+) {
+    /** 输入区那一行卡片只展示首行，避免整段提示词把输入框顶掉。 */
+    val preview: String
+        get() = content.lineSequence().firstOrNull()?.trim()?.take(160).orEmpty()
 }
 
 @Immutable

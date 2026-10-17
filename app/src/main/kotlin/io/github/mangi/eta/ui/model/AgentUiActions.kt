@@ -9,6 +9,12 @@ sealed interface AgentHomeAction {
     data class ReasoningEffortChanged(val effort: ReasoningEffort) : AgentHomeAction
     data class ModelSelected(val modelId: String) : AgentHomeAction
     data class SubmitMessage(val text: String) : AgentHomeAction
+    data class SteerQueuedMessage(val id: String) : AgentHomeAction
+    data class RemoveQueuedMessage(val id: String) : AgentHomeAction
+    data class SaveGoal(val text: String) : AgentHomeAction
+    data object ClearGoal : AgentHomeAction
+    data object PauseGoal : AgentHomeAction
+    data object ResumeGoal : AgentHomeAction
     data object StopRun : AgentHomeAction
     data class ImageAttached(val uri: String) : AgentHomeAction
     data class RemoveImage(val id: String) : AgentHomeAction
