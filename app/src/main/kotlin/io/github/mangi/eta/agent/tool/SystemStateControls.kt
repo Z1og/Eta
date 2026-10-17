@@ -95,6 +95,13 @@ internal class SystemStateControls(
     }
 
     companion object {
+        /**
+         * 可写目标白名单。
+         *
+         * 刻意**不含 `auto_rotate`**：模型会在跑任务时"顺手"把自动旋转打开，用户看到的是
+         * 「eta 一运行屏幕就自己转」。自动旋转是用户自己的显示偏好，不该由 agent 改。
+         * 读取仍然支持（[read] 有独立分支），只是不能再写。
+         */
         val targets =
             listOf(
                 "wifi",
@@ -104,7 +111,6 @@ internal class SystemStateControls(
                 "location",
                 "nfc",
                 "battery_saver",
-                "auto_rotate",
                 "auto_brightness",
                 "dark_mode",
                 "night_light",
@@ -119,7 +125,6 @@ internal class SystemStateControls(
                 "location" -> "cmd location set-location-enabled $enabled --user $userId"
                 "nfc" -> "cmd nfc ${if (enabled) "enable-nfc" else "disable-nfc persist"}"
                 "battery_saver" -> "cmd power set-mode $value"
-                "auto_rotate" -> "settings --user $userId put system accelerometer_rotation $value"
                 "auto_brightness" ->
                     "settings --user $userId put system screen_brightness_mode $value"
                 "dark_mode" -> "cmd uimode night ${if (enabled) "yes" else "no"}"
