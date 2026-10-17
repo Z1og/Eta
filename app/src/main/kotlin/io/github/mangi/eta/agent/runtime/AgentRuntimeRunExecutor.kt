@@ -466,7 +466,7 @@ internal class AgentRuntimeRunExecutor(
                     else -> runToolExecutor.execute(call)
                 }
             }
-            subAgentTool = AgentSubAgentTool { role, prompt ->
+            subAgentTool = AgentSubAgentTool { role, prompt, complexity ->
                 val childExecutor = subAgentExecutor
                 if (childExecutor == null) {
                     errorToolResult("SUBAGENT_UNAVAILABLE", "子代理执行器未就绪")
@@ -490,7 +490,9 @@ internal class AgentRuntimeRunExecutor(
                     try {
                         val response = AgentModelClient.complete(
                             config = request.config,
-                            maxRounds = SUB_AGENT_MAX_ROUNDS,
+                            // 轮次按子任务复杂度分档：简单 6、普通 12、复杂 24。
+                            // 给简单任务 24 轮只会让它反复改同一处；给复杂任务 6 轮会半路掐断。
+                            maxRounds = complexity.rounds,
                             prompt = buildString {
                                 appendLine("你是主代理派出的子代理，角色：$role。")
                                 appendLine("你看不到主对话，只依据下面的任务说明工作。")
@@ -823,10 +825,7 @@ private const val LEARN_WINDOW_TIMEOUT_MS = 10_000L
 /** 口头拒绝后用当前 provider 原样重试的次数上限。 */
 private const val REFUSAL_RETRY_MAX_ATTEMPTS = 2
 
-/** 子代理轮次上限：没有用户盯着，含糊任务不会自己认输。 */
-private const val SUB_AGENT_MAX_ROUNDS = 12
-
-/** 子代理墙钟上限：轮次再宽松也得有个终点，防止单个子代理拖住整批。 */
+/** 子代理墙钟上限：轮次分档再宽松也得有个终点，防止单个子代理拖住整批。 */
 private const val SUB_AGENT_TIMEOUT_MS = 300_000L
 
 /** 工具层的失败结果：统一 `{ok:false, code, message}`，模型能据此换方案而不是崩掉。 */private fun errorToolResult(code: String, message: String): AgentModelClient.ToolResult =

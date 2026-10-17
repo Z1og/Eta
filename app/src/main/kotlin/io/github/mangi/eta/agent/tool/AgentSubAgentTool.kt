@@ -10,6 +10,19 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** 一条解析后的子任务；[complexity] 是主代理显式声明的档位，null 表示交给启发式估。 */
+private data class ParsedSubTask(
+    val role: String,
+    val prompt: String,
+    val complexity: SubAgentComplexity?,
+)
+
+private data class SubAgentOutcome(
+    val task: ParsedSubTask,
+    val complexity: SubAgentComplexity,
+    val result: Result<AgentModelClient.ToolResult>,
+)
+
 /**
  * 并行子代理。
  *
@@ -24,7 +37,11 @@ import org.json.JSONObject
  * 需要看屏幕的步骤留给主代理，子代理只做读写文件、跑终端、查网络这类活。
  */
 internal class AgentSubAgentTool(
-    private val runOne: (role: String, prompt: String) -> AgentModelClient.ToolResult,
+    private val runOne: (
+        role: String,
+        prompt: String,
+        complexity: SubAgentComplexity,
+    ) -> AgentModelClient.ToolResult,
 ) {
     fun execute(call: AgentModelClient.ToolCall): AgentModelClient.ToolResult {
         val args = runCatching { JSONObject(call.argumentsJson.ifBlank { "{}" }) }.getOrNull()
@@ -38,14 +55,29 @@ internal class AgentSubAgentTool(
             val item = array.optJSONObject(index) ?: return@mapNotNull null
             val role = item.optString("role").trim().ifBlank { "子任务 ${index + 1}" }
             val prompt = item.optString("prompt").trim()
-            if (prompt.isEmpty()) null else role to prompt
+            if (prompt.isEmpty()) {
+                null
+            } else {
+                ParsedSubTask(
+                    role = role,
+                    prompt = prompt,
+                    complexity = SubAgentComplexity.fromWire(item.optString("complexity")),
+                )
+            }
         }
         if (tasks.isEmpty()) return failure("SUBAGENT_EMPTY", "每个子代理都需要 prompt")
 
         val results = runBlocking {
             coroutineScope {
-                tasks.map { (role, prompt) ->
-                    async(Dispatchers.IO) { role to runCatching { runOne(role, prompt) } }
+                tasks.map { task ->
+                    val complexity = SubAgentBudget.complexityOf(task.prompt, task.complexity)
+                    async(Dispatchers.IO) {
+                        SubAgentOutcome(
+                            task = task,
+                            complexity = complexity,
+                            result = runCatching { runOne(task.role, task.prompt, complexity) },
+                        )
+                    }
                 }.awaitAll()
             }
         }
@@ -53,8 +85,8 @@ internal class AgentSubAgentTool(
         val payload = JSONArray()
         val summary = StringBuilder()
         var failures = 0
-        results.forEach { (role, outcome) ->
-            val result = outcome.getOrNull()
+        results.forEach { outcome ->
+            val result = outcome.result.getOrNull()
             // 子代理回的不是 JSON 时按成功处理：它是自然语言结论，不是错误。
             val ok = result != null && runCatching {
                 JSONObject(result.content).optBoolean("ok", true)
@@ -62,12 +94,22 @@ internal class AgentSubAgentTool(
             if (!ok) failures++
             payload.put(
                 JSONObject()
-                    .put("role", role)
+                    .put("role", outcome.task.role)
                     .put("ok", ok)
-                    .put("content", (result?.content ?: outcome.exceptionOrNull()?.message.orEmpty()).take(MAX_RESULT_CHARS)),
+                    .put("complexity", outcome.complexity.wireValue)
+                    .put("max_rounds", outcome.complexity.rounds)
+                    .put(
+                        "content",
+                        (result?.content ?: outcome.result.exceptionOrNull()?.message.orEmpty())
+                            .take(MAX_RESULT_CHARS),
+                    ),
             )
-            summary.append(if (ok) "### " else "### [失败] ").append(role).append('\n')
-            summary.append((result?.content ?: outcome.exceptionOrNull()?.message ?: "无结果").take(MAX_RESULT_CHARS))
+            summary.append(if (ok) "### " else "### [失败] ").append(outcome.task.role)
+                .append("（").append(outcome.complexity.rounds).append(" 轮上限）").append('\n')
+            summary.append(
+                (result?.content ?: outcome.result.exceptionOrNull()?.message ?: "无结果")
+                    .take(MAX_RESULT_CHARS),
+            )
             summary.append("\n\n")
         }
 
@@ -128,6 +170,25 @@ internal class AgentSubAgentTool(
                                                 "prompt",
                                                 JSONObject().put("type", "string").put("maxLength", 4_000)
                                                     .put("description", "完整任务说明，含背景、要做什么、交付什么"),
+                                            )
+                                            .put(
+                                                "complexity",
+                                                JSONObject()
+                                                    .put("type", "string")
+                                                    .put(
+                                                        "enum",
+                                                        JSONArray()
+                                                            .put(SubAgentComplexity.Simple.wireValue)
+                                                            .put(SubAgentComplexity.Normal.wireValue)
+                                                            .put(SubAgentComplexity.Complex.wireValue),
+                                                    )
+                                                    .put(
+                                                        "description",
+                                                        "这条子任务的复杂度，决定它能跑多少轮：" +
+                                                            "simple=6 轮（一两步就能做完）、normal=12 轮、" +
+                                                            "complex=24 轮（要通读多份材料或反复验证）。" +
+                                                            "省略时按 prompt 的长度与信号词自动估。不要一律填 complex。",
+                                                    ),
                                             ),
                                     )
                                     .put("required", JSONArray().put("role").put("prompt")),

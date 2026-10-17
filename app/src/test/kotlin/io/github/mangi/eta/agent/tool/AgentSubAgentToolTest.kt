@@ -15,7 +15,7 @@ class AgentSubAgentToolTest {
         val concurrent = AtomicInteger()
         val maxConcurrent = AtomicInteger()
         val gate = CountDownLatch(1)
-        val tool = AgentSubAgentTool { role, _ ->
+        val tool = AgentSubAgentTool { role, _, _ ->
             val now = concurrent.incrementAndGet()
             maxConcurrent.updateAndGet { maxOf(it, now) }
             // 三个都起来了才放行；串行实现会在这里逐个超时，maxConcurrent 永远到不了 3。
@@ -50,7 +50,7 @@ class AgentSubAgentToolTest {
 
     @Test
     fun oneFailingSubAgentDoesNotDiscardTheOthers() {
-        val tool = AgentSubAgentTool { role, _ ->
+        val tool = AgentSubAgentTool { role, _, _ ->
             if (role == "坏掉的那个") {
                 throw IllegalStateException("子代理崩了")
             }
@@ -77,7 +77,7 @@ class AgentSubAgentToolTest {
     @Test
     fun emptyOrOversizedBatchesAreRejectedBeforeSpawningAnything() {
         var invoked = 0
-        val tool = AgentSubAgentTool { _, _ ->
+        val tool = AgentSubAgentTool { _, _, _ ->
             invoked++
             AgentModelClient.ToolResult("不应被调用")
         }
