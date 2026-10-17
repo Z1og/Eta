@@ -1005,6 +1005,32 @@ class AgentModelClientLoopTest {
         assertTrue(provider.requests[1].toString().contains("还有 2 条待办"))
     }
 
+    @Test
+    fun roundCapStopsASubAgentThatKeepsCallingTools() {
+        var index = 0
+        val provider = ScriptedProvider(List(10) {
+            { _, _ ->
+                index++
+                assistant(
+                    finishReason = "tool_calls",
+                    toolCalls = listOf(toolCall("c$index", "get_current_context", "{}")),
+                )
+            }
+        })
+
+        assertThrows(AgentModelExecutionException::class.java) {
+            AgentModelClient.complete(
+                modelConfig(), "做点事",
+                AgentModelClient.ToolExecutor { AgentModelClient.ToolResult("""{"ok":true}""") },
+                provider = provider,
+                maxRounds = 2,
+            )
+        }
+
+        // 没有上限时这个脚本会一直跑下去：子代理必须能被硬性截停。
+        assertEquals(2, provider.requests.size)
+    }
+
     private class ScriptedProvider(
         private val responses: List<(ProviderRequest, AgentRunController) -> JSONObject>,
     ) : AgentProviderClient {

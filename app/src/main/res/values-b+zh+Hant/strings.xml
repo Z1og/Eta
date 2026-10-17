@@ -1144,6 +1144,10 @@
   <string name="chat_goal_dialog_title">目標</string>
   <string name="chat_goal_dialog_hint">寫下你要的結果。Eta 會一直推進，直到它回報目標已達成。</string>
   <string name="chat_goal_save">設為目標</string>
+  <string name="chat_goal_tasks_title">子任務清單</string>
+  <string name="chat_goal_tasks_empty">還沒拆解子任務。Eta 開始動手時會先拆解。</string>
+  <string name="chat_goal_edit">編輯目標</string>
+  <string name="chat_goal_close">關閉</string>
   <string name="chat_input_hint">交給 Eta 完成</string>
   <string name="chat_stop">停止</string>
   <string name="chat_send">傳送</string>

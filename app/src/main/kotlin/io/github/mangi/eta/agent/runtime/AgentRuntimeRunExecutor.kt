@@ -471,9 +471,23 @@ internal class AgentRuntimeRunExecutor(
                     // 每个子代理独立上下文、独立取消器：主 run 被取消时级联终止，不留后台野进程。
                     val childController = AgentRunController()
                     val binding = runController.register { childController.cancel() }
+                    // 子代理没有用户盯着，轮次上限之外再加一道墙钟：超过就直接取消，
+                    // 让它在检查点抛取消异常，而不是无限跑下去烧 token。
+                    val watchdog = Thread {
+                        try {
+                            Thread.sleep(SUB_AGENT_TIMEOUT_MS)
+                            childController.cancel()
+                        } catch (_: InterruptedException) {
+                            // 正常结束时由 finally 打断，属于预期路径。
+                        }
+                    }.apply {
+                        isDaemon = true
+                        start()
+                    }
                     try {
                         val response = AgentModelClient.complete(
                             config = request.config,
+                            maxRounds = SUB_AGENT_MAX_ROUNDS,
                             prompt = buildString {
                                 appendLine("你是主代理派出的子代理，角色：$role。")
                                 appendLine("你看不到主对话，只依据下面的任务说明工作。")
@@ -499,6 +513,7 @@ internal class AgentRuntimeRunExecutor(
                     } catch (throwable: Throwable) {
                         errorToolResult("SUBAGENT_FAILED", throwable.message ?: "子代理执行失败")
                     } finally {
+                        watchdog.interrupt()
                         binding.close()
                     }
                 }
@@ -805,8 +820,13 @@ private const val LEARN_WINDOW_TIMEOUT_MS = 10_000L
 /** 口头拒绝后用当前 provider 原样重试的次数上限。 */
 private const val REFUSAL_RETRY_MAX_ATTEMPTS = 2
 
-/** 工具层的失败结果：统一 `{ok:false, code, message}`，模型能据此换方案而不是崩掉。 */
-private fun errorToolResult(code: String, message: String): AgentModelClient.ToolResult =
+/** 子代理轮次上限：没有用户盯着，含糊任务不会自己认输。 */
+private const val SUB_AGENT_MAX_ROUNDS = 12
+
+/** 子代理墙钟上限：轮次再宽松也得有个终点，防止单个子代理拖住整批。 */
+private const val SUB_AGENT_TIMEOUT_MS = 300_000L
+
+/** 工具层的失败结果：统一 `{ok:false, code, message}`，模型能据此换方案而不是崩掉。 */private fun errorToolResult(code: String, message: String): AgentModelClient.ToolResult =
     AgentModelClient.ToolResult(
         JSONObject().put("ok", false).put("code", code).put("message", message).toString(),
     )

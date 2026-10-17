@@ -1175,6 +1175,10 @@
   <string name="chat_goal_dialog_title">Goal</string>
   <string name="chat_goal_dialog_hint">Describe the outcome you want. Eta keeps working until it reports the goal is done.</string>
   <string name="chat_goal_save">Set goal</string>
+  <string name="chat_goal_tasks_title">Subtasks</string>
+  <string name="chat_goal_tasks_empty">No subtasks yet. Eta splits the goal when it starts working.</string>
+  <string name="chat_goal_edit">Edit goal</string>
+  <string name="chat_goal_close">Close</string>
   <string name="chat_input_hint">Ask Eta to do something</string>
   <string name="chat_stop">Stop</string>
   <string name="chat_send">Send</string>

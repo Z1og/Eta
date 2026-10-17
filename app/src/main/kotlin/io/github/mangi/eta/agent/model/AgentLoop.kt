@@ -39,6 +39,8 @@ internal class AgentLoop(
     private val goal: String = "",
     /** 当前子任务清单进度；有清单时以清单为完成依据，而不是模型自己的说法。 */
     private val goalProgress: (() -> GoalProgress?)? = null,
+    /** 本地轮次上限，0 表示不设限（主 run 沿用模型自然结束）。子代理必须给上限。 */
+    private val maxRounds: Int = 0,
 ) {
     data class Result(
         val content: String,
@@ -100,6 +102,14 @@ internal class AgentLoop(
         var consecutiveRefusals = 0
 
         while (true) {
+            // 子代理没有用户盯着，必须有本地上限：目标写得含糊时它不会自己认输。
+            if (maxRounds > 0 && round > maxRounds) {
+                throw AgentModelFailure(
+                    "ROUND_LIMIT",
+                    false,
+                    "本次运行超过 $maxRounds 轮上限，已停止；请缩小任务范围后重试。",
+                )
+            }
             runController.throwIfCancelled()
             if (purpose.allowsTools) appendPendingSteeringMessage()
 

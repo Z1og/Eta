@@ -18,6 +18,8 @@ internal data class AgentGoalControls(
     val running: Boolean = false,
     /** 目标拆解进度；null 表示还没拆过子任务。 */
     val taskProgress: TaskProgressUi? = null,
+    /** 完整清单，点开目标时展开。 */
+    val tasks: List<TaskItemUi> = emptyList(),
     val onSave: (String) -> Unit = {},
     val onPause: () -> Unit = {},
     val onResume: () -> Unit = {},

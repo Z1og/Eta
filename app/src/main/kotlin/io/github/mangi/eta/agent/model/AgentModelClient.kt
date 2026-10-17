@@ -114,6 +114,8 @@ internal object AgentModelClient {
         goalProgress: (() -> GoalProgress?)? = null,
         /** 与技能提示共用同一注入点：返回非空时作为一条上下文提示进 messages，不进会话 UI。 */
         taskPlanHint: (() -> String?)? = null,
+        /** 本地轮次上限，0 表示不设限；子代理必须显式给值。 */
+        maxRounds: Int = 0,
         onContextSnapshot: (AgentContextSnapshot) -> Unit = {},
         onTranscript: (List<ConversationMessage>) -> Unit = {},
         onEvent: (AgentEvent) -> Unit = {}
@@ -264,6 +266,7 @@ internal object AgentModelClient {
             initialSupplementIndex = initialSupplementIndex,
             goal = goal,
             goalProgress = goalProgress,
+            maxRounds = maxRounds,
             toolsForRound = ::toolsForRound,
             onToolResultsHint = if (rewriteReply) null else { toolText ->
                 listOfNotNull(midRunSkillHint(toolText), taskPlanHint?.invoke())

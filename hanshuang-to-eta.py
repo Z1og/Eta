@@ -42,6 +42,33 @@ def write_lf(path, text: str) -> None:
         f.write(text)
 
 
+# 破甲记忆在 App 里是随包资产：装配时写成 filesDir/prompts/破甲记忆.md。
+# 资产文件名必须保持 ASCII —— 中文名在 zip 条目与 Robolectric 资源查找下都读不到，
+# 会让内置链路静默退化成"没有装配入口"。
+USER_PROTOCOL_SOURCE = ("memory", "破甲记忆.md")
+USER_PROTOCOL_ASSET = Path("app/src/main/assets/user_protocol/pojia-memory.md")
+USER_PROTOCOL_MAX_CHARS = 96_000
+
+
+def sync_user_protocol(repo_path: Path, project_root: Path) -> None:
+    """把上游 memory/破甲记忆.md 同步成 App 的随包资产。"""
+    source = repo_path.joinpath(*USER_PROTOCOL_SOURCE)
+    target = project_root / USER_PROTOCOL_ASSET
+    if not source.is_file():
+        print("  [破甲记忆] 上游缺少 memory/破甲记忆.md，跳过（目录结构可能又变了）")
+        return
+    text = source.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if target.is_file() and target.read_text(encoding="utf-8").replace("\r\n", "\n") == text:
+        print(f"  [破甲记忆] 未变化（{len(text):,} 字符）")
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    write_lf(target, text)
+    warning = ""
+    if len(text) > USER_PROTOCOL_MAX_CHARS:
+        warning = f"；超过 {USER_PROTOCOL_MAX_CHARS:,} 字符上限，装配时会被截断"
+    print(f"  [破甲记忆] 已更新 {USER_PROTOCOL_ASSET}（{len(text):,} 字符）{warning}")
+
+
 # ============================================================
 # 配置
 # ============================================================
@@ -875,6 +902,7 @@ def main():
                         shutil.rmtree(target)
                     shutil.copytree(sd, target)
             print(f"  已部署到 builtin_skills")
+            sync_user_protocol(repo_path, project_root)
 
         print(f"  manifest: {len(unique)} 个 Skill")
 

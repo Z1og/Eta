@@ -20,7 +20,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.R
 import io.github.mangi.eta.data.repository.AgentGoalStore
+import io.github.mangi.eta.data.repository.AgentTaskStatus
 import io.github.mangi.eta.ui.model.AgentGoalControls
+import io.github.mangi.eta.ui.model.TaskItemUi
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.layout.DialogDefaults
@@ -36,7 +38,7 @@ import top.yukonga.miuix.kmp.window.WindowDialog
 @Composable
 internal fun AgentGoalRow(
     controls: AgentGoalControls,
-    onEdit: () -> Unit,
+    onOpenDetail: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (!controls.hasGoal) return
@@ -76,7 +78,7 @@ internal fun AgentGoalRow(
                 .weight(1f)
                 .padding(horizontal = 8.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onEdit),
+                .clickable(onClick = onOpenDetail),
         )
         if (controls.running) {
             GoalRowAction(
@@ -104,6 +106,83 @@ private fun GoalRowAction(text: String, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 4.dp),
     )
+}
+
+/** 目标详情：展开完整子任务清单。清单只读——改状态是模型通过 task_write 做的事。 */
+@Composable
+internal fun AgentTaskPlanDialog(
+    tasks: List<TaskItemUi>,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+) {
+    WindowDialog(
+        show = true,
+        cornerRadius = DialogDefaults.CornerRadius,
+        title = stringResource(R.string.chat_goal_tasks_title),
+        onDismissRequest = onDismiss,
+    ) {
+        Column {
+            if (tasks.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.chat_goal_tasks_empty),
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+            tasks.forEach { task ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 5.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(
+                        text = taskSymbol(task.status),
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = if (task.status == AgentTaskStatus.Done) {
+                            MiuixTheme.colorScheme.primary
+                        } else {
+                            MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = task.title,
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = if (task.status == AgentTaskStatus.Done) {
+                                MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            } else {
+                                MiuixTheme.colorScheme.onSurface
+                            },
+                        )
+                        if (task.note.isNotBlank()) {
+                            Text(
+                                text = task.note,
+                                style = MiuixTheme.textStyles.footnote1,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            )
+                        }
+                    }
+                }
+            }
+            MiuixDialogActions(
+                confirmText = stringResource(R.string.chat_goal_edit),
+                cancelText = stringResource(R.string.chat_goal_close),
+                onCancel = onDismiss,
+                onConfirm = onEdit,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+    }
+}
+
+private fun taskSymbol(status: AgentTaskStatus): String = when (status) {
+    AgentTaskStatus.Done -> "✓"
+    AgentTaskStatus.InProgress -> "▸"
+    AgentTaskStatus.Blocked -> "!"
+    AgentTaskStatus.Pending -> "○"
 }
 
 /** 目标编辑框：保存后从下一个 run 起注入；清空等于取消目标。 */

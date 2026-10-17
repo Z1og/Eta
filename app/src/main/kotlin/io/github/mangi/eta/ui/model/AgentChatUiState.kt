@@ -39,6 +39,8 @@ internal data class AgentChatUiState(
     val goalPaused: Boolean = false,
     /** 子任务清单进度；null 表示还没有拆解过。 */
     val taskProgress: TaskProgressUi? = null,
+    /** 完整清单，供目标详情展开；空表示没拆过。 */
+    val taskItems: List<TaskItemUi> = emptyList(),
 ) {
     val canCompactContext: Boolean get() = !isStreaming && messageEdit == null && history.any {
         !it.contextSummary && (it.role == "assistant" || it.role == "tool")
@@ -65,6 +67,15 @@ data class TaskProgressUi(
 
     val allDone: Boolean get() = total > 0 && done >= total
 }
+
+/** 清单里的一条，只给界面渲染用。 */
+@Immutable
+internal data class TaskItemUi(
+    val id: String,
+    val title: String,
+    val status: io.github.mangi.eta.data.repository.AgentTaskStatus,
+    val note: String = "",
+)
 
 @Immutable
 sealed interface AgentChatMessageUi {

@@ -931,6 +931,7 @@ private fun AgentChatBottomBar(
     goal: AgentGoalControls,
 ) {
     var showGoalDialog by remember { mutableStateOf(false) }
+    var showPlanDialog by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -989,7 +990,7 @@ private fun AgentChatBottomBar(
                 .navigationBarsPadding()
                 .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
         ) {
-            AgentGoalRow(controls = goal, onEdit = { showGoalDialog = true })
+            AgentGoalRow(controls = goal, onOpenDetail = { showPlanDialog = true })
             QueuedMessagePanel(
                 queued = queuedMessages,
                 onSteer = onSteerQueuedMessage,
@@ -1026,6 +1027,16 @@ private fun AgentChatBottomBar(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+    if (showPlanDialog) {
+        AgentTaskPlanDialog(
+            tasks = goal.tasks,
+            onDismiss = { showPlanDialog = false },
+            onEdit = {
+                showPlanDialog = false
+                showGoalDialog = true
+            },
+        )
     }
     if (showGoalDialog) {
         AgentGoalDialog(

@@ -64,6 +64,7 @@ import io.github.mangi.eta.ui.model.PendingFileReferenceUi
 import io.github.mangi.eta.ui.model.PendingImageUi
 import io.github.mangi.eta.ui.model.QueuedMessageUi
 import io.github.mangi.eta.ui.model.TaskProgressUi
+import io.github.mangi.eta.ui.model.TaskItemUi
 import io.github.mangi.eta.ui.model.SystemNoticeCode
 import io.github.mangi.eta.ui.model.SystemNoticeMessageUi
 import io.github.mangi.eta.ui.model.ThinkingMessageUi
@@ -1641,7 +1642,12 @@ internal class AgentAppState(
         val conversationId = selectedConversationId
         if (conversationId == null) {
             if (homeState.goal != null || homeState.goalPaused || homeState.taskProgress != null) {
-                homeState = homeState.copy(goal = null, goalPaused = false, taskProgress = null)
+                homeState = homeState.copy(
+                    goal = null,
+                    goalPaused = false,
+                    taskProgress = null,
+                    taskItems = emptyList(),
+                )
             }
             return
         }
@@ -1653,6 +1659,14 @@ internal class AgentAppState(
             val progress = plan?.takeIf { it.total > 0 }?.let {
                 TaskProgressUi(done = it.doneCount, total = it.total)
             }
+            val items = plan?.tasks.orEmpty().map { task ->
+                TaskItemUi(
+                    id = task.id,
+                    title = task.title,
+                    status = task.status,
+                    note = task.note,
+                )
+            }
             withContext(Dispatchers.Main) {
                 if (selectedConversationId != conversationId) return@withContext
                 val state = conversationsById[conversationId] ?: return@withContext
@@ -1660,7 +1674,7 @@ internal class AgentAppState(
                 if (state.goal == normalized && state.taskProgress == progress) return@withContext
                 updateConversation(
                     conversationId,
-                    state.copy(goal = normalized, taskProgress = progress),
+                    state.copy(goal = normalized, taskProgress = progress, taskItems = items),
                 )
             }
         }
@@ -1708,7 +1722,12 @@ internal class AgentAppState(
                 val state = conversationsById[conversationId] ?: return@withContext
                 updateConversation(
                     conversationId,
-                    state.copy(goal = null, goalPaused = false, taskProgress = null),
+                    state.copy(
+                        goal = null,
+                        goalPaused = false,
+                        taskProgress = null,
+                        taskItems = emptyList(),
+                    ),
                 )
             }
         }
