@@ -546,8 +546,22 @@ fun AgentAppRoot(
                                                 }
                                             }
                                         } else {
+                                            // 直接弹本应用的豁免对话框；部分 ROM 不支持时回落到列表页。
                                             runCatching {
-                                                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                                context.startActivity(
+                                                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                                                        .setData(
+                                                            android.net.Uri.parse(
+                                                                "package:${context.packageName}",
+                                                            ),
+                                                        ),
+                                                )
+                                            }.onFailure {
+                                                runCatching {
+                                                    context.startActivity(
+                                                        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                                                    )
+                                                }
                                             }
                                         }
                                     }

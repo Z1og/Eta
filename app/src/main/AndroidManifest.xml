@@ -3,6 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 锁屏后维持 CPU：屏幕关闭时前台服务还在，但没有唤醒锁，流式响应会被休眠掐断。 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 让用户可以把 eta 从电池优化里排除，避免息屏静置后网络被 Doze 切断。 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.READ_ASSIST_STRUCTURE_SCREEN_CONTENT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

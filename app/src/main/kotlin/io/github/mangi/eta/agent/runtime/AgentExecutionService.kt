@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.overlay.AgentOverlayStatus
 import io.github.mangi.eta.agent.overlay.localizedText
@@ -27,12 +28,24 @@ internal class AgentExecutionService : Service() {
     }
     private val owner = ownerSequence.incrementAndGet()
     private var foregroundActive = false
+
+    /** 执行期间持有；服务销毁时释放。锁屏后靠它维持 CPU，否则流式响应会被休眠掐断。 */
+    private var wakeLock: PowerManager.WakeLock? = null
     @Volatile private var startRejected = false
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         leases.attachOwner(owner)
+        // 锁屏后屏幕虽然关着，前台服务仍在；但 CPU 会休眠，模型流式响应与网络请求
+        // 会被挂起，表现就是"锁屏后卡住"。只在本服务存活期间持 PARTIAL_WAKE_LOCK
+        // （服务只在有执行租约时才存在），并带超时兜底，防止异常路径残留耗电。
+        wakeLock = getSystemService(PowerManager::class.java)
+            ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+            ?.apply {
+                setReferenceCounted(false)
+                runCatching { acquire(WAKE_LOCK_TIMEOUT_MS) }
+            }
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL, getString(R.string.execution_channel), NotificationManager.IMPORTANCE_LOW),
@@ -71,6 +84,9 @@ internal class AgentExecutionService : Service() {
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        // 先放唤醒锁再收任务：任务回收可能还要跑几秒，不该让 CPU 一直醒着。
+        wakeLock?.let { lock -> runCatching { if (lock.isHeld) lock.release() } }
+        wakeLock = null
         // 销毁时同样收回本服务拥有的任务。回收在独立有界工作线程上完成，不阻塞 Main。
         stopQueue.close(leases.drainOwner(owner))
         super.onDestroy()
@@ -137,6 +153,15 @@ internal class AgentExecutionService : Service() {
     companion object {
         private const val CHANNEL = "eta_execution"
         private const val NOTIFICATION_ID = 1107
+
+        /**
+         * 唤醒锁超时：1 小时。
+         *
+         * 正常路径由 onDestroy 释放，这个超时只是兜底——异常退出时不能让设备一直醒着耗电。
+         * 超时后长任务会退回"锁屏挂起"，所以不要设得太短。
+         */
+        private const val WAKE_LOCK_TIMEOUT_MS = 60 * 60 * 1000L
+        private const val WAKE_LOCK_TAG = "Eta:agent-execution"
         private const val ACTION_STOP = "io.github.mangi.eta.action.STOP_USER_EXECUTION"
         private val leases = ExecutionLeaseRegistry()
         private val ownerSequence = AtomicLong()
