@@ -959,6 +959,52 @@ class AgentModelClientLoopTest {
         assertTrue(result.content.isNotBlank())
     }
 
+    @Test
+    fun finishedTaskListStopsGoalContinuationEvenIfNothingSaysDone() {
+        val provider = ScriptedProvider(listOf(
+            { _, _ -> assistant(content = "看起来差不多了", finishReason = "stop") },
+        ))
+
+        AgentModelClient.complete(
+            modelConfig(), "推进目标",
+            AgentModelClient.ToolExecutor { AgentModelClient.ToolResult("""{"ok":true}""") },
+            provider = provider,
+            goal = "把首页做完",
+            goalProgress = { GoalProgress(total = 3, done = 3, open = 0, allDone = true) },
+        )
+
+        // 清单全绿就是完成，不需要模型额外报一次 done。
+        assertEquals(1, provider.requests.size)
+    }
+
+    @Test
+    fun openTasksForceAnotherRoundEvenWhenTheModelSoundsFinished() {
+        val provider = ScriptedProvider(listOf(
+            { _, _ -> assistant(content = "已经做完了", finishReason = "stop") },
+            { _, _ -> assistant(content = "全部完成 <goal_status>done</goal_status>", finishReason = "stop") },
+        ))
+        var checks = 0
+
+        AgentModelClient.complete(
+            modelConfig(), "推进目标",
+            AgentModelClient.ToolExecutor { AgentModelClient.ToolResult("""{"ok":true}""") },
+            provider = provider,
+            goal = "把首页做完",
+            goalProgress = {
+                checks++
+                if (checks == 1) {
+                    GoalProgress(total = 3, done = 1, open = 2, allDone = false)
+                } else {
+                    GoalProgress(total = 3, done = 3, open = 0, allDone = true)
+                }
+            },
+        )
+
+        // 模型说"已经做完"不算数，清单还有 2 条没勾就得继续。
+        assertEquals(2, provider.requests.size)
+        assertTrue(provider.requests[1].toString().contains("还有 2 条待办"))
+    }
+
     private class ScriptedProvider(
         private val responses: List<(ProviderRequest, AgentRunController) -> JSONObject>,
     ) : AgentProviderClient {

@@ -53,6 +53,7 @@ internal fun AgentHomeScreen(
                 goal = state.goal,
                 paused = state.goalPaused,
                 running = state.isStreaming,
+                taskProgress = state.taskProgress,
                 onSave = { text -> onAction(AgentHomeAction.SaveGoal(text)) },
                 onPause = { onAction(AgentHomeAction.PauseGoal) },
                 onResume = { onAction(AgentHomeAction.ResumeGoal) },

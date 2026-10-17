@@ -11,6 +11,7 @@ import io.github.mangi.eta.agent.model.AgentModelClient
 import io.github.mangi.eta.agent.model.AgentModelRefusal
 import io.github.mangi.eta.agent.model.AgentModelExecutionException
 import io.github.mangi.eta.agent.model.AgentModelFailure
+import io.github.mangi.eta.agent.model.GoalProgress
 import io.github.mangi.eta.agent.model.AgentHttpClient
 import io.github.mangi.eta.agent.memory.AgentMemoryContext
 import io.github.mangi.eta.agent.memory.AgentMemoryContextBuilder
@@ -34,6 +35,11 @@ import io.github.mangi.eta.agent.skill.SkillIndexEntry
 import io.github.mangi.eta.agent.skill.SkillTriggerSignals
 import io.github.mangi.eta.agent.skill.SkillUsageStats
 import io.github.mangi.eta.agent.tool.AgentLocalTools
+import io.github.mangi.eta.agent.tool.AgentSubAgentTool
+import io.github.mangi.eta.agent.tool.AgentTaskTool
+import io.github.mangi.eta.agent.tool.ScreenBusyException
+import io.github.mangi.eta.agent.tool.ScreenLease
+import io.github.mangi.eta.agent.tool.ScreenToolPolicy
 import io.github.mangi.eta.agent.tool.AgentToolRequirements
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
 import io.github.mangi.eta.agent.tool.PendingSkillConflictCapabilityParser
@@ -42,6 +48,7 @@ import io.github.mangi.eta.agent.voice.EtaAssistantOverlayService
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.safeLogType
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
+import io.github.mangi.eta.data.repository.AgentTaskPlanStore
 import io.github.mangi.eta.data.repository.AgentUserPromptRepository
 import io.github.mangi.eta.data.repository.AgentUserPromptSnapshot
 import io.github.mangi.eta.data.repository.ModelRepository
@@ -388,20 +395,111 @@ internal class AgentRuntimeRunExecutor(
                     journal + session.transcript
                 }
             }
+            val taskStore = conversationId?.let { AgentTaskPlanStore(appContext.filesDir) }
+            val taskTool = if (taskStore != null && conversationId != null) {
+                AgentTaskTool(taskStore, conversationId)
+            } else {
+                null
+            }
+            var subAgentTool: AgentSubAgentTool? = null
+            var subAgentExecutor: AgentModelClient.ToolExecutor? = null
             val runTools = JSONArray(mcpTools.toString()).also { tools ->
                 if (historyTool != null) tools.put(AgentConversationToolCatalog.schema())
                 if (characterMemoryTools != null && memoryEnabled) CharacterMemoryTools.appendSchemas(tools)
+                if (taskTool != null) {
+                    tools.put(taskTool.schema())
+                    tools.put(AgentSubAgentTool.schema())
+                }
             }
             val runToolExecutor = AgentModelClient.ToolExecutor { call ->
                 if (call.name == AgentConversationToolCatalog.READ_HISTORY && historyTool != null) {
                     historyTool.execute(call)
                 } else if (call.name in CharacterMemoryTools.NAMES && characterMemoryTools != null) {
                     characterMemoryTools.execute(call)
-                } else routingExecutor.execute(call).also { result ->
-                    if (call.name == "memory_write") {
-                        runCatching { JSONObject(result.content) }.getOrNull()
-                            ?.takeIf { it.optBoolean("ok") }
-                            ?.let { ConversationMemoryPins.recordOwnWrite(conversationId, it.optString("revision")) }
+                } else if (call.name == AgentTaskTool.TASK_WRITE && taskTool != null) {
+                    taskTool.execute(call)
+                } else if (call.name == AgentSubAgentTool.SPAWN_AGENTS) {
+                    subAgentTool?.execute(call) ?: errorToolResult(
+                        "SUBAGENT_UNAVAILABLE", "当前会话不支持子代理",
+                    )
+                } else {
+                    val invoke = {
+                        routingExecutor.execute(call).also { result ->
+                            if (call.name == "memory_write") {
+                                runCatching { JSONObject(result.content) }.getOrNull()
+                                    ?.takeIf { it.optBoolean("ok") }
+                                    ?.let { ConversationMemoryPins.recordOwnWrite(conversationId, it.optString("revision")) }
+                            }
+                        }
+                    }
+                    // 屏幕是进程级独占资源：两个 agent 交替 observe/tap 会让彼此的观察互相作废。
+                    if (ScreenToolPolicy.isScreenTool(call.name)) {
+                        runCatching { ScreenLease.withLease(request.runId) { invoke() } }
+                            .getOrElse { throwable ->
+                                if (throwable is ScreenBusyException) {
+                                    errorToolResult(
+                                        "SCREEN_BUSY",
+                                        "屏幕正被另一个 agent（${throwable.holder}）使用；先做不需要看屏幕的步骤，稍后重试。",
+                                    )
+                                } else {
+                                    throw throwable
+                                }
+                            }
+                    } else {
+                        invoke()
+                    }
+                }
+            }
+            // 子代理的执行器：拦掉屏幕、派发与清单写入，其余能力共享。
+            // 共享工具实例是有意的——屏幕观察状态才需要隔离，而不碰屏幕的子代理不会污染它。
+            subAgentExecutor = AgentModelClient.ToolExecutor { call ->
+                when {
+                    call.name == AgentSubAgentTool.SPAWN_AGENTS ->
+                        errorToolResult("SUBAGENT_CANNOT_SPAWN", "子代理不能再派子代理；请自己完成这一步。")
+                    ScreenToolPolicy.isScreenTool(call.name) ->
+                        errorToolResult("SCREEN_TOOLS_UNAVAILABLE", "子代理不能操作屏幕；需要看屏幕的步骤留给主代理。")
+                    call.name == AgentTaskTool.TASK_WRITE ->
+                        errorToolResult("SUBAGENT_CANNOT_WRITE_TASKS", "子代理不能修改主代理的任务清单。")
+                    else -> runToolExecutor.execute(call)
+                }
+            }
+            subAgentTool = AgentSubAgentTool { role, prompt ->
+                val childExecutor = subAgentExecutor
+                if (childExecutor == null) {
+                    errorToolResult("SUBAGENT_UNAVAILABLE", "子代理执行器未就绪")
+                } else {
+                    // 每个子代理独立上下文、独立取消器：主 run 被取消时级联终止，不留后台野进程。
+                    val childController = AgentRunController()
+                    val binding = runController.register { childController.cancel() }
+                    try {
+                        val response = AgentModelClient.complete(
+                            config = request.config,
+                            prompt = buildString {
+                                appendLine("你是主代理派出的子代理，角色：$role。")
+                                appendLine("你看不到主对话，只依据下面的任务说明工作。")
+                                appendLine()
+                                appendLine(prompt)
+                                appendLine()
+                                append(
+                                    "要求：只做这一件事；做完直接给结论与证据（文件路径、命令输出、来源）。" +
+                                        "不能操作屏幕，不能派子代理，不能反问；缺什么就自己用工具查清楚。",
+                                )
+                            },
+                            toolExecutor = childExecutor,
+                            history = emptyList(),
+                            runController = childController,
+                            skillContext = skillContext,
+                            memoryContext = AgentMemoryContext.DISABLED,
+                            // 子代理不背作战协议：81k 字符乘以并行数会把窗口直接撑爆。
+                            userPrompt = AgentUserPromptSnapshot.EMPTY,
+                            additionalTools = runTools,
+                            executionContext = executor.terminalExecutionContext,
+                        )
+                        AgentModelClient.ToolResult(response.content)
+                    } catch (throwable: Throwable) {
+                        errorToolResult("SUBAGENT_FAILED", throwable.message ?: "子代理执行失败")
+                    } finally {
+                        binding.close()
                     }
                 }
             }
@@ -437,6 +535,36 @@ internal class AgentRuntimeRunExecutor(
                     memoryContext = memoryContext,
                     userPrompt = userPrompt,
                     goal = request.goal,
+                    goalProgress = taskStore?.let { store ->
+                        {
+                            val plan = store.load(conversationId.orEmpty())
+                            if (plan.total == 0) {
+                                null
+                            } else {
+                                GoalProgress(
+                                    total = plan.total,
+                                    done = plan.doneCount,
+                                    open = plan.openCount,
+                                    allDone = plan.allDone,
+                                )
+                            }
+                        }
+                    },
+                    // 清单跟着工具结果再注入一次，但只在它真的变了时注入：
+                    // 每轮无脑重发会把上下文泡满，反而挤掉工作空间。
+                    taskPlanHint = taskStore?.let { store ->
+                        var lastSignature = ""
+                        {
+                            val plan = store.load(conversationId.orEmpty())
+                            val signature = plan.tasks.joinToString { "${it.id}:${it.status.name}" }
+                            if (plan.total == 0 || signature == lastSignature) {
+                                null
+                            } else {
+                                lastSignature = signature
+                                "当前任务清单（用 ${AgentTaskTool.TASK_WRITE} 更新）：\n" + plan.summary()
+                            }
+                        }
+                    },
                     additionalTools = runTools,
                     executionContext = executor.terminalExecutionContext,
                 ) { event ->
@@ -676,3 +804,9 @@ private const val LEARN_WINDOW_TIMEOUT_MS = 10_000L
 
 /** 口头拒绝后用当前 provider 原样重试的次数上限。 */
 private const val REFUSAL_RETRY_MAX_ATTEMPTS = 2
+
+/** 工具层的失败结果：统一 `{ok:false, code, message}`，模型能据此换方案而不是崩掉。 */
+private fun errorToolResult(code: String, message: String): AgentModelClient.ToolResult =
+    AgentModelClient.ToolResult(
+        JSONObject().put("ok", false).put("code", code).put("message", message).toString(),
+    )

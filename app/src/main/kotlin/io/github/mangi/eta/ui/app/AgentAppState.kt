@@ -29,6 +29,7 @@ import io.github.mangi.eta.agent.roleplay.RoleplayMessageLink
 import io.github.mangi.eta.agent.roleplay.RoleplayMessageState
 import io.github.mangi.eta.data.repository.CharacterRepository
 import io.github.mangi.eta.data.repository.AgentGoalRepository
+import io.github.mangi.eta.data.repository.AgentTaskPlanStore
 import io.github.mangi.eta.agent.runtime.AgentEvent
 import io.github.mangi.eta.agent.runtime.AgentExecutionService
 import io.github.mangi.eta.agent.runtime.AgentExternalArchivePayload
@@ -62,6 +63,7 @@ import io.github.mangi.eta.ui.model.MessageEditUiState
 import io.github.mangi.eta.ui.model.PendingFileReferenceUi
 import io.github.mangi.eta.ui.model.PendingImageUi
 import io.github.mangi.eta.ui.model.QueuedMessageUi
+import io.github.mangi.eta.ui.model.TaskProgressUi
 import io.github.mangi.eta.ui.model.SystemNoticeCode
 import io.github.mangi.eta.ui.model.SystemNoticeMessageUi
 import io.github.mangi.eta.ui.model.ThinkingMessageUi
@@ -1638,19 +1640,28 @@ internal class AgentAppState(
     fun refreshGoal() {
         val conversationId = selectedConversationId
         if (conversationId == null) {
-            if (homeState.goal != null || homeState.goalPaused) {
-                homeState = homeState.copy(goal = null, goalPaused = false)
+            if (homeState.goal != null || homeState.goalPaused || homeState.taskProgress != null) {
+                homeState = homeState.copy(goal = null, goalPaused = false, taskProgress = null)
             }
             return
         }
         scope.launch(Dispatchers.IO) {
             val goal = runCatching { AgentGoalRepository.goal(conversationId) }.getOrDefault("")
+            val plan = runCatching {
+                AgentTaskPlanStore(appContext.filesDir).load(conversationId)
+            }.getOrNull()
+            val progress = plan?.takeIf { it.total > 0 }?.let {
+                TaskProgressUi(done = it.doneCount, total = it.total)
+            }
             withContext(Dispatchers.Main) {
                 if (selectedConversationId != conversationId) return@withContext
                 val state = conversationsById[conversationId] ?: return@withContext
                 val normalized = goal.takeIf { it.isNotBlank() }
-                if (state.goal == normalized) return@withContext
-                updateConversation(conversationId, state.copy(goal = normalized))
+                if (state.goal == normalized && state.taskProgress == progress) return@withContext
+                updateConversation(
+                    conversationId,
+                    state.copy(goal = normalized, taskProgress = progress),
+                )
             }
         }
     }
@@ -1688,12 +1699,17 @@ internal class AgentAppState(
         val runId = currentRunId
         scope.launch(Dispatchers.IO) {
             runCatching { AgentGoalRepository.clear(conversationId) }
+            // 清单跟着目标一起清：留着旧清单，下次设新目标会被上一次的子任务污染。
+            runCatching { AgentTaskPlanStore(appContext.filesDir).clear(conversationId) }
             if (runId != null) {
                 AgentRuntimeClient(appContext, AndroidAgentLogger).cancelGoal(runId)
             }
             withContext(Dispatchers.Main) {
                 val state = conversationsById[conversationId] ?: return@withContext
-                updateConversation(conversationId, state.copy(goal = null, goalPaused = false))
+                updateConversation(
+                    conversationId,
+                    state.copy(goal = null, goalPaused = false, taskProgress = null),
+                )
             }
         }
     }
@@ -1789,6 +1805,8 @@ internal class AgentAppState(
                 updateConversation(id, state.copy(goalPaused = false))
             }
         }
+        // 子任务清单是本轮写出来的，跑完重读一次让目标行的 2/5 跟上。
+        refreshGoal()
         runMessageProjector.clearRun(runId)
         runConversationIds.remove(runId)
         refreshConversationSummaries()

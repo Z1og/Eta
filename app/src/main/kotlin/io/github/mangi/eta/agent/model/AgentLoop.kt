@@ -37,6 +37,8 @@ internal class AgentLoop(
     initialSupplementIndex: Int = 0,
     /** 持续目标正文；非空时模型自然收尾后会自动续跑，直到达成、被取消或触及上限。 */
     private val goal: String = "",
+    /** 当前子任务清单进度；有清单时以清单为完成依据，而不是模型自己的说法。 */
+    private val goalProgress: (() -> GoalProgress?)? = null,
 ) {
     data class Result(
         val content: String,
@@ -353,6 +355,12 @@ internal class AgentLoop(
             goalSettled = true
             return false
         }
+        // 有清单就以清单为准：模型说"差不多了"不算完成，清单里还有待办就得继续。
+        val progress = goalProgress?.invoke()
+        if (progress != null && progress.total > 0 && progress.allDone) {
+            goalSettled = true
+            return false
+        }
         if (goalContinuations >= MAX_GOAL_CONTINUATIONS) {
             goalSettled = true
             appendMessage(
@@ -365,9 +373,14 @@ internal class AgentLoop(
             return true
         }
         goalContinuations++
+        val progressNote = progress?.takeIf { it.total > 0 }?.let {
+            "当前子任务进度：${it.done}/${it.total} 完成，还有 ${it.open} 条待办。" +
+                "用 task_write 更新清单状态，全部 done 才算目标达成。"
+        }.orEmpty()
         appendMessage(
             AgentConversationCodec.userTextMessage(
                 "继续推进目标：上一轮没有报告目标达成。" +
+                    progressNote +
                     "先确认已经完成的部分，再处理剩余部分；不要重做已完成或已验证过的步骤。" +
                     "确实无法继续时输出 <goal_status>blocked</goal_status> 并说明卡在哪。",
             ).put("_eta_message_id", "user-$operationId-goal-$goalContinuations"),
@@ -577,6 +590,14 @@ internal class AgentLoop(
 
 /** 连续被拒多少个子任务后升级为失败（此前每次仅跳过当前子任务并续跑）。 */
 private const val REFUSAL_SKIP_LIMIT = 2
+
+/** 目标模式下子任务清单的进度快照，供续跑判定使用。 */
+internal data class GoalProgress(
+    val total: Int,
+    val done: Int,
+    val open: Int,
+    val allDone: Boolean,
+)
 
 /**
  * 目标模式最多自动续跑多少轮。

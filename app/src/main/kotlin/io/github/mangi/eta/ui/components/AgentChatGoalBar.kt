@@ -54,6 +54,18 @@ internal fun AgentGoalRow(
             style = MiuixTheme.textStyles.footnote1,
             color = MiuixTheme.colorScheme.primary,
         )
+        controls.taskProgress?.let { progress ->
+            Text(
+                text = progress.label,
+                style = MiuixTheme.textStyles.footnote1,
+                color = if (progress.allDone) {
+                    MiuixTheme.colorScheme.primary
+                } else {
+                    MiuixTheme.colorScheme.onSurfaceVariantSummary
+                },
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
         Text(
             text = controls.preview,
             style = MiuixTheme.textStyles.footnote1,

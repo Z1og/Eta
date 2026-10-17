@@ -37,14 +37,15 @@ internal data class AgentChatUiState(
     val goal: String? = null,
     /** 目标模式被用户暂停：run 挂在下一个检查点，等继续。 */
     val goalPaused: Boolean = false,
+    /** 子任务清单进度；null 表示还没有拆解过。 */
+    val taskProgress: TaskProgressUi? = null,
 ) {
     val canCompactContext: Boolean get() = !isStreaming && messageEdit == null && history.any {
         !it.contextSummary && (it.role == "assistant" || it.role == "tool")
     }
 }
 
-/** 一条等待发送的消息。[content] 是用户原始输入，不含任何内部前缀。 */
-@Immutable
+/** 一条等待发送的消息。[content] 是用户原始输入，不含任何内部前缀。 */@Immutable
 data class QueuedMessageUi(
     val id: String,
     val content: String,
@@ -52,6 +53,17 @@ data class QueuedMessageUi(
     /** 输入区那一行卡片只展示首行，避免整段提示词把输入框顶掉。 */
     val preview: String
         get() = content.lineSequence().firstOrNull()?.trim()?.take(160).orEmpty()
+}
+
+/** 目标拆解进度：界面只需要这两个数，完整清单在会话文件里。 */
+@Immutable
+data class TaskProgressUi(
+    val done: Int,
+    val total: Int,
+) {
+    val label: String get() = "$done/$total"
+
+    val allDone: Boolean get() = total > 0 && done >= total
 }
 
 @Immutable

@@ -111,6 +111,9 @@ internal object AgentModelClient {
         assistantScreenContext: String = "",
         userPrompt: AgentUserPromptSnapshot = AgentUserPromptSnapshot.EMPTY,
         goal: String = "",
+        goalProgress: (() -> GoalProgress?)? = null,
+        /** 与技能提示共用同一注入点：返回非空时作为一条上下文提示进 messages，不进会话 UI。 */
+        taskPlanHint: (() -> String?)? = null,
         onContextSnapshot: (AgentContextSnapshot) -> Unit = {},
         onTranscript: (List<ConversationMessage>) -> Unit = {},
         onEvent: (AgentEvent) -> Unit = {}
@@ -260,8 +263,13 @@ internal object AgentModelClient {
             roleplayContext = roleplayContext,
             initialSupplementIndex = initialSupplementIndex,
             goal = goal,
+            goalProgress = goalProgress,
             toolsForRound = ::toolsForRound,
-            onToolResultsHint = if (rewriteReply) null else ::midRunSkillHint,
+            onToolResultsHint = if (rewriteReply) null else { toolText ->
+                listOfNotNull(midRunSkillHint(toolText), taskPlanHint?.invoke())
+                    .joinToString("\n")
+                    .ifBlank { null }
+            },
         )
         val result = try {
             if (compactOnly) loop.compactOnly() else loop.run()

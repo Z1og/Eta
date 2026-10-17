@@ -16,6 +16,8 @@ internal data class AgentGoalControls(
     val paused: Boolean = false,
     /** 有 run 正在跑（暂停/继续只在这时有意义）。 */
     val running: Boolean = false,
+    /** 目标拆解进度；null 表示还没拆过子任务。 */
+    val taskProgress: TaskProgressUi? = null,
     val onSave: (String) -> Unit = {},
     val onPause: () -> Unit = {},
     val onResume: () -> Unit = {},
