@@ -32,6 +32,9 @@ internal object SkillTriggerMatcher {
     /** 扩展名信号命中时折算的特异度——足够大，使其压过普通短词命中。 */
     private const val EXT_SIGNAL_LEN = 12
 
+    /** 纯扩展名命中的排序分：固定很低，保证永远排在真正命中关键词的技能之后。 */
+    private const val EXT_ONLY_RANK = 0.1
+
     /** 逆向模式开启时，逆向技能命中得分的乘数。 */
     private const val REVERSE_BIAS = 1.5
 
@@ -54,6 +57,15 @@ internal object SkillTriggerMatcher {
         val skill: SkillIndexEntry,
         val specificity: Double,
         val score: Double,
+        /**
+         * 排序用综合分：命中词的平均特异性 × 命中密度。
+         *
+         * 只看 specificity 会让"某个触发词特别长"的技能永远霸榜——
+         * 一个带 60 个触发词的技能几乎必然命中，然后靠最长那个词把别人挤掉。
+         * 密度（命中数 / 触发词数，封顶 8）让"只有 5 个触发词却命中 3 个"的技能
+         * 能赢过"60 个触发词只命中 3 个"的技能。
+         */
+        val rank: Double = score,
     )
 
     /** 从文本中探测文件扩展名（小写、不含点），用于扩展名强命中与结构化兜底路由。 */
@@ -121,6 +133,8 @@ internal object SkillTriggerMatcher {
             if (!seenIds.add(skill.id)) continue
             var specificity = 0.0
             var aggregate = 0.0
+            var hitCount = 0
+            var idfSum = 0.0
             for (raw in skill.triggers) {
                 val trigger = raw.trim().lowercase()
                 if (trigger.isEmpty()) continue
@@ -129,6 +143,8 @@ internal object SkillTriggerMatcher {
                 if (!matched) continue
                 val contribution = trigger.length * idf(trigger)
                 aggregate += contribution
+                hitCount += 1
+                idfSum += idf(trigger)
                 if (contribution > specificity) specificity = contribution
             }
             if (skill.extensions.isNotEmpty() && extensions.isNotEmpty() &&
@@ -138,12 +154,25 @@ internal object SkillTriggerMatcher {
                 if (EXT_SIGNAL_LEN.toDouble() > specificity) specificity = EXT_SIGNAL_LEN.toDouble()
             }
             if (specificity <= 0.0) continue
-            var score = aggregate * skill.triggerWeight.coerceAtLeast(0.1)
-            if (reverseBias && skill.id in reverseSkillIds) score *= REVERSE_BIAS
-            hits += Scored(skill, specificity, score)
+            val weight = skill.triggerWeight.coerceAtLeast(0.1)
+            val score = aggregate * weight
+            // 密度封顶 8：触发词少于 8 个的技能不该因为分母小而白拿满分。
+            val density = if (hitCount == 0) {
+                0.0
+            } else {
+                hitCount.toDouble() / minOf(skill.triggers.size, 8).coerceAtLeast(1)
+            }
+            val avgIdf = if (hitCount == 0) 0.0 else idfSum / hitCount
+            // 纯扩展名/工具名信号：specificity 足够进阈值筛选，但排序上必须让位给关键词命中，
+            // 否则"看到 .apk 就命中"的技能会盖过"用户真的说了反编译"的技能。
+            val base = if (hitCount == 0) EXT_ONLY_RANK else avgIdf * (0.6 + 0.4 * density)
+            val biased = if (reverseBias && skill.id in reverseSkillIds) base * REVERSE_BIAS else base
+            hits += Scored(skill, specificity, score, biased * weight)
         }
         return hits
-            .sortedWith(compareByDescending<Scored> { it.specificity }.thenByDescending { it.score })
+            .sortedWith(
+                compareByDescending<Scored> { it.rank }.thenByDescending { it.specificity },
+            )
             .take(maxResults)
     }
 
