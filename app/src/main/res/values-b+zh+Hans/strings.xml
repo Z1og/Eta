@@ -1155,7 +1155,7 @@
   <string name="chat_goal_clear">取消目标</string>
   <string name="chat_goal_cleared">已取消目标，本轮会正常收尾。</string>
   <string name="chat_goal_dialog_title">目标</string>
-  <string name="chat_goal_dialog_hint">写下你要的结果。Eta 会一直推进，直到它报告目标已达成。</string>
+  <string name="chat_goal_dialog_hint">写下你要的结果。保存后立刻开始拆解子任务，Eta 会一直推进到它报告达成。</string>
   <string name="chat_goal_save">设为目标</string>
   <string name="chat_goal_tasks_title">子任务清单</string>
   <string name="chat_goal_tasks_empty">还没拆解子任务。Eta 开始动手时会先拆解。</string>

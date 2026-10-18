@@ -1709,19 +1709,28 @@ internal class AgentAppState(
                 }
             withContext(Dispatchers.Main) {
                 val state = conversationsById[conversationId] ?: homeState
+                // 记下改之前有没有目标：只有"首次设置"才自动开跑，
+                // 改已有目标时自动重发会把上一轮的执行打断重来。
+                val hadGoal = !state.goal.isNullOrBlank()
                 updateConversation(
                     conversationId,
                     state.copy(goal = saved.takeIf { it.isNotBlank() }, goalPaused = false),
                 )
-                Toast.makeText(
-                    appContext,
-                    if (saved.isBlank()) {
-                        "已取消目标"
-                    } else {
-                        "目标已设置，下一条消息开始生效（会先拆解成子任务）"
-                    },
-                    Toast.LENGTH_SHORT,
-                ).show()
+                if (saved.isBlank()) {
+                    Toast.makeText(appContext, "已取消目标", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(
+                        appContext,
+                        if (hadGoal) "目标已更新，下一条消息按新目标推进" else "目标已设置，开始拆解子任务",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    // 首次设置目标：拿目标本身当第一条消息直接开跑。
+                    // 否则用户对着空白会话 + 禁用的发送按钮，不知道还得自己再打一行——
+                    // 目标输入框和会话输入框是两个地方，这道坎卡住了整个功能。
+                    if (!hadGoal && state.input.isBlank()) {
+                        sendCurrentMessage(saved)
+                    }
+                }
             }
         }
     }
