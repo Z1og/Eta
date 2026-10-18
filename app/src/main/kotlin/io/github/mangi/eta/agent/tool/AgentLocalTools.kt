@@ -217,7 +217,14 @@ internal class AgentLocalTools(
                         ?: textResult(errorResult("UNKNOWN_TOOL", "未知设备工具"))
                 "read_image" -> fileVisionTool { imageTools.readImage(args) }
                 in AgentTerminalToolCatalog.names -> textResult(terminalTool {
-                    if (toolCall.name == "terminal" && args.optString("action").equals("check_root", ignoreCase = true)) checkRoot()
+                    // 旋转是用户的显示偏好，任何路径都不许改：set_setting 已经从白名单移除，
+                    // 这里再堵住 shell——否则 `settings put system accelerometer_rotation 1` 照样能开。
+                    if (toolCall.name == "terminal" && touchesRotationSetting(args.optString("command"))) {
+                        errorResult(
+                            "ROTATION_PROTECTED",
+                            "自动旋转属于用户自己的显示偏好，不允许由 agent 修改。需要读取状态请用 get_setting(target=auto_rotate)。",
+                        )
+                    } else if (toolCall.name == "terminal" && args.optString("action").equals("check_root", ignoreCase = true)) checkRoot()
                     else terminalController.executeTool(toolCall.name, args)
                 })
                 in AgentFileToolCatalog.names -> textResult(terminalTool { terminalController.fileTool(toolCall.name, args) })
@@ -1411,6 +1418,16 @@ internal class AgentLocalTools(
         block()
     } catch (failure: GitHubSkillSourceException) {
         errorResult(failure.code, failure.message ?: "GitHub Skill 请求失败")
+    }
+
+    /**
+     * 命令里出现旋转设置就算触碰，读也一并拒绝——读状态有 `get_setting`，不需要 shell。
+     * 只做子串匹配、不做 shell 解析：多一层解析就多一个绕过口子。
+     */
+    private fun touchesRotationSetting(command: String): Boolean {
+        if (command.isBlank()) return false
+        val text = command.lowercase()
+        return text.contains("accelerometer_rotation") || text.contains("user_rotation")
     }
 
     private fun errorResult(code: String, message: String): String =

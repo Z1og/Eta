@@ -1656,6 +1656,9 @@ internal class AgentAppState(
             val plan = runCatching {
                 AgentTaskPlanStore(appContext.filesDir).load(conversationId)
             }.getOrNull()
+            val completed = runCatching {
+                AgentGoalRepository.isCompleted(conversationId)
+            }.getOrDefault(false)
             val progress = plan?.takeIf { it.total > 0 }?.let {
                 TaskProgressUi(done = it.doneCount, total = it.total)
             }
@@ -1674,7 +1677,12 @@ internal class AgentAppState(
                 if (state.goal == normalized && state.taskProgress == progress) return@withContext
                 updateConversation(
                     conversationId,
-                    state.copy(goal = normalized, taskProgress = progress, taskItems = items),
+                    state.copy(
+                        goal = normalized,
+                        taskProgress = progress,
+                        taskItems = items,
+                        goalCompleted = completed,
+                    ),
                 )
             }
         }

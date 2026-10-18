@@ -36,6 +36,8 @@ internal class AgentGoalStore(rootDir: File) {
         }
         val target = fileFor(conversationId)
             ?: throw AgentGoalException("GOAL_INVALID_CONVERSATION", "无法识别该会话，目标未保存")
+        // 保存新目标意味着重新开始：旧的完成标记一并清掉。
+        clearCompletedLocked(conversationId)
         if (!goalDir.exists() && !goalDir.mkdirs() && !goalDir.isDirectory) {
             throw AgentGoalException("GOAL_WRITE_FAILED", "无法创建 $DIRECTORY_NAME 目录")
         }
@@ -59,11 +61,43 @@ internal class AgentGoalStore(rootDir: File) {
         synchronized(lock) { clearLocked(conversationId) }
     }
 
+    /**
+     * 目标是否已经完成过。
+     *
+     * 为什么需要这个标记：完成状态以前只存在于单次 run 的内存里，
+     * 用户下次随便说句话，新 run 又会重新注入目标并从头推进——这就是"用着怪"的来源。
+     */
+    fun isCompleted(conversationId: String): Boolean = synchronized(lock) {
+        doneFileFor(conversationId)?.isFile == true
+    }
+
+    fun markCompleted(conversationId: String) {
+        synchronized(lock) {
+            val target = doneFileFor(conversationId) ?: return
+            runCatching {
+                target.parentFile?.mkdirs()
+                if (!target.exists()) target.createNewFile()
+            }
+        }
+    }
+
+    /** 新目标从零开始：旧的完成标记必须一起清掉。 */
+    private fun clearCompletedLocked(conversationId: String) {
+        val target = doneFileFor(conversationId) ?: return
+        runCatching { if (target.exists()) target.delete() }
+    }
+
+    private fun doneFileFor(conversationId: String): File? {
+        val base = fileFor(conversationId) ?: return null
+        return File(base.parentFile, base.nameWithoutExtension + COMPLETED_EXTENSION)
+    }
+
     private fun clearLocked(conversationId: String) {
         val target = fileFor(conversationId) ?: return
         if (target.exists() && !target.delete()) {
             throw AgentGoalException("GOAL_CLEAR_FAILED", "无法删除目标文件")
         }
+        clearCompletedLocked(conversationId)
     }
 
     private fun read(conversationId: String): String {
@@ -97,6 +131,9 @@ internal class AgentGoalStore(rootDir: File) {
         const val DIRECTORY_NAME = "goals"
         const val EXTENSION = ".md"
 
+        /** 完成标记文件后缀：`<convId>.done`，存在即表示这个目标已经收工。 */
+        const val COMPLETED_EXTENSION = ".done"
+
         /**
          * 目标上限：目标该是一条验收条件，不是第二份作战协议。
          * 4000 字符足够写清"做成什么样"，再长说明该拆成多个任务。
@@ -128,5 +165,13 @@ internal object AgentGoalRepository {
     fun clear(conversationId: String) {
         if (conversationId.isBlank()) return
         requireStore().clear(conversationId)
+    }
+
+    fun isCompleted(conversationId: String): Boolean =
+        if (conversationId.isBlank()) false else requireStore().isCompleted(conversationId)
+
+    fun markCompleted(conversationId: String) {
+        if (conversationId.isBlank()) return
+        requireStore().markCompleted(conversationId)
     }
 }

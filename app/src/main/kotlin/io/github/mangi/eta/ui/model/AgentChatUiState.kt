@@ -41,6 +41,8 @@ internal data class AgentChatUiState(
     val taskProgress: TaskProgressUi? = null,
     /** 完整清单，供目标详情展开；空表示没拆过。 */
     val taskItems: List<TaskItemUi> = emptyList(),
+    /** 目标已经收工：不再注入、不再续跑，等用户重新设定或清除。 */
+    val goalCompleted: Boolean = false,
 ) {
     val canCompactContext: Boolean get() = !isStreaming && messageEdit == null && history.any {
         !it.contextSummary && (it.role == "assistant" || it.role == "tool")

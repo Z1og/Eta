@@ -48,6 +48,7 @@ import io.github.mangi.eta.agent.voice.EtaAssistantOverlayService
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.safeLogType
 import io.github.mangi.eta.data.datastore.SettingsDataStore
+import io.github.mangi.eta.data.repository.AgentGoalRepository
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
 import io.github.mangi.eta.data.repository.AgentTaskPlanStore
 import io.github.mangi.eta.data.repository.AgentUserPromptRepository
@@ -284,6 +285,10 @@ internal class AgentRuntimeRunExecutor(
             } else {
                 AgentMemoryContext.DISABLED
             }
+            // 已完成的目标不再注入：否则用户下次随便说句话，又会被从头推进同一个旧目标。
+            val goalCompleted = runCatching {
+                conversationId != null && AgentGoalRepository.isCompleted(conversationId)
+            }.getOrDefault(false)
             // 用户自备作战协议（filesDir/prompts/ 下第一个非空 .md）。
             // 会话开始时读取一次并冻结：中途改文件只影响下个会话，避免系统提示抖动废掉请求前缀缓存。
             // 只看作战协议自己的开关：与逆向能力开关平级，关掉逆向不影响这里，反之亦然。
@@ -299,8 +304,7 @@ internal class AgentRuntimeRunExecutor(
                     AgentUserPromptSnapshot.EMPTY
                 }
             }
-            if (request.config.terminalTools) {
-                // 启动探测由 App 拥有；模型首轮等待其结果，避免把检测中的授权当成普通设备。
+            if (request.config.terminalTools) {                // 启动探测由 App 拥有；模型首轮等待其结果，避免把检测中的授权当成普通设备。
                 runBlocking {
                     while (io.github.mangi.eta.agent.device.RootAccess.state.value.isChecking) {
                         runController.throwIfCancelled()
@@ -554,7 +558,7 @@ internal class AgentRuntimeRunExecutor(
                     skillContext = skillContext,
                     memoryContext = memoryContext,
                     userPrompt = userPrompt,
-                    goal = request.goal,
+                    goal = if (goalCompleted) "" else request.goal,
                     goalProgress = taskStore?.let { store ->
                         {
                             val plan = store.load(conversationId.orEmpty())
@@ -614,6 +618,13 @@ internal class AgentRuntimeRunExecutor(
                 )
             }) { modelConfig ->
                 runModelAttempt(modelConfig)
+            }
+            // 清单全绿就把目标标记完成：下一次 run 不再注入、也不续跑它。
+            // 否则用户第二天随便说句话，agent 又会从头推进同一个旧目标——这就是"用着怪"。
+            runCatching {
+                val id = conversationId ?: return@runCatching
+                val plan = taskStore?.load(id) ?: return@runCatching
+                if (plan.allDone) AgentGoalRepository.markCompleted(id)
             }
             response = completedResponse
             AgentRuntimeWire.RunResult(

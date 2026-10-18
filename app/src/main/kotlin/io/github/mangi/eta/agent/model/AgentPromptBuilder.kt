@@ -218,6 +218,7 @@ internal object AgentPromptBuilder {
                 appendLine("- 动手前先用 task_write 把目标拆成 3–8 条可独立验证的子任务（pending），之后每完成一条立即改成 done，再做下一条。")
                 appendLine("- 不要只把拆解写在回答里：不写进 task_write 的清单，下一轮就会被忘记。")
                 appendLine("- 有 2 个以上互不依赖的子任务时，用 spawn_agents 并行派出去，而不是自己一条条串行做。")
+                appendLine("- 用户发来与目标无关的新问题时，先正常回答那个问题，不要硬把话题拉回目标；回答完再继续目标。")
                 appendLine("- 目标未达成就继续做；不要把中间进度当成完成，也不要等用户追问才继续。")
                 appendLine("- 已经完成或已经验证过的步骤不要重做；先确认现状，再处理剩余部分。")
                 appendLine("- 目标完全达成时，在回复最后单独输出一行 <goal_status>done</goal_status>，之后不再继续操作。")

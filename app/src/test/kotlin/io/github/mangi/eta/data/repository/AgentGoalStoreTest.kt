@@ -79,4 +79,24 @@ class AgentGoalStoreTest {
         store.clear("never-saved")
         assertEquals("", store.goal("never-saved"))
     }
+
+    @Test
+    fun completionFlagPersistsAndResetsWhenANewGoalIsSaved() {
+        val root = temporaryFolder.newFolder()
+        val store = AgentGoalStore(root)
+        store.save("conv-a", "旧目标")
+        assertFalse(store.isCompleted("conv-a"))
+
+        store.markCompleted("conv-a")
+        // 重开也要记住：完成状态必须跨进程，否则下次 run 又会从头推进旧目标。
+        assertTrue(AgentGoalStore(root).isCompleted("conv-a"))
+
+        // 保存新目标 = 重新开始，完成标记必须一起清掉。
+        store.save("conv-a", "新目标")
+        assertFalse(store.isCompleted("conv-a"))
+
+        store.markCompleted("conv-a")
+        store.clear("conv-a")
+        assertFalse(store.isCompleted("conv-a"))
+    }
 }

@@ -20,6 +20,8 @@ internal data class AgentGoalControls(
     val taskProgress: TaskProgressUi? = null,
     /** 完整清单，点开目标时展开。 */
     val tasks: List<TaskItemUi> = emptyList(),
+    /** 目标已收工。 */
+    val completed: Boolean = false,
     val onSave: (String) -> Unit = {},
     val onPause: () -> Unit = {},
     val onResume: () -> Unit = {},
