@@ -747,13 +747,15 @@ def main():
         print(f"\n[1.5/4] 拉取 apk-reverse 深度版...")
         try:
             fetch_repo(pro_cache, APK_REVERSE_PRO_URL, branch="main")
-        except subprocess.CalledProcessError as e:
-            print(f"[警告] apk-reverse 深度版拉取失败，将保留 hanshuang 版本: {e}")
+        except Exception as e:
+            # 源仓库可能已被删除或转为私有。fetch_repo 在"克隆失败且无本地缓存"时抛的是
+            # RuntimeError，以前只捕获 CalledProcessError，于是第三方仓库一消失就中断整条每日管线。
+            print(f"[警告] apk-reverse 深度版不可用，跳过（保留 hanshuang 版本）: {e}")
         print(f"\n[1.6/4] 拉取 reverse-skill 合集...")
         try:
             fetch_repo(project_root / ".cache" / REVERSE_SKILL_COLLECTION_CACHE, REVERSE_SKILL_COLLECTION_URL, branch="main")
-        except subprocess.CalledProcessError as e:
-            print(f"[警告] reverse-skill 合集拉取失败，将跳过: {e}")
+        except Exception as e:
+            print(f"[警告] reverse-skill 合集不可用，跳过: {e}")
 
     # Step 2
     print(f"\n[2/4] 扫描 Skill...")
