@@ -62,6 +62,21 @@ class SkillTriggerRankingTest {
     }
 
     @Test
+    fun compoundTriggersStillReachTheSkillThroughSharedTerms() {
+        // 真实数据形态：so 相关触发词都是 "so逆向/so破解/so加固" 这类复合词。
+        // 用户说"分析这个 so 文件的加密逻辑"时，完整子串一个都命中不了——术语层负责补这个洞。
+        val native = skill("native", listOf("so逆向", "elf分析"))
+
+        val ranked = SkillTriggerMatcher.rankScored(
+            input = SkillTriggerMatcher.Input(text = "分析这个 so 文件的加密逻辑"),
+            skills = listOf(native),
+        )
+
+        assertEquals(1, ranked.size)
+        assertEquals("native", ranked.first().skill.id)
+    }
+
+    @Test
     fun specificityIsStillReportedForTheBodyThreshold() {
         val ranked = SkillTriggerMatcher.rankScored(
             input = SkillTriggerMatcher.Input(text = query),

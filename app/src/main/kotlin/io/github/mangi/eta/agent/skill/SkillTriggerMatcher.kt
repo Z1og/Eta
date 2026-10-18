@@ -35,6 +35,27 @@ internal object SkillTriggerMatcher {
     /** 纯扩展名命中的排序分：固定很低，保证永远排在真正命中关键词的技能之后。 */
     private const val EXT_ONLY_RANK = 0.1
 
+    /**
+     * 拉丁术语（so / elf / dex / frida / hook...）。
+     *
+     * 真实数据里 so 相关触发词全是复合词（`so逆向`、`so破解`、`so加固`），
+     * 用户说"so 文件的加密逻辑"时完整子串一个都命中不了 —— 整条查询召回 0 个技能。
+     * 术语层就是为了补这个洞：查询与触发词共享同一个术语时算弱命中。
+     */
+    private val LATIN_TERM = Regex("[a-z][a-z0-9_]{1,15}")
+
+    /**
+     * 太常见、不构成信号的词。
+     *
+     * 刻意**不含 `so`**：在逆向语境里它几乎总是指 Shared Object（`.so` 文件），
+     * 而 so 相关技能的关键词恰恰都是"so逆向/so破解/so加固"这类复合词，
+     * 把 so 当停用词会让整类任务召回为 0。误命中风险有限（涉及 so 的技能只有几个）。
+     */
+    private val LATIN_STOPWORDS = setOf(
+        "my", "is", "the", "to", "in", "on", "of", "and", "for", "an",
+        "it", "this", "that", "with", "how", "can", "do", "you", "me",
+    )
+
     /** 逆向模式开启时，逆向技能命中得分的乘数。 */
     private const val REVERSE_BIAS = 1.5
 
@@ -66,6 +87,8 @@ internal object SkillTriggerMatcher {
          * 能赢过"60 个触发词只命中 3 个"的技能。
          */
         val rank: Double = score,
+        /** 命中次数（含术语弱命中）。真实数据里命中数往往只有 1–2 个，它是比 specificity 更可靠的信号。 */
+        val hitCount: Int = 0,
     )
 
     /** 从文本中探测文件扩展名（小写、不含点），用于扩展名强命中与结构化兜底路由。 */
@@ -129,6 +152,11 @@ internal object SkillTriggerMatcher {
 
         val hits = ArrayList<Scored>()
         val seenIds = HashSet<String>()
+        // 查询里的技术术语，用于补复合触发词召回不到的洞。
+        val queryTerms = LATIN_TERM.findAll(haystack)
+            .map { it.value }
+            .filter { it !in LATIN_STOPWORDS }
+            .toSet()
         for (skill in skills) {
             if (!seenIds.add(skill.id)) continue
             var specificity = 0.0
@@ -153,6 +181,19 @@ internal object SkillTriggerMatcher {
                 aggregate += EXT_SIGNAL_LEN
                 if (EXT_SIGNAL_LEN.toDouble() > specificity) specificity = EXT_SIGNAL_LEN.toDouble()
             }
+            if (hitCount == 0 && queryTerms.isNotEmpty()) {
+                // 术语弱命中：只在完整子串一个都没命中时才启用，避免把精确命中搅浑。
+                val skillTerms = skill.triggers.asSequence()
+                    .flatMap { LATIN_TERM.findAll(it.lowercase()).map { match -> match.value } }
+                    .filter { it !in LATIN_STOPWORDS }
+                    .toSet()
+                val overlap = queryTerms.intersect(skillTerms)
+                if (overlap.isNotEmpty()) {
+                    hitCount = overlap.size
+                    // 强到足够进入正文阈值（2.0），但排序上仍排在完整命中之后。
+                    specificity = maxOf(specificity, 1.5 + overlap.size * 0.5)
+                }
+            }
             if (specificity <= 0.0) continue
             val weight = skill.triggerWeight.coerceAtLeast(0.1)
             val score = aggregate * weight
@@ -162,16 +203,23 @@ internal object SkillTriggerMatcher {
             } else {
                 hitCount.toDouble() / minOf(skill.triggers.size, 8).coerceAtLeast(1)
             }
-            val avgIdf = if (hitCount == 0) 0.0 else idfSum / hitCount
-            // 纯扩展名/工具名信号：specificity 足够进阈值筛选，但排序上必须让位给关键词命中，
-            // 否则"看到 .apk 就命中"的技能会盖过"用户真的说了反编译"的技能。
-            val base = if (hitCount == 0) EXT_ONLY_RANK else avgIdf * (0.6 + 0.4 * density)
+            val avgIdf = if (hitCount == 0 || idfSum <= 0.0) 0.0 else idfSum / hitCount
+            // 纯术语弱命中（idfSum 为 0）给固定弱分，避免除零后 rank 归零、排在最后。
+            val base = when {
+                hitCount == 0 -> EXT_ONLY_RANK
+                idfSum <= 0.0 -> 0.4 * hitCount
+                else -> avgIdf * (0.6 + 0.4 * density)
+            }
             val biased = if (reverseBias && skill.id in reverseSkillIds) base * REVERSE_BIAS else base
-            hits += Scored(skill, specificity, score, biased * weight)
+            hits += Scored(skill, specificity, score, biased * weight, hitCount)
         }
+        // 命中数优先：真实数据里每个技能通常只命中 1–2 个词，
+        // "命中 2 个" 就是比 "命中 1 个" 更相关，不该被某个长词的 specificity 压过去。
         return hits
             .sortedWith(
-                compareByDescending<Scored> { it.rank }.thenByDescending { it.specificity },
+                compareByDescending<Scored> { it.hitCount }
+                    .thenByDescending { it.specificity }
+                    .thenByDescending { it.rank },
             )
             .take(maxResults)
     }
