@@ -637,7 +637,9 @@ internal class AgentRuntimeRunExecutor(
             runCatching {
                 val id = conversationId ?: return@runCatching
                 val plan = taskStore?.load(id) ?: return@runCatching
-                if (plan.allDone) AgentGoalRepository.markCompleted(id)
+                // 至少两条子任务才算真拆解过：只写一条再标完成，等同于没拆就宣布收工，
+                // 以前这种清单会把目标永久标记为完成，之后再也不续跑——用户看到的就是"坏了"。
+                if (plan.allDone && plan.total >= 2) AgentGoalRepository.markCompleted(id)
             }
             response = completedResponse
             AgentRuntimeWire.RunResult(

@@ -960,6 +960,34 @@ class AgentModelClientLoopTest {
     }
 
     @Test
+    fun doneStatusIsIgnoredWhileTheChecklistStillHasOpenItems() {
+        // 这是"目标模式跑一会儿就停"的主因：模型做了一部分就直接报 done，
+        // 旧逻辑看到 done 立刻收工，完全没看清单里还剩几条。
+        val provider = ScriptedProvider(listOf(
+            { _, _ -> assistant(content = "做完了 <goal_status>done</goal_status>", finishReason = "stop") },
+            { _, _ -> assistant(content = "确实完成 <goal_status>done</goal_status>", finishReason = "stop") },
+        ))
+        var checks = 0
+
+        AgentModelClient.complete(
+            modelConfig(), "推进目标",
+            AgentModelClient.ToolExecutor { AgentModelClient.ToolResult("""{"ok":true}""") },
+            provider = provider,
+            goal = "把首页做完",
+            goalProgress = {
+                checks++
+                if (checks == 1) {
+                    GoalProgress(total = 3, done = 1, open = 2, allDone = false)
+                } else {
+                    GoalProgress(total = 3, done = 3, open = 0, allDone = true)
+                }
+            },
+        )
+
+        assertEquals("清单还有待办时，模型的 done 不该结束目标", 2, provider.requests.size)
+    }
+
+    @Test
     fun finishedTaskListStopsGoalContinuationEvenIfNothingSaysDone() {
         val provider = ScriptedProvider(listOf(
             { _, _ -> assistant(content = "看起来差不多了", finishReason = "stop") },

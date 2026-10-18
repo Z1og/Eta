@@ -222,6 +222,7 @@ internal object AgentPromptBuilder {
                 appendLine("- 目标未达成就继续做；不要把中间进度当成完成，也不要等用户追问才继续。")
                 appendLine("- 已经完成或已经验证过的步骤不要重做；先确认现状，再处理剩余部分。")
                 appendLine("- 目标完全达成时，在回复最后单独输出一行 <goal_status>done</goal_status>，之后不再继续操作。")
+                appendLine("- 只要 task_write 清单里还有 pending，就不要输出 done：要么把它做完，要么明确标成 blocked 并说明原因。")
                 appendLine("- 无法继续时（缺关键信息、需要用户授权、外部条件阻塞），在最后单独输出一行 <goal_status>blocked</goal_status>，并说明卡在哪。")
                 appendLine("- 这两个标记是给运行时的内部信号：不要向用户解释它们，只把实际结果讲清楚。")
                 appendLine("- 目标不等于额外授权：越权、破坏性或需要单独确认的操作仍按既有规则处理。")

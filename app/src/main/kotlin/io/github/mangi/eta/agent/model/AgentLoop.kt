@@ -355,19 +355,28 @@ internal class AgentLoop(
      */
     private fun continueGoal(content: String): Boolean {
         when (goalStatusOf(content)) {
-            GOAL_STATUS_DONE, GOAL_STATUS_BLOCKED -> {
+            // blocked 是"卡住了"，强行继续只会空转。
+            GOAL_STATUS_BLOCKED -> {
                 goalSettled = true
                 return false
             }
+            // done 不在这里直接收工：模型经常做了一部分就宣布完成，
+            // 得先问清单——清单里还有待办，它说的 done 不算数。
             else -> Unit
         }
         if (runController.isGoalCancelled) {
             goalSettled = true
             return false
         }
-        // 有清单就以清单为准：模型说"差不多了"不算完成，清单里还有待办就得继续。
         val progress = goalProgress?.invoke()
-        if (progress != null && progress.total > 0 && progress.allDone) {
+        if (progress != null && progress.total > 0) {
+            if (progress.allDone) {
+                goalSettled = true
+                return false
+            }
+            // 清单有未完成项：无视 done 继续推进（下面统一走轮次预算）。
+        } else if (goalStatusOf(content) == GOAL_STATUS_DONE) {
+            // 没有清单时只能信模型自己的判断。
             goalSettled = true
             return false
         }
