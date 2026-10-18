@@ -3,28 +3,53 @@ package io.github.mangi.eta.agent.skill
 import io.github.mangi.eta.agent.model.AgentModelClient
 
 /**
- * 触发信号拼装——把「本轮消息 + 最近若干轮对话尾」合并为一段匹配文本。
+ * 触发信号拼装——把「本轮消息 + 最近若干轮对话尾 + 最近一轮的思考结论」合并为一段匹配文本。
  *
  * 目的：让「接着搞」「换个 id 试试」这类没有关键词的续问，
  * 也能借助上一轮里出现过的 `.so` / `frida` / 域名等信号命中对应技能。
+ *
+ * 思考内容（reasoning_content）是很强的路由信号：模型在第一轮常会写下
+ * "这是 so 文件，属于 ELF，需要看加密逻辑"这类判断，而用户下一句只说"继续"。
+ * 以前只拼 content，这些判断全部浪费。
+ *
+ * 只取**最新一轮**的思考，不是每轮都拼：思考会提到技能名与工具名，
+ * 如果历史里每轮的思考都进匹配文本，一旦命中某技能就会自我强化、每轮都命中它，
+ * 路由会被固化住。新鲜的那一轮才有信息量。
  */
 internal object SkillTriggerSignals {
 
     private const val MAX_HISTORY_MESSAGES = 6
     private const val MAX_PER_MESSAGE_CHARS = 1_500
 
+    /**
+     * 思考内容只取尾部这么多字符。
+     *
+     * 比正文更短是刻意的：思考里大量是自我纠错与试探（"也许该先…不，还是…"），
+     * 噪声比正文大；结论一般落在尾部。
+     */
+    private const val MAX_REASONING_CHARS = 800
+
     fun buildText(
         prompt: String,
         history: List<AgentModelClient.ConversationMessage>,
     ): String {
         if (history.isEmpty()) return prompt
+        val tail = history.takeLast(MAX_HISTORY_MESSAGES)
+        // 最新一条 assistant 的思考才参与路由，见类注释。
+        val newestReasoningIndex = tail.indexOfLast {
+            it.role == "assistant" && it.reasoningContent.isNotBlank()
+        }
         return buildString {
             append(prompt)
-            history.takeLast(MAX_HISTORY_MESSAGES).forEach { message ->
+            tail.forEachIndexed { index, message ->
                 val content = message.content
                 if (content.isNotBlank()) {
                     append('\n')
                     append(content.take(MAX_PER_MESSAGE_CHARS))
+                }
+                if (index == newestReasoningIndex) {
+                    append('\n')
+                    append(message.reasoningContent.takeLast(MAX_REASONING_CHARS))
                 }
             }
         }
