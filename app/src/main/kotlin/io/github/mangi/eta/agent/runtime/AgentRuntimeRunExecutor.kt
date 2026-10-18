@@ -182,27 +182,40 @@ internal class AgentRuntimeRunExecutor(
                     text = triggerText,
                     extensions = SkillTriggerMatcher.detectExtensions(triggerText),
                 )
+                // 逆向模式放宽覆盖面：技能多、触发词切分细，4 个正文经常不够用。
+                val autoLoadLimit = if (reverseModeEnabled) {
+                    SkillTriggerMatcher.REVERSE_MAX_AUTO_LOADED
+                } else {
+                    SkillTriggerMatcher.MAX_AUTO_LOADED
+                }
+                val candidateLimit = if (reverseModeEnabled) {
+                    SkillTriggerMatcher.REVERSE_MAX_CANDIDATES
+                } else {
+                    SkillTriggerMatcher.MAX_CANDIDATES
+                }
                 val ranked = SkillTriggerMatcher.rankScored(
                     input = triggerInput,
                     skills = rankedSkills,
-                    maxResults = SkillTriggerMatcher.MAX_CANDIDATES + SkillTriggerMatcher.MAX_AUTO_LOADED,
+                    maxResults = candidateLimit + autoLoadLimit,
                     reverseSkillIds = reverseSkillIds,
                     reverseBias = reverseModeEnabled,
+                    // 中文汉字重合召回噪声大，只在逆向模式下开。
+                    chineseRecall = reverseModeEnabled,
                 )
                 // 阈值：只对足够特异的命中自动下发正文（<2.0 视为低置信），避免注入错技能。
                 val strongBodies = SkillTriggerMatcher.selectBodies(
                     ranked.filter { it.specificity >= 2.0 },
-                    SkillTriggerMatcher.MAX_AUTO_LOADED,
+                    autoLoadLimit,
                 )
                 // 结构化兜底路由（扩展名/工具名）——补足关键词命中不到的口。
                 val bySignal = ReverseSignalRouter.route(
                     text = triggerText,
                     skills = compatibleSkills,
-                    maxMatches = SkillTriggerMatcher.MAX_AUTO_LOADED,
+                    maxMatches = autoLoadLimit,
                 )
                 val selected = (strongBodies + bySignal)
                     .distinctBy { it.id }
-                    .take(SkillTriggerMatcher.MAX_AUTO_LOADED)
+                    .take(autoLoadLimit)
                 // 记录自动注入，作为负样本素材（自动注入但未被读取的技能将被温和降权）。
                 runCatching { selected.forEach { SkillUsageStats.recordAutoLoad(appContext.filesDir, it.id) } }
                 autoLoadedSkills = selected.mapNotNull { entry ->
@@ -215,13 +228,13 @@ internal class AgentRuntimeRunExecutor(
                         .getOrNull()
                 }
                 val loadedIds = selected.mapTo(mutableSetOf()) { it.id }
-                rankedCandidates = if (loadedIds.size >= SkillTriggerMatcher.MAX_AUTO_LOADED) {
+                rankedCandidates = if (loadedIds.size >= autoLoadLimit) {
                     emptyList()
                 } else {
                     ranked.map { it.skill }
                         .filter { it.id !in loadedIds }
                         .distinctBy { it.id }
-                        .take(SkillTriggerMatcher.MAX_CANDIDATES)
+                        .take(candidateLimit)
                 }
             }
             // Trellis 项目规范探测（方案 A）：从用户消息中的路径向上找 .trellis/spec/，

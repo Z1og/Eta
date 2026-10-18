@@ -1,6 +1,7 @@
 package io.github.mangi.eta.agent.skill
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SkillTriggerRankingTest {
@@ -74,6 +75,28 @@ class SkillTriggerRankingTest {
 
         assertEquals(1, ranked.size)
         assertEquals("native", ranked.first().skill.id)
+    }
+
+    @Test
+    fun chineseRecallOnlyRunsWhenExplicitlyEnabled() {
+        val member = skill("member", listOf("会员破解"))
+        val text = "会员校验怎么绕过"
+
+        // 普通对话：完整子串命中不了就是不命中，不该靠汉字重合硬凑。
+        val off = SkillTriggerMatcher.rankScored(
+            input = SkillTriggerMatcher.Input(text = text),
+            skills = listOf(member),
+        )
+        assertTrue(off.isEmpty())
+
+        // 逆向模式：共享"会员"两个字（覆盖率 2/4 = 0.5）就够召回。
+        val on = SkillTriggerMatcher.rankScored(
+            input = SkillTriggerMatcher.Input(text = text),
+            skills = listOf(member),
+            chineseRecall = true,
+        )
+        assertEquals(1, on.size)
+        assertEquals("member", on.first().skill.id)
     }
 
     @Test

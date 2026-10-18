@@ -26,6 +26,12 @@ internal object SkillTriggerMatcher {
     /** 单轮自动加载的 Skill 正文上限。 */
     const val MAX_AUTO_LOADED = 4
 
+    /** 逆向模式下的正文上限：技能多、切分细，需要更大覆盖面才找得到。 */
+    const val REVERSE_MAX_AUTO_LOADED = 6
+
+    /** 非正文的候选短名单上限（模型可用 skills_read 自己取）。 */
+    const val REVERSE_MAX_CANDIDATES = 10
+
     /** 低置信时下发的候选短名单上限。 */
     const val MAX_CANDIDATES = 6
 
@@ -55,6 +61,22 @@ internal object SkillTriggerMatcher {
         "my", "is", "the", "to", "in", "on", "of", "and", "for", "an",
         "it", "this", "that", "with", "how", "can", "do", "you", "me",
     )
+
+    /**
+     * 中文二元组。
+     *
+     * 用二元组而不是单字集合：单字会丢词序，"会员"和"员会"看起来一样，
+     * 而且"会""员"这类字单独出现时几乎没有信号。
+     */
+    private fun bigrams(text: String): Set<String> {
+        val cjk = text.lowercase().filter { it in '\u4e00'..'\u9fff' }
+        if (cjk.length < 2) return emptySet()
+        val out = HashSet<String>(cjk.length)
+        for (index in 0 until cjk.length - 1) {
+            out += cjk.substring(index, index + 2)
+        }
+        return out
+    }
 
     /** 逆向模式开启时，逆向技能命中得分的乘数。 */
     private const val REVERSE_BIAS = 1.5
@@ -129,6 +151,13 @@ internal object SkillTriggerMatcher {
         maxResults: Int = MAX_CANDIDATES,
         reverseSkillIds: Set<String> = emptySet(),
         reverseBias: Boolean = false,
+        /**
+         * 中文重合召回：只在逆向模式开启时启用。
+         *
+         * 触发词常是"会员破解"而用户说"会员校验怎么绕过"，完整子串对不上；
+         * 汉字重合能补上，但噪声比术语层大（常见字重合），普通对话不该开。
+         */
+        chineseRecall: Boolean = false,
     ): List<Scored> {
         if (input.text.isBlank() || skills.isEmpty() || maxResults <= 0) return emptyList()
         val haystack = input.text.lowercase()
@@ -157,12 +186,37 @@ internal object SkillTriggerMatcher {
             .map { it.value }
             .filter { it !in LATIN_STOPWORDS }
             .toSet()
+        // 查询的实义二元组；常见组合（"分析""文件"）在这里先剔掉，否则任何技能都能蹭到。
+        val commonBigrams = if (chineseRecall) {
+            val dfMap = HashMap<String, Int>(1024)
+            for (entry in skills) {
+                for (trigger in entry.triggers) {
+                    for (bigram in bigrams(trigger)) {
+                        dfMap[bigram] = (dfMap[bigram] ?: 0) + 1
+                    }
+                }
+            }
+            // 出现在二十分之一以上、且至少 5 个技能里 = 通用词（"绕过""加固""分析"），不构成区分信号。
+            // 30% 太松（196 个技能的触发词各不相同，没有任何 bigram 能达到三成）；
+            // 绝对下限 5 是必需的：样本很少时按比例算会把唯一的关键词也一起过滤掉。
+            val floor = maxOf(5, (total * 0.05).toInt() + 1)
+            dfMap.filterValues { it >= floor }.keys
+        } else {
+            emptySet()
+        }
+        val queryBigrams = if (chineseRecall) {
+            bigrams(haystack) - commonBigrams
+        } else {
+            emptySet()
+        }
         for (skill in skills) {
             if (!seenIds.add(skill.id)) continue
             var specificity = 0.0
             var aggregate = 0.0
             var hitCount = 0
             var idfSum = 0.0
+            // 中文弱命中的覆盖率；用于让"覆盖 4/4 字"胜过"覆盖 2/4 字"。
+            var chineseCoverage = 0.0
             for (raw in skill.triggers) {
                 val trigger = raw.trim().lowercase()
                 if (trigger.isEmpty()) continue
@@ -194,6 +248,32 @@ internal object SkillTriggerMatcher {
                     specificity = maxOf(specificity, 1.5 + overlap.size * 0.5)
                 }
             }
+            if (hitCount == 0 && chineseRecall && queryBigrams.isNotEmpty()) {
+                // 逐个触发词算字符覆盖率，取最佳的一个：
+                // "会员破解" 覆盖了"会员"两个字（2/4 = 0.5）就够，
+                // 不要求覆盖整串——用户很少照着触发词原样说话。
+                var bestCoverage = 0.0
+                var bestOverlap = 0
+                for (trigger in skill.triggers) {
+                    val triggerBigrams = bigrams(trigger) - commonBigrams
+                    if (triggerBigrams.isEmpty()) continue
+                    val overlap = triggerBigrams.intersect(queryBigrams)
+                    if (overlap.isEmpty()) continue
+                    val coveredChars = overlap.flatMap { it.toList() }.toSet().size
+                    val totalChars = trigger.count { it in '\u4e00'..'\u9fff' }
+                    if (totalChars < 2) continue
+                    val coverage = coveredChars.toDouble() / totalChars
+                    if (coverage > bestCoverage) {
+                        bestCoverage = coverage
+                        bestOverlap = overlap.size
+                    }
+                }
+                if (bestOverlap >= 1 && bestCoverage >= 0.5) {
+                    hitCount = bestOverlap
+                    chineseCoverage = bestCoverage
+                    specificity = maxOf(specificity, 1.5 + bestOverlap * 0.5)
+                }
+            }
             if (specificity <= 0.0) continue
             val weight = skill.triggerWeight.coerceAtLeast(0.1)
             val score = aggregate * weight
@@ -207,6 +287,7 @@ internal object SkillTriggerMatcher {
             // 纯术语弱命中（idfSum 为 0）给固定弱分，避免除零后 rank 归零、排在最后。
             val base = when {
                 hitCount == 0 -> EXT_ONLY_RANK
+                chineseCoverage > 0.0 -> chineseCoverage
                 idfSum <= 0.0 -> 0.4 * hitCount
                 else -> avgIdf * (0.6 + 0.4 * density)
             }
