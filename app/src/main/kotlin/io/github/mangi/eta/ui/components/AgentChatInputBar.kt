@@ -354,6 +354,34 @@ internal fun AgentChatInputBar(
                             onModelSelected = onModelSelected,
                         )
 
+                        // 运行中唯一能点的位置被停止按钮占住，onSubmit 永远调不到：
+                        // AgentAppState.sendCurrentMessage 里"运行中 → enqueueWhileRunning"那条分支
+                        // 实际是死代码，队列永远空着，引导按钮也无从触发。这里把入口补回来。
+                        // 附件不排队（enqueueWhileRunning 会提示），所以有附件时不显示。
+                        if (isStreaming && canSend &&
+                            pendingImages.isEmpty() && pendingFileReferences.isEmpty()
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    dictation.cancel()
+                                    val queuedText = textFieldState.text.toString()
+                                    textFieldState.clearText()
+                                    onSubmit(queuedText)
+                                },
+                                enabled = true,
+                                minWidth = ChatInputActionSize,
+                                minHeight = ChatInputActionSize,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.ArrowUpward,
+                                    contentDescription = stringResource(R.string.chat_queue_send),
+                                    modifier = Modifier.size(SendIconSize),
+                                    tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(2.dp))
+                        }
+
                         IconButton(
                             onClick = if (isStreaming) {
                                 onStop
