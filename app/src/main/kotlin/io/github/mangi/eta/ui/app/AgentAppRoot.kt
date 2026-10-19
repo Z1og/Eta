@@ -155,11 +155,16 @@ fun AgentAppRoot(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                RootAccess.refresh(context)
-                appViewModel.refreshKimiWeb()
-                permissionHealth.refreshPermissionHealth()
-                agentState.refreshRuntimeResults()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    RootAccess.refresh(context)
+                    appViewModel.refreshKimiWeb()
+                    permissionHealth.refreshPermissionHealth()
+                    agentState.refreshRuntimeResults()
+                }
+                // 切后台立刻提交一次流式内容，别等节流窗口，也别赌进程不会被杀。
+                Lifecycle.Event.ON_PAUSE -> agentState.flushStreamPersistence()
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

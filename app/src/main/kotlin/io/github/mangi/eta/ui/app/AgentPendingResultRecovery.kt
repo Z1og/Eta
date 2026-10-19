@@ -96,7 +96,17 @@ internal object AgentPendingResultRecovery {
                 )
             }
             if (assistantIndex >= 0) {
-                messages[assistantIndex] = completedMessage.copyWithId(messages[assistantIndex].id)
+                val target = messages[assistantIndex]
+                val streamed = (target as? AgentMessageUi)?.content?.takeIf { it.isNotBlank() }
+                if (content == null && streamed != null) {
+                    // 失败或空结果不能吞掉已经生成的内容（Runtime 服务被停止、
+                    // 后台执行服务起不来、网络中断等都会走到这里）：保留原文收尾，
+                    // 错误提示追加在后面，否则用户看到的只剩一条"运行失败"。
+                    messages[assistantIndex] = (target as AgentMessageUi).copy(isStreaming = false)
+                    messages.add(assistantIndex + 1, completedMessage)
+                } else {
+                    messages[assistantIndex] = completedMessage.copyWithId(target.id)
+                }
             } else {
                 messages += completedMessage
             }

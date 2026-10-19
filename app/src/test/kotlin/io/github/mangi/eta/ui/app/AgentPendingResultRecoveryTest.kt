@@ -207,6 +207,34 @@ class AgentPendingResultRecoveryTest {
     }
 
     @Test
+    fun failedRunKeepsAlreadyStreamedContentAndAppendsFailureNotice() {
+        // Runtime 服务被停止、后台执行服务起不来等失败，不能把已经生成的内容吞掉。
+        val partial = AgentMessageUi(id = "assistant-run-fail-1-0", content = "已经生成的半截回答")
+        val recovered = AgentPendingResultRecovery.apply(
+            state = AgentChatUiState(
+                messages = listOf(partial),
+                input = "",
+                isStreaming = true,
+                thinkingEnabled = false,
+            ),
+            runId = "run-fail",
+            result = AgentRuntimeWire.RunResult(
+                runId = "run-fail",
+                ok = false,
+                content = "",
+                error = "Agent Runtime 服务已停止",
+            ),
+            supplements = emptyList(),
+        )
+
+        val kept = recovered.state.messages[0] as AgentMessageUi
+        assertEquals("已经生成的半截回答", kept.content)
+        assertFalse(kept.isStreaming)
+        val notice = recovered.state.messages[1] as SystemNoticeMessageUi
+        assertEquals(SystemNoticeCode.RuntimeFailed, notice.code)
+    }
+
+    @Test
     fun completedOutboxResultKeepsToolTraceAndRemovesInterruptedNotice() {
         val tool = ToolActivityMessageUi(
             id = "run-tool-tool-1-call-1",

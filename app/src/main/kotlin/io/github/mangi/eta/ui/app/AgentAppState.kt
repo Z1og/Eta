@@ -102,6 +102,8 @@ internal class AgentAppState(
     private val runMessageProjector = AgentRunMessageProjector()
     private val runEventCoalescer = AgentRunEventCoalescer()
     private val runEventFlushJobs = mutableMapOf<String, Job>()
+    /** 流式期间的节流落盘任务：让生成中的内容不只有 checkpoint 一份。 */
+    private var streamPersistJob: Job? = null
     private var currentRunId: String? = null
     private var currentRunJob: Job? = null
     private val persistenceLock = Any()
@@ -380,6 +382,16 @@ internal class AgentAppState(
                 state.roleplayMessages.pendingRewrites.keys.filterNot { it in observed }.map { id to it }
             }
         } else emptyList()
+        if (checkpoints.isNotEmpty()) {
+            // 只在确实有遗留 checkpoint 时打一条，便于定位"回复没回来"到底卡在哪一步。
+            AndroidAgentLogger.warn(
+                "Run recovery: runs=${checkpoints.map { "${it.runId}/${it.events.size}" }} " +
+                    "activeKnown=$activeStateKnown terminalKnown=$terminalStateKnown " +
+                    "activeRunId=$activeRunId localRunId=$locallyObservedRunId locallyBusy=$locallyBusy " +
+                    "completed=${plan.completed.map { it.result.result.runId.ifBlank { it.result.handoff.id } }} " +
+                    "interrupted=${plan.interrupted.map { it.runId }} reattach=${plan.reattach?.runId}",
+            )
+        }
         if (
             plan.completed.isEmpty() &&
             plan.interrupted.isEmpty() &&
@@ -1580,6 +1592,7 @@ internal class AgentAppState(
                 applyRunEvent(runId, ready)
             }
             scheduleRunDeltaFlush(runId)
+            scheduleStreamPersistence()
             return
         }
 
@@ -1594,6 +1607,29 @@ internal class AgentAppState(
             runEventFlushJobs.remove(runId)
             flushPendingRunDelta(runId)
         }
+    }
+
+    /**
+     * 流式期间节流落盘。生成中的回复此前只存在于 checkpoint：进程被杀后能不能回来，
+     * 完全取决于恢复链路上每一步都不出错。这里补一份数据库副本——
+     * 即使恢复整条失败，内容也已经落盘；恢复成功时 restoreRunEvents 会先
+     * resetForReplay 按 id 前缀清掉同一 run 的旧投影，不会重复追加。
+     */
+    private fun scheduleStreamPersistence() {
+        if (streamPersistJob?.isActive == true) return
+        streamPersistJob = scope.launch {
+            delay(STREAM_PERSIST_INTERVAL_MS)
+            streamPersistJob = null
+            persistConversations()
+        }
+    }
+
+    /** 切后台时立刻提交一次：节流窗口内的内容不该等到下一次定时才写。 */
+    fun flushStreamPersistence() {
+        if (streamPersistJob?.isActive != true) return
+        streamPersistJob?.cancel()
+        streamPersistJob = null
+        persistConversations()
     }
 
     private fun flushPendingRunDelta(runId: String) {
@@ -2191,6 +2227,8 @@ internal class AgentAppState(
         /** Runtime 状态查询重试次数与间隔：冷启动 binder 未就绪时给几次机会。 */
         const val RUNTIME_PROBE_RETRY_ATTEMPTS = 3
         const val RUNTIME_PROBE_RETRY_DELAY_MS = 400L
+        /** 流式期间落盘节流间隔。 */
+        const val STREAM_PERSIST_INTERVAL_MS = 2_000L
 
         fun emptyChatState(thinkingEnabled: Boolean): AgentChatHomeUiState =
             AgentChatHomeUiState(
