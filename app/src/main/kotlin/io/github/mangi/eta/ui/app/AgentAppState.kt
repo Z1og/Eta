@@ -310,16 +310,40 @@ internal class AgentAppState(
             (initialCompletedQuery as? AgentRuntimeClient.CompletedRunsQuery.Known)
                 ?.runs
                 .orEmpty()
-        val activeRunQuery = client.queryActiveRun()
-        val terminalRaceQuery = if (
+        var activeRunQuery = client.queryActiveRun()
+        var completedQuery = if (
             activeRunQuery is AgentRuntimeClient.ActiveRunQuery.Known && checkpoints.isNotEmpty()
         ) {
             client.queryCompletedRuns()
         } else {
             initialCompletedQuery
         }
+        // 进程被杀后冷启动，Runtime 往往刚被拉起，首轮查询拿不到状态。以前只查一次，
+        // 拿不到就把待恢复的 checkpoint 原样留在磁盘上——正在生成的那条回复整条消失，
+        // 而且残留 checkpoint 会在很久之后的某次冷启动再冒出来。这里补几次重试。
+        var probeAttempt = 0
+        while (
+            probeAttempt < RUNTIME_PROBE_RETRY_ATTEMPTS &&
+            (
+                activeRunQuery is AgentRuntimeClient.ActiveRunQuery.Unavailable ||
+                    completedQuery is AgentRuntimeClient.CompletedRunsQuery.Unavailable
+                )
+        ) {
+            probeAttempt++
+            delay(RUNTIME_PROBE_RETRY_DELAY_MS)
+            if (activeRunQuery is AgentRuntimeClient.ActiveRunQuery.Unavailable) {
+                activeRunQuery = client.queryActiveRun()
+            }
+            if (
+                completedQuery is AgentRuntimeClient.CompletedRunsQuery.Unavailable &&
+                activeRunQuery is AgentRuntimeClient.ActiveRunQuery.Known &&
+                checkpoints.isNotEmpty()
+            ) {
+                completedQuery = client.queryCompletedRuns()
+            }
+        }
         val terminalRaceCompletedRuns =
-            (terminalRaceQuery as? AgentRuntimeClient.CompletedRunsQuery.Known)
+            (completedQuery as? AgentRuntimeClient.CompletedRunsQuery.Known)
                 ?.runs
                 .orEmpty()
         val completedRuns = (initialCompletedRuns + terminalRaceCompletedRuns)
@@ -329,9 +353,13 @@ internal class AgentAppState(
             .values
             .toList()
         val activeStateKnown = activeRunQuery is AgentRuntimeClient.ActiveRunQuery.Known
-        val terminalStateKnown = terminalRaceQuery is AgentRuntimeClient.CompletedRunsQuery.Known
+        val terminalStateKnown = completedQuery is AgentRuntimeClient.CompletedRunsQuery.Known
         val activeRunId = (activeRunQuery as? AgentRuntimeClient.ActiveRunQuery.Known)?.runId
-        val locallyObservedRunId = withContext(Dispatchers.Main) { currentRunId }
+        val (locallyObservedRunId, locallyBusy) = withContext(Dispatchers.Main) {
+            currentRunId to (
+                currentRunId != null || conversationsById.values.any { it.isStreaming }
+                )
+        }
         val plan = AgentRunRecoveryCoordinator.plan(
             checkpoints = checkpoints,
             completedRuns = completedRuns,
@@ -339,8 +367,10 @@ internal class AgentAppState(
             terminalStateKnown = terminalStateKnown,
             activeRunId = activeRunId,
             locallyObservedRunId = locallyObservedRunId,
+            // 查不到状态时，只要本地没有在跑的 run，遗留 checkpoint 一定是被中断的。
+            treatUnknownAsInterrupted = !locallyBusy,
         )
-        val orphanRewrites = if (activeStateKnown && terminalStateKnown) withContext(Dispatchers.Main) {
+        val orphanRewrites = if ((activeStateKnown && terminalStateKnown) || !locallyBusy) withContext(Dispatchers.Main) {
             val observed = checkpoints.mapTo(mutableSetOf()) { it.runId }.apply {
                 addAll(completedRuns.map { it.result.runId })
                 activeRunId?.let(::add)
@@ -367,6 +397,7 @@ internal class AgentAppState(
                 val runId = completedRun.result.runId.ifBlank { completedRun.handoff.id }
                 val payload = AgentUiHandoffPayload.from(completedRun.handoff.payload)
                 val conversationId = payload.conversationId
+                ensureRecoverableConversation(conversationId, runId)
                 val state = conversationsById[conversationId] ?: return@forEach
                 recoveryPlan.checkpoint?.let { checkpoint ->
                     stateChanged = restoreCheckpointTrace(
@@ -425,6 +456,27 @@ internal class AgentAppState(
         }
     }
 
+    /**
+     * 恢复目标会话可能还没进内存：进程被杀时它尚未落盘（新会话首轮，
+     * persistConversations 是异步的），流式期间也只有 checkpoint 里有内容。
+     * 以前直接跳过——正在生成的那条回复整条消失，且无从排查。这里重建一个最小会话，
+     * 让 checkpoint / outbox 里的事件能重放进去：内容回来比会话元数据完美更重要。
+     */
+    private fun ensureRecoverableConversation(conversationId: String, runId: String) {
+        if (conversationId.isBlank() || conversationsById.containsKey(conversationId)) return
+        AndroidAgentLogger.error(
+            "Recovering into a conversation not yet persisted: run=$runId conv=$conversationId",
+        )
+        updateConversation(conversationId, AgentChatHomeUiState(
+            messages = emptyList(),
+            history = emptyList(),
+            journal = emptyList(),
+            input = "",
+            isStreaming = false,
+            thinkingEnabled = homeState.thinkingEnabled,
+        ))
+    }
+
     /** 把安全事件恢复为 UI 轨迹；半截回复不进入模型 history，设备工具也不会重放。 */
     private fun restoreCheckpointTrace(
         checkpoint: AgentRunCheckpointStore.Checkpoint,
@@ -435,6 +487,7 @@ internal class AgentAppState(
         val conversationId = AgentUiHandoffPayload
             .from(checkpoint.handoff.payload)
             .conversationId
+        ensureRecoverableConversation(conversationId, runId)
         val existing = conversationsById[conversationId] ?: return false
         if (AgentRuntimeHistoryReducer.wasApplied(existing, runId)) return false
         if (checkpoint.operation == AgentRuntimeWire.OP_REWRITE_REPLY) {
@@ -490,6 +543,7 @@ internal class AgentAppState(
         val conversationId = AgentUiHandoffPayload
             .from(checkpoint.handoff.payload)
             .conversationId
+        ensureRecoverableConversation(conversationId, runId)
         val existing = conversationsById[conversationId] ?: return
         if (currentRunId != null || AgentRuntimeHistoryReducer.wasApplied(existing, runId)) return
 
@@ -2134,6 +2188,9 @@ internal class AgentAppState(
         const val REVERSE_MODE_BUSY_ID = "__reverse_mode__"
         // 数据状态以较粗粒度发布，文字显现由独立的帧时钟连续推进。
         const val STREAM_UI_UPDATE_INTERVAL_MS = 80L
+        /** Runtime 状态查询重试次数与间隔：冷启动 binder 未就绪时给几次机会。 */
+        const val RUNTIME_PROBE_RETRY_ATTEMPTS = 3
+        const val RUNTIME_PROBE_RETRY_DELAY_MS = 400L
 
         fun emptyChatState(thinkingEnabled: Boolean): AgentChatHomeUiState =
             AgentChatHomeUiState(
