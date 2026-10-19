@@ -674,22 +674,25 @@ internal class AgentRuntimeRunExecutor(
                         "model_code=${requestFailure?.code.orEmpty()}, " +
                         "cause_type=${requestFailure?.cause?.safeLogType().orEmpty()}"
                 )
-                val event = AgentEvent.RunFailed(message)
-                runCatching {
-                    acceptEvent(
-                        session,
-                        event,
-                        archivedEvents,
-                        entrySurfaceGuard,
-                        checkpointRecorder,
-                    )
-                }.onFailure { checkpointFailure ->
-                    AndroidAgentLogger.error(
-                        "Agent runtime failure checkpoint failed: " +
-                            "type=${checkpointFailure.safeLogType()}"
-                    )
-                    session.emit(event)
-                }
+            }
+            // 停止与失败都要落盘。原来只有失败分支 acceptEvent，被用户按停时这一轮
+            // 已产生的助手消息、工具调用、思考就只留在内存里 —— 表现为"会话记录突然少了内容"。
+            // 上层本来就靠 checkpoint 在 interrupted 时回填（AgentAppState 第 474 行），
+            // 前提是这里真的写了 checkpoint。
+            runCatching {
+                acceptEvent(
+                    session,
+                    AgentEvent.RunFailed(message),
+                    archivedEvents,
+                    entrySurfaceGuard,
+                    checkpointRecorder,
+                )
+            }.onFailure { checkpointFailure ->
+                AndroidAgentLogger.error(
+                    "Agent runtime failure checkpoint failed: " +
+                        "type=${checkpointFailure.safeLogType()}"
+                )
+                session.emit(AgentEvent.RunFailed(message))
             }
             AgentRuntimeWire.RunResult(
                 runId = request.runId,
@@ -697,7 +700,9 @@ internal class AgentRuntimeRunExecutor(
                 content = "",
                 error = message,
                 reasoningContent = modelFailure?.reasoningContent.orEmpty(),
-                transcript = modelFailure?.transcript.orEmpty(),
+                // complete() 调用之前被取消时没有 AgentModelExecutionException 包装，
+                // transcript 会是空的；用 session 已积累的本轮增量兜底，别让 UI 收到空列表。
+                transcript = modelFailure?.transcript ?: session.transcript,
                 contextSnapshot = modelFailure?.contextSnapshot?.copy(operationId = request.runId) ?: session.contextSnapshot,
                 operation = request.operation,
                 rewriteTargetMessageId = request.rewriteTargetMessageId,

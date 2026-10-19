@@ -111,6 +111,14 @@ internal object SkillTriggerMatcher {
         val rank: Double = score,
         /** 命中次数（含术语弱命中）。真实数据里命中数往往只有 1–2 个，它是比 specificity 更可靠的信号。 */
         val hitCount: Int = 0,
+        /**
+         * 是否靠关键词（完整子串 / 术语 / 中文重合）命中，而不是只靠扩展名。
+         *
+         * 扩展名信号的 specificity 是常量 [EXT_SIGNAL_LEN]，比大多数关键词命中都高，
+         * 直接参与排序会压过"用户真的说了反编译"却触发词偏短的技能。两者不是一回事，
+         * 排序时先看这个标志。
+         */
+        val keywordHit: Boolean = true,
     )
 
     /** 从文本中探测文件扩展名（小写、不含点），用于扩展名强命中与结构化兜底路由。 */
@@ -217,6 +225,8 @@ internal object SkillTriggerMatcher {
             var idfSum = 0.0
             // 中文弱命中的覆盖率；用于让"覆盖 4/4 字"胜过"覆盖 2/4 字"。
             var chineseCoverage = 0.0
+            // 到目前为止只有扩展名信号，没有关键词命中。
+            var keywordHit = false
             for (raw in skill.triggers) {
                 val trigger = raw.trim().lowercase()
                 if (trigger.isEmpty()) continue
@@ -227,6 +237,7 @@ internal object SkillTriggerMatcher {
                 aggregate += contribution
                 hitCount += 1
                 idfSum += idf(trigger)
+                keywordHit = true
                 if (contribution > specificity) specificity = contribution
             }
             if (skill.extensions.isNotEmpty() && extensions.isNotEmpty() &&
@@ -244,6 +255,7 @@ internal object SkillTriggerMatcher {
                 val overlap = queryTerms.intersect(skillTerms)
                 if (overlap.isNotEmpty()) {
                     hitCount = overlap.size
+                    keywordHit = true
                     // 强到足够进入正文阈值（2.0），但排序上仍排在完整命中之后。
                     specificity = maxOf(specificity, 1.5 + overlap.size * 0.5)
                 }
@@ -270,6 +282,7 @@ internal object SkillTriggerMatcher {
                 }
                 if (bestOverlap >= 1 && bestCoverage >= 0.5) {
                     hitCount = bestOverlap
+                    keywordHit = true
                     chineseCoverage = bestCoverage
                     specificity = maxOf(specificity, 1.5 + bestOverlap * 0.5)
                 }
@@ -292,14 +305,20 @@ internal object SkillTriggerMatcher {
                 else -> avgIdf * (0.6 + 0.4 * density)
             }
             val biased = if (reverseBias && skill.id in reverseSkillIds) base * REVERSE_BIAS else base
-            hits += Scored(skill, specificity, score, biased * weight, hitCount)
+            hits += Scored(skill, specificity, score, biased * weight, hitCount, keywordHit)
         }
-        // 命中数优先：真实数据里每个技能通常只命中 1–2 个词，
-        // "命中 2 个" 就是比 "命中 1 个" 更相关，不该被某个长词的 specificity 压过去。
+        // 主键必须是 specificity（精确度），hitCount 只能做次键。
+        // 用 hitCount 当主键会让"弱召回 3 次"压过"精确命中 1 次"：
+        // 实测查询「用 frida hook 一下这个方法」里 src-hunt 靠大字组弱召回拿到 hit=3、
+        // specificity 只有 3.0，而 dynamic-instrumentation 精确命中 frida、hit=1、
+        // specificity 24.0——前者被挤到第 6 位，frida 专项技能直接掉出 top2。
+        // specificity 优先同时修好了另一个误伤：capture-mitm(spec 24, hit 2) 稳压
+        // reverse-engineering-api(spec 19.2, hit 1)，不再被"命中更多"反超。
         return hits
             .sortedWith(
-                compareByDescending<Scored> { it.hitCount }
+                compareByDescending<Scored> { it.keywordHit }
                     .thenByDescending { it.specificity }
+                    .thenByDescending { it.hitCount }
                     .thenByDescending { it.rank },
             )
             .take(maxResults)
