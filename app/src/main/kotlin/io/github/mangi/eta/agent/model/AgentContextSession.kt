@@ -130,9 +130,13 @@ internal class AgentContextSession(
      * 有硬上限但 provider 不回报 usage 时维持旧语义（不主动压缩），避免无依据地改写用户上下文。
      */
     private fun effectiveInputTokens(): Int? {
-        inputTokens?.let { return it }
-        if (contextWindow != null) return null
-        return messages.toString().length / CHARS_PER_TOKEN_ESTIMATE
+        // 有窗口时优先用 provider 回报的用量；没回报就按体积估算。
+        // 原先"配了窗口且无 usage 就返回 null"会让 before 恒为 null，
+        // 触发条件里 before == null 直接成立 → 自动压缩永不触发，只能人工强制压缩。
+        // 窗口未知时反过来不采信 usage（无从校验口径，曾出现报 10M 的假值），
+        // 统一按体积估算，与 triggerThreshold 的保守假定窗口配套。
+        if (contextWindow == null) return messages.toString().length / CHARS_PER_TOKEN_ESTIMATE
+        return inputTokens ?: messages.toString().length / CHARS_PER_TOKEN_ESTIMATE
     }
 
     /**

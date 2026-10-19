@@ -263,10 +263,14 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
                     val data = msg.data
                     val runId = data?.let(AgentRuntimeWire::runIdFromBundle).orEmpty()
                     val text = data?.let(AgentRuntimeWire::steerTextFromBundle).orEmpty()
+                    // 必须走 session.steer(text) { recordSupplementEvent(...) }：
+                    // 直接 controller.steer 只入队，不会记录 supplement、也不会向订阅者
+                    // 发 UserSupplementReceived —— 界面上这条消息"发送后就没了"，
+                    // 重放历史里同样缺失。与 overlay 的补充入口保持同一条路径。
                     val accepted = activeSession?.let { session ->
                         !session.isTerminal &&
                             (runId.isBlank() || runId == session.runId) &&
-                            session.controller.steer(text)
+                            session.steer(text) { recordSupplementEvent(text) } != null
                     } ?: false
                     msg.replyTo?.let { target ->
                         runCatching {

@@ -189,6 +189,15 @@ internal object AgentConversationStore {
                 unaligned += conversation.id
             }
             val checkpoint = dao.contextCheckpoint(conversation.id)
+            val decodedHistory = AgentConversationCodec.decodeTranscript(checkpoint?.historyJson)
+            if (decodedHistory.isEmpty() && restored.isNotEmpty()) {
+                // 上下文检查点缺失/为空时会退化成"全量消息当历史"，压缩成果就此丢失，
+                // 下一轮直接爆上下文。这里留证据，便于判断是没写入还是被覆盖。
+                AndroidAgentLogger.warn(
+                    "context checkpoint empty; history falls back to all messages " +
+                        "(conv=${conversation.id}, messages=${restored.size})",
+                )
+            }
             states[conversation.id] = AgentChatHomeUiState(
                 roleplay = conversation.roleplayJson.takeIf(String::isNotBlank)?.let { json.decodeFromString<RoleplayBinding>(it) },
                 roleplayMessages = conversation.revisionsJson.takeIf(String::isNotBlank)?.let {
@@ -196,12 +205,9 @@ internal object AgentConversationStore {
                 } ?: RoleplayMessageState(),
                 journal = AgentConversationCodec.decodeTranscript(checkpoint?.journalJson),
                 messages = restored,
-                history = AgentConversationCodec.decodeTranscript(
-                    checkpoint?.historyJson
-                )
-                    .ifEmpty {
-                        messages.toLegacyHistory()
-                    },
+                history = decodedHistory.ifEmpty {
+                    messages.toLegacyHistory()
+                },
                 appliedRuntimeRunIds = conversation.appliedRuntimeRunIdsJson.toStringList(),
                 input = "",
                 isStreaming = false,

@@ -245,7 +245,7 @@ class AgentContextCompactionTest {
     @Test
     fun unknownContextWindowStillCompactsByEstimatedSize() {
         // 中转/自定义端点没有窗口元数据：换到这类模型后自动压缩过去会被整体关闭，
-        // 现在按消息体积估算照常触发（有窗口但无 usage 的语义保持不变）。
+        // 现在按消息体积估算照常触发（有窗口、无 usage 的场景见下一条用例）。
         var summaries = 0
         val bigHistory = (1..6).flatMap { turn -> listOf(
             AgentModelClient.ConversationMessage("user", "问题 $turn"),
@@ -267,6 +267,27 @@ class AgentContextCompactionTest {
         assertTrue("估算阈值未触发压缩", summaries > 0)
         assertEquals(listOf("完成最新请求"), result.transcript.map { it.content })
         assertTrue(checkNotNull(result.contextSnapshot).messages.any { it.contextSummary })
+    }
+
+    @Test
+    fun knownContextWindowStillAutoCompactsWhenProviderReportsNoUsage() {
+        // 流式接口不带 usage（DeepSeek 等常见）时 provider 永远不回报 token 数。
+        // 之前这种情况 before 恒为 null，自动压缩永不触发，只能人工强制压缩。
+        val original = "历史事实".repeat(120_000)
+        var summaries = 0
+        val result = AgentModelClient.complete(config, "继续", AgentModelClient.ToolExecutor { error("不应执行工具") },
+            history = listOf(AgentModelClient.ConversationMessage("assistant", original)),
+            provider = provider { request, _ ->
+                if (request.purpose == ProviderRequestPurpose.COMPACTION) {
+                    summaries++
+                    response("此前任务已完成。")
+                } else {
+                    assertFalse(request.messages.toString().contains(original))
+                    response("完成")
+                }
+            })
+        assertTrue("估算阈值未触发自动压缩", summaries > 0)
+        assertNotNull(result.contextSnapshot)
     }
 
     @Test

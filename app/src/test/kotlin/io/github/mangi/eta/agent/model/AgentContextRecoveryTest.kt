@@ -15,7 +15,9 @@ class AgentContextRecoveryTest {
     )
 
     @Test
-    fun unknownWindowStillRunsButNeverAutoCompacts() {
+    fun unknownWindowStillRunsAndCompactsByVolumeNotByBogusUsage() {
+        // 窗口未知时不采信 provider 回报的 usage（这里故意报 10M 假值），按消息体积估算。
+        // 压缩该触发就触发，但对话必须照常跑完，不被窗口缺失阻断。
         for (window in listOf(null, 0, -1)) {
             var summaries = 0
             val result = AgentModelClient.complete(config.copy(contextWindow = window), "继续",
@@ -30,7 +32,7 @@ class AgentContextRecoveryTest {
                     }
                 })
             assertEquals("完成", result.content)
-            assertEquals(0, summaries)
+            assertTrue("窗口未知时应按体积估算触发压缩", summaries > 0)
         }
     }
 
@@ -124,7 +126,8 @@ class AgentContextRecoveryTest {
 
     @Test
     fun invalidSummaryDoesNotRetryAndKeepsOriginalHistory() {
-        for ((content, stop) in listOf("" to "stop", "半截" to "length", "长".repeat(12_001) to "stop")) {
+        // 只有"空"和"被 length 截断"才算无效；超长正文改走截断，见下一条。
+        for ((content, stop) in listOf("" to "stop", "半截" to "length")) {
             val messages = messages()
             val original = messages.toString()
             var requests = 0
@@ -137,6 +140,16 @@ class AgentContextRecoveryTest {
             assertEquals(1, requests)
             assertEquals(original, messages.toString())
         }
+    }
+
+    @Test
+    fun overlongSummaryIsTruncatedInsteadOfRejected() {
+        val messages = messages()
+        val session = AgentContextSession(config, messages, 1, "operation", provider { _, _ ->
+            response("长".repeat(12_001))
+        }, AgentRunController(), { emptySet() }, {}, { })
+        session.compact(force = true)
+        assertNotNull(session.snapshot())
     }
 
     @Test
