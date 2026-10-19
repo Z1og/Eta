@@ -402,6 +402,9 @@ private fun AgentChatScaffold(
                 onRegenerateMessage = onRegenerateMessage,
                 onSelectReplyCandidate = onSelectReplyCandidate,
                 messageActionsEnabled = !isStreaming && messageEdit == null,
+                // 运行中也允许长按打开菜单：复制和编辑都不是破坏性操作。
+                // 删除与重写历史仍受 messageActionsEnabled 约束。
+                messageMenuEditable = messageEdit == null,
                 editTargetMessageId = messageEdit?.targetMessageId,
                 currentBrowserMessageId = currentBrowserMessageId,
                 modifier = Modifier
@@ -430,6 +433,8 @@ internal fun AgentConversationMessages(
     onRegenerateMessage: (String) -> Unit = {},
     onSelectReplyCandidate: (String, Int) -> Unit = { _, _ -> },
     messageActionsEnabled: Boolean = false,
+    /** 是否允许打开长按菜单（复制/编辑）。与删除、重写历史分开。 */
+    messageMenuEditable: Boolean = false,
     editTargetMessageId: String? = null,
     currentBrowserMessageId: String? = null,
     modifier: Modifier = Modifier,
@@ -689,6 +694,7 @@ internal fun AgentConversationMessages(
                             showMessageActions = message.id in finalResultMessageIds ||
                                 (message is AgentMessageUi && message.characterEditable),
                             messageActionsEnabled = messageActionsEnabled,
+                            messageMenuEditable = messageMenuEditable,
                             isEditing = message.id == editTargetMessageId,
                             onEditMessage = onEditMessage,
                             onDeleteMessage = onDeleteMessage,

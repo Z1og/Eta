@@ -1164,6 +1164,7 @@
   <string name="chat_eta_working">Eta is working…</string>
   <string name="chat_queue_steer">Steer</string>
   <string name="chat_queue_send">Queue (keeps current run going)</string>
+  <string name="chat_edit_stopped_to_edit">Stopped the current run — you can edit this message now</string>
   <string name="chat_queue_remove">Remove queued message</string>
   <string name="chat_queue_blocked_attachment">Attachments can\'t be queued while Eta is running. Send it after this turn.</string>
   <string name="chat_goal_title">Goal</string>

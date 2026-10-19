@@ -939,7 +939,21 @@ internal class AgentAppState(
     }
 
     fun beginMessageEdit(messageId: String) {
-        if (homeState.isStreaming || homeState.messageEdit != null) return
+        if (homeState.messageEdit != null) return
+        if (homeState.isStreaming) {
+            // 运行中点编辑：先停掉当前运行，run 收尾后自动接着进编辑态。
+            // 以前是直接 return —— 用户点了没反应，也不知道为什么不能改。
+            // 也不能简单放开：saveCurrentMessage 里 isStreaming 分支在处理 messageEdit
+            // 之前就 return 了，运行中保存会把编辑内容当新消息排队，编辑等于没生效。
+            pendingEditMessageId = messageId
+            stopCurrentRun()
+            Toast.makeText(
+                appContext,
+                appContext.getString(R.string.chat_edit_stopped_to_edit),
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
         if (homeState.roleplay != null) {
             if (messageId !in homeState.roleplayMessages.links) return
             val content = when (val message = homeState.messages.firstOrNull { it.id == messageId }) {
@@ -1472,6 +1486,9 @@ internal class AgentAppState(
 
     private val stopRequestedRunIds = mutableSetOf<String>()
 
+    /** 运行中点过"编辑"的目标消息；等 run 停完再进编辑态。 */
+    private var pendingEditMessageId: String? = null
+
     fun stopCurrentRun() {
         val runId = currentRunId ?: return
         if (!stopRequestedRunIds.add(runId)) return
@@ -1870,6 +1887,20 @@ internal class AgentAppState(
                 null
             }
         )
+        consumePendingEdit()
+    }
+
+    /**
+     * run 收尾后接上"运行中点过编辑"的意图。
+     *
+     * 编辑不能像普通消息那样排队——排队只会把它追加成一条新消息，编辑等于没生效；
+     * 所以运行中点编辑先停 run，停完再进编辑态。
+     */
+    private fun consumePendingEdit() {
+        val messageId = pendingEditMessageId ?: return
+        if (homeState.isStreaming || homeState.messageEdit != null) return
+        pendingEditMessageId = null
+        beginMessageEdit(messageId)
     }
 
     private fun updateRunTrace(

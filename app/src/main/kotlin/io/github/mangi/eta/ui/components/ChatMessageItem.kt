@@ -198,6 +198,8 @@ internal fun ChatMessageItem(
     showCopyAction: Boolean = true,
     showMessageActions: Boolean = false,
     messageActionsEnabled: Boolean = true,
+    /** 是否允许打开长按菜单（复制/编辑）。运行中也为 true，与删除/重写历史分开。 */
+    messageMenuEditable: Boolean = true,
     isEditing: Boolean = false,
     onEditMessage: (String) -> Unit = {},
     onDeleteMessage: (String) -> Unit = {},
@@ -209,6 +211,7 @@ internal fun ChatMessageItem(
             message = message,
             assistantOverlay = assistantOverlay,
             actionsEnabled = messageActionsEnabled,
+            menuEditable = messageMenuEditable,
             isEditing = isEditing,
             onEdit = { onEditMessage(message.id) },
             onDelete = { onDeleteMessage(message.id) },
@@ -290,6 +293,8 @@ private fun UserMessageBubble(
     message: UserMessageUi,
     assistantOverlay: Boolean,
     actionsEnabled: Boolean,
+    /** 运行中也允许打开菜单；删除按钮仍只在 actionsEnabled 时出现。 */
+    menuEditable: Boolean,
     isEditing: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -350,7 +355,7 @@ private fun UserMessageBubble(
                                 onEdit()
                             },
                         )
-                        MessageTooltipAction(
+                        if (actionsEnabled) MessageTooltipAction(
                             icon = Icons.Rounded.Delete,
                             label = stringResource(R.string.ui_delete_3755f5),
                             onClick = {
@@ -363,7 +368,7 @@ private fun UserMessageBubble(
             },
             state = tooltipState,
             focusable = true,
-            enableUserInput = actionsEnabled,
+            enableUserInput = actionsEnabled || menuEditable,
         ) {
             Column(
                 modifier = Modifier
