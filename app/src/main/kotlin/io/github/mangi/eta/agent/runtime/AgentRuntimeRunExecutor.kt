@@ -213,8 +213,11 @@ internal class AgentRuntimeRunExecutor(
                     skills = compatibleSkills,
                     maxMatches = autoLoadLimit,
                 )
+                // 正文自动注入只保留原版三个技能：其余技能动辄几千字，按关键词猜着塞进上下文
+                // 既不准又贵。非原版技能改由模型按需 skills_read（后续会并入知识库/经验库）。
                 val selected = (strongBodies + bySignal)
                     .distinctBy { it.id }
+                    .filter { it.id in ReverseSkillCatalog.NATIVE_SKILL_IDS }
                     .take(autoLoadLimit)
                 // 记录自动注入，作为负样本素材（自动注入但未被读取的技能将被温和降权）。
                 runCatching { selected.forEach { SkillUsageStats.recordAutoLoad(appContext.filesDir, it.id) } }
@@ -227,15 +230,8 @@ internal class AgentRuntimeRunExecutor(
                         }
                         .getOrNull()
                 }
-                val loadedIds = selected.mapTo(mutableSetOf()) { it.id }
-                rankedCandidates = if (loadedIds.size >= autoLoadLimit) {
-                    emptyList()
-                } else {
-                    ranked.map { it.skill }
-                        .filter { it.id !in loadedIds }
-                        .distinctBy { it.id }
-                        .take(candidateLimit)
-                }
+                // 候选短名单已停用：它同样是关键词猜测，模型需要时自己 skills_read 更准。
+                rankedCandidates = emptyList()
             }
             // Trellis 项目规范探测（方案 A）：从用户消息中的路径向上找 .trellis/spec/，
             // 命中则注入规范索引；失败静默降级，不影响正常对话。

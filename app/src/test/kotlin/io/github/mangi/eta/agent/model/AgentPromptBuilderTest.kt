@@ -155,7 +155,7 @@ class AgentPromptBuilderTest {
     }
 
     @Test
-    fun browserAndSkillMessagesAreConditionalAndStructurallyComplete() {
+    fun browserMessageIsConditionalAndSkillIndexIsNotInjected() {
         val skill = SkillIndexEntry(
             id = "screen-audit",
             name = "屏幕审计",
@@ -179,16 +179,14 @@ class AgentPromptBuilderTest {
             skillContext = SkillContext(installedSkills = listOf(skill)),
         )
 
-        assertEquals(listOf("system", "system", "system", "user"), messages.roles())
+        // 技能索引与候选短名单已停用，只剩主提示、浏览器说明和用户消息。
+        assertEquals(listOf("system", "system", "user"), messages.roles())
         val systemContents = messages.systemContents()
         assertTrue(systemContents.any { it.contains("browser_use") })
         assertFalse(systemContents.any { it.contains("只需 command") })
-        val skillMessage = systemContents.single { it.contains("id=screen-audit") }
-        assertTrue(skillMessage.contains("path=/skills/screen-audit/SKILL.md"))
-        assertTrue(skillMessage.contains("capabilities=scripts, assets"))
-        assertTrue(skillMessage.contains("description=检查屏幕 并输出 结论"))
-        assertTrue(skillMessage.contains("先调用 skills_read"))
-        assertEquals("读取网页", messages.getJSONObject(3).getString("content"))
+        assertFalse(systemContents.any { it.contains("id=screen-audit") })
+        assertFalse(systemContents.any { it.contains("已启用 Skills 索引") })
+        assertEquals("读取网页", messages.getJSONObject(2).getString("content"))
     }
 
     @Test

@@ -292,67 +292,9 @@ internal object AgentPromptBuilder {
             }
             messages += systemMessage(text)
         }
-        // 低置信命中：不下发正文，只给按相关度排序的候选短名单，避免注入错技能正文，
-        // 由模型按语义用 skills_read 精准挑 1-2 个。
-        val candidates = skillContext.rankedCandidates
-        if (candidates.isNotEmpty()) {
-            val text = buildString {
-                appendLine("以下 Skills 与当前任务相关度较高，正文未自动加载；需要时用 skills_read 精准读取其中最相关的 1-2 个：")
-                candidates.forEach { skill ->
-                    val description = skill.description
-                        .replace(Regex("\\s+"), " ")
-                        .trim()
-                        .let { if (it.length <= 120) it else it.take(120) + "..." }
-                        .ifBlank { "无描述" }
-                    appendLine("- id=${skill.id} | name=${skill.name} | $description")
-                }
-            }
-            messages += systemMessage(text)
-        }
-        val installed = skillContext.installedSkills
-        if (installed.isEmpty()) return messages
-        val autoLoadedIds = skillContext.autoLoadedSkills.mapTo(mutableSetOf()) { it.skillId }
-        // 逆向模式开启时索引只列逆向技能，折叠其余，减少上下文占用（仍可 skills_list 全量查询）。
-        val indexed = if (skillContext.reverseModeEnabled) {
-            installed.filter { it.id in skillContext.reverseSkillIds }
-        } else {
-            installed
-        }
-        val folded = installed.size - indexed.size
-        val body = buildString {
-            appendLine("已启用 Skills 索引（仅元信息，正文按需加载）：")
-            if (folded > 0) {
-                appendLine("（逆向模式开启：已折叠 $folded 个非逆向技能；需要时用 skills_list 全量查询。）")
-            }
-            indexed.forEach { skill ->
-                if (skill.id in autoLoadedIds) return@forEach
-                val capabilities = buildList {
-                    if (skill.hasScripts) add("scripts")
-                    if (skill.hasReferences) add("references")
-                    if (skill.hasAssets) add("assets")
-                    if (skill.hasEvals) add("evals")
-                }.joinToString(", ").ifBlank { "metadata-only" }
-                val description = skill.description
-                    .replace(Regex("\\s+"), " ")
-                    .trim()
-                    .let { if (it.length <= 180) it else it.take(180) + "..." }
-                    .ifBlank { "无描述" }
-                appendLine(
-                    "- id=${skill.id} | name=${skill.name} | path=${skill.skillFilePath} | " +
-                        "capabilities=$capabilities | description=$description"
-                )
-            }
-            appendLine()
-            append(
-                "接到非闲聊任务时，先按语义（不只按字面关键词）在索引中判断是否存在相关 Skill：" +
-                    "逆向、破解、脱壳、游戏、渗透、抓包、自动化、设备与系统操作类任务几乎总有对应 Skill，" +
-                    "不要凭通用知识直接开干。命中就先调用 skills_read 读取对应 SKILL.md 再执行任务，" +
-                    "单个任务至多读 2-3 个最相关的 Skill；正文引用其他文本资源时再调用 skills_read_resource；" +
-                    "不要为了读取 Skill 资源而开启终端，也不要凭索引臆测正文细节。" +
-                    "已在其他 system 消息中给出正文的 Skill 无需重复读取。"
-            )
-        }
-        messages += systemMessage(body)
+        // 候选短名单与已启用技能索引都已停用：
+        // 前者是"按关键词猜"，后者是每次请求都要带上的几百行元信息。
+        // 技能正文改由模型按需 skills_read（原版三个除外，见上）；索引等与知识库/记忆一起重做。
         return messages
     }
 

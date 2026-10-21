@@ -68,15 +68,8 @@ class EtaApp : Application(), XposedServiceHelper.OnServiceListener {
         AgentMemoryRepository.init(this)
         AgentUserPromptRepository.init(this)
         AgentGoalRepository.init(this)
-        // 首启装配随包破甲记忆。只装一次、失败静默：装配≠生效，是否注入仍看档位（默认关闭）。
-        applicationScope.launch {
-            runCatching { AgentUserPromptRepository.seedBuiltinIfNeeded() }
-                .onFailure { throwable ->
-                    AndroidAgentLogger.warn(
-                        "Agent user prompt builtin seed failed: type=${throwable.safeLogType()}"
-                    )
-                }
-        }
+        // 破甲记忆不再首启自动装配：默认应为"没有文件、不注入"，
+        // 需要的人到 设置 → 上下文与扩展 → 编辑作战协议 里点「装配内置版本」。
         ProviderRepository.init(this)
         McpServerRepository.init(this)
         XposedServiceHelper.registerListener(this)
