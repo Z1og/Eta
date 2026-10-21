@@ -65,10 +65,23 @@ internal class AgentContextCompactor(
             } else message
             result.put(AnthropicEphemeralState.withoutContentBlocks(withoutResponsesItems))
         }
-        if (result.toString().length >= messages.toString().length) {
+        // 同样逐条累加：两侧口径一致即可判定"是否变小"，不必各物化一次整段 JSON。
+        if (jsonChars(result) >= jsonChars(messages)) {
             throw failure("CONTEXT_NO_REDUCTION", "摘要未能缩小上下文，原始上下文已保留。")
         }
         return result
+    }
+
+    private fun jsonChars(source: JSONArray): Int {
+        var chars = 0
+        for (index in 0 until source.length()) {
+            val message = source.optJSONObject(index) ?: continue
+            chars += message.optString("content").length +
+                message.optString("reasoning_content").length +
+                message.optString("tool_calls").length +
+                64
+        }
+        return chars
     }
 
     companion object {

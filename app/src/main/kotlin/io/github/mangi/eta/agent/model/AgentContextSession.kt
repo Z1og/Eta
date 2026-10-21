@@ -135,8 +135,25 @@ internal class AgentContextSession(
         // 触发条件里 before == null 直接成立 → 自动压缩永不触发，只能人工强制压缩。
         // 窗口未知时反过来不采信 usage（无从校验口径，曾出现报 10M 的假值），
         // 统一按体积估算，与 triggerThreshold 的保守假定窗口配套。
-        if (contextWindow == null) return messages.toString().length / CHARS_PER_TOKEN_ESTIMATE
-        return inputTokens ?: messages.toString().length / CHARS_PER_TOKEN_ESTIMATE
+        if (contextWindow == null) return estimatedTokens()
+        return inputTokens ?: estimatedTokens()
+    }
+
+    /**
+     * 逐条累加估算，绝不 `messages.toString()`：
+     * 后者每轮都会把整段对话物化成一个巨字符串（历史大时可达数百 MB），
+     * 而这个估算有可能每一轮都跑一次——是"继续对话卡死"的直接来源之一。
+     */
+    private fun estimatedTokens(): Int {
+        var chars = 0
+        for (index in 0 until messages.length()) {
+            val message = messages.optJSONObject(index) ?: continue
+            chars += message.optString("content").length +
+                message.optString("reasoning_content").length +
+                message.optString("tool_calls").length +
+                FIELD_OVERHEAD_CHARS
+        }
+        return chars / CHARS_PER_TOKEN_ESTIMATE
     }
 
     /**
@@ -158,5 +175,7 @@ internal class AgentContextSession(
         /** 窗口未知时的保守假定窗口：宁可提前压缩，也不要撞服务端硬上限。 */
         const val FALLBACK_CONTEXT_WINDOW = 32_000
         const val CHARS_PER_TOKEN_ESTIMATE = 4
+        /** 每条消息的 JSON 键名与结构开销估计。 */
+        const val FIELD_OVERHEAD_CHARS = 64
     }
 }
