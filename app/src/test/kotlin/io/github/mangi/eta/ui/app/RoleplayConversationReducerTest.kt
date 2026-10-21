@@ -58,6 +58,32 @@ class RoleplayConversationReducerTest {
         assertEquals("谢谢", (restored.messages.last() as UserMessageUi).content)
     }
 
+    /**
+     * linkRun 曾经对每条 journal 条目全扫一遍消息、并且每次比较现拼前缀字符串，
+     * 长会话下 M×N 次分配直接把主线程卡死（ANR 栈停在 StringBuilder.append）。
+     * 现在改成集合索引，行为必须保持不变：同一 journal 条目下的多条候选按下标编号。
+     */
+    @Test fun linkRunMapsCandidatesToJournalEntryByOrder() {
+        val base = conversation()
+        val state = RoleplayConversationReducer.linkRun(
+            base.copy(messages = base.messages.flatMap {
+                if (it.id == "assistant-r1-2-0") {
+                    listOf(AgentMessageUi("assistant-r1-2-0", "第一段"), AgentMessageUi("assistant-r1-2-1", "第二段"))
+                } else {
+                    listOf(it)
+                }
+            }),
+            "r1",
+        )
+        val links = state.roleplayMessages.links
+        assertEquals("assistant-r1-2", links.getValue("assistant-r1-2-0").transcriptMessageId)
+        assertEquals(0, links.getValue("assistant-r1-2-0").blockOrder)
+        assertEquals("assistant-r1-2", links.getValue("assistant-r1-2-1").transcriptMessageId)
+        assertEquals(1, links.getValue("assistant-r1-2-1").blockOrder)
+        assertEquals("user-r1", links.getValue("user-r1").transcriptMessageId)
+        assertEquals("greeting", links.getValue("greeting").transcriptMessageId)
+    }
+
     @Test fun interruptedRewriteKeepsOriginalAndRemovesPendingMarker() {
         val initial = conversation()
         val state = initial.copy(roleplayMessages = initial.roleplayMessages.copy(

@@ -41,7 +41,9 @@ internal object AgentRuntimeHistoryReducer {
         } else state.history + additions + pendingSupplements
         return Outcome(
             state = state.copy(
-                journal = state.journal.ifEmpty { state.history } + additions + pendingSupplements,
+                journal = boundedJournal(
+                    state.journal.ifEmpty { state.history } + additions + pendingSupplements,
+                ),
                 history = history,
                 appliedRuntimeRunIds = state.appliedRuntimeRunIds + runId,
             ),

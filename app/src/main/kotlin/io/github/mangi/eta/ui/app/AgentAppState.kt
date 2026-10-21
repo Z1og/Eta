@@ -1210,7 +1210,9 @@ internal class AgentAppState(
                 modelId = runModelId,
                 isStreaming = true,
                 history = if (operation == AgentRuntimeWire.OP_REWRITE_REPLY) state.history else history + listOfNotNull(userHistoryMessage),
-                journal = state.journal.ifEmpty { state.history } + listOfNotNull(userHistoryMessage),
+                journal = boundedJournal(
+                    state.journal.ifEmpty { state.history } + listOfNotNull(userHistoryMessage),
+                ),
                 isCompacting = operation == AgentRuntimeWire.OP_COMPACT,
                 messages = messages,
                 messageEdit = null,

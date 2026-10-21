@@ -121,7 +121,7 @@ internal object AgentConversationStore {
                             }
                             phase = "encode_journal"
                             if (missing || journalChanged) {
-                                journal = AgentConversationCodec.encodeTranscriptForStorage(state.journal)
+                                journal = encodeJournal(state.journal)
                             }
                         }
                         val oldMessages = old?.messages.orEmpty()
@@ -199,6 +199,36 @@ internal object AgentConversationStore {
         }
     }
 
+    /**
+     * journal 编码撞 OOM 时退化到"只存尾部"，而不是让整条落盘失败。
+     *
+     * 失败会让 write-ahead 判定本轮未提交，失败分支会回到主线程重建会话状态——
+     * 在长会话上那就是用户看到的"发消息卡死"。宁可这次少存早期记录。
+     */
+    private fun encodeJournal(journal: List<AgentModelClient.ConversationMessage>): String {
+        encodeJournalOrNull(journal)?.let { return it }
+        val bounded = boundedJournal(journal, maxChars = JOURNAL_MAX_CHARS)
+        encodeJournalOrNull(bounded)?.let {
+            AndroidAgentLogger.warn(
+                "journal encode out of memory, degrade to ${bounded.size}/${journal.size} entries",
+            )
+            return it
+        }
+        val tail = boundedJournal(journal, maxChars = JOURNAL_EMERGENCY_CHARS)
+        AndroidAgentLogger.warn(
+            "journal encode out of memory again, emergency tail ${tail.size}/${journal.size} entries",
+        )
+        return AgentConversationCodec.encodeTranscriptForStorage(tail)
+    }
+
+    private fun encodeJournalOrNull(
+        journal: List<AgentModelClient.ConversationMessage>,
+    ): String? = try {
+        AgentConversationCodec.encodeTranscriptForStorage(journal)
+    } catch (_: OutOfMemoryError) {
+        null
+    }
+
     private data class PersistPlan(
         val id: String,
         val metadata: ConversationEntity?,
@@ -266,7 +296,11 @@ internal object AgentConversationStore {
                 roleplayMessages = conversation.revisionsJson.takeIf(String::isNotBlank)?.let {
                     json.decodeFromString<RoleplayMessageState>(it)
                 } ?: RoleplayMessageState(),
-                journal = AgentConversationCodec.decodeTranscript(checkpoint?.journalJson),
+                // 历史库里可能有修复前写下的超大 journal（数十 MB）。载入时就按上限截尾，
+                // 否则它会一直占着堆，下一次整段编码（journal_json）必然 OOM。
+                journal = boundedJournal(
+                    AgentConversationCodec.decodeTranscript(checkpoint?.journalJson),
+                ),
                 messages = restored,
                 history = decodedHistory.ifEmpty {
                     messages.toLegacyHistory()

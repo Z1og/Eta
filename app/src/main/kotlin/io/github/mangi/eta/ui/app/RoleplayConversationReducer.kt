@@ -18,25 +18,73 @@ internal object RoleplayConversationReducer {
             ),
         )
 
+    /**
+     * 把 journal 条目和界面消息重新对上号。
+     *
+     * 旧实现对每条 journal 条目都把 `state.messages` 全扫一遍，并且每次比较都要现拼
+     * `"${entry.messageId}-"` 这个前缀字符串：长会话下是 M×N 次字符串分配。
+     * ANR 栈里主线程就停在 `StringBuilder.append` → `Arrays.copyOf`，
+     * 表现正是"在已有会话发消息直接卡死"。
+     *
+     * 现在两趟：先把 journal 的 id 收进两个 HashSet，再单趟扫消息，
+     * 助手消息按"最长匹配前缀"归到所属条目上。整体 O(消息数 × id 段数 + journal 数)。
+     */
     fun linkRun(state: AgentChatUiState, runId: String): AgentChatUiState {
         if (state.roleplay == null) return state
         val links = state.roleplayMessages.links.toMutableMap()
         val journal = state.journal.ifEmpty { state.history }
-        journal.filter { it.messageId.isNotBlank() }.forEach { entry ->
-            if (entry.role == "user") {
-                state.messages.filterIsInstance<UserMessageUi>().firstOrNull { it.id == entry.messageId }?.let {
-                    links[it.id] = RoleplayMessageLink(entry.messageId)
+        if (journal.isNotEmpty()) {
+            val userIds = HashSet<String>()
+            val assistantIds = HashSet<String>()
+            journal.forEach { entry ->
+                val id = entry.messageId
+                if (id.isBlank()) return@forEach
+                when (entry.role) {
+                    "user" -> userIds += id
+                    "assistant" -> assistantIds += id
+                    else -> Unit
                 }
-            } else if (entry.role == "assistant") {
-                state.messages.filterIsInstance<AgentMessageUi>()
-                    .filter { it.id == entry.messageId || it.id.startsWith("${entry.messageId}-") }
-                    .forEachIndexed { index, message -> links[message.id] = RoleplayMessageLink(entry.messageId, index) }
+            }
+            // 同一 journal 条目下的多条候选回复要按下标区分，所以先分组再按下标编号。
+            val grouped = LinkedHashMap<String, MutableList<AgentMessageUi>>()
+            state.messages.forEach { message ->
+                when (message) {
+                    is UserMessageUi -> if (message.id in userIds) {
+                        links[message.id] = RoleplayMessageLink(message.id)
+                    }
+                    is AgentMessageUi -> journalBaseOf(message.id, assistantIds)?.let { base ->
+                        grouped.getOrPut(base) { mutableListOf() } += message
+                    }
+                    else -> Unit
+                }
+            }
+            grouped.forEach { (base, messages) ->
+                messages.forEachIndexed { index, message ->
+                    links[message.id] = RoleplayMessageLink(base, index)
+                }
             }
         }
         val fallback = state.messages.filterIsInstance<AgentMessageUi>().firstOrNull { it.id == "assistant-$runId" }
         val last = journal.lastOrNull { it.role == "assistant" && it.messageId.startsWith("assistant-$runId-") }
         if (fallback != null && last != null) links[fallback.id] = RoleplayMessageLink(last.messageId)
         return decorate(state.copy(roleplayMessages = state.roleplayMessages.copy(links = links)))
+    }
+
+    /**
+     * 恢复 journal 条目 id：`assistant-<runId>` 的候选回复是 `assistant-<runId>-<下标>`，
+     * 所以按 `-` 边界从长到短找第一个命中 journal 的前缀。
+     */
+    private fun journalBaseOf(messageId: String, journalIds: Set<String>): String? {
+        if (messageId in journalIds) return messageId
+        var index = messageId.length - 1
+        while (index > 0) {
+            if (messageId[index] == '-') {
+                val prefix = messageId.substring(0, index)
+                if (prefix in journalIds) return prefix
+            }
+            index--
+        }
+        return null
     }
 
     fun decorate(state: AgentChatUiState): AgentChatUiState {
