@@ -145,6 +145,7 @@ internal object AgentRuntimeWire {
     private const val KEY_CUSTOM_BODY_JSON = "custom_body_json"
     private const val KEY_IMAGES = "images"
     private const val KEY_HISTORY = "history"
+    private const val KEY_HISTORY_REF = "history_ref"
     private const val KEY_CONTENT_JSON = "content_json"
     private const val KEY_TOOL_CALL_ID = "tool_call_id"
     private const val KEY_TOOL_CALLS_JSON = "tool_calls_json"
@@ -186,6 +187,14 @@ internal object AgentRuntimeWire {
         val config: AgentModelClient.ModelConfig,
         val images: List<AgentModelClient.ModelImage>,
         val history: List<AgentModelClient.ConversationMessage> = emptyList(),
+        /**
+         * 历史改从库里读时的会话 id（同进程 runtime 直接读 context_checkpoint）。
+         *
+         * 之前每次都把整段历史编码成 JSON 跨 binder 传过去，实测 5.7MB 历史要
+         * encode 697ms + 解码 888ms，纯搬运。发送前有 write-ahead 落盘保证，
+         * 库里那份与内存一致，所以只传 id 就够。
+         */
+        val historyRef: String = "",
         val handoff: EntryHandoff? = null,
         val modelSessionId: String = "",
         val operation: String = OP_CHAT,
@@ -328,7 +337,11 @@ internal object AgentRuntimeWire {
             )
         }
         RunPhaseTrace.markSized("wire.encode", historyChars)
-        AgentWireText.put(this, "history_json", AgentConversationCodec.encodeTranscriptForStorage(request.history), payloadDirectory)
+        if (request.historyRef.isBlank()) {
+            AgentWireText.put(this, "history_json", AgentConversationCodec.encodeTranscriptForStorage(request.history), payloadDirectory)
+        } else {
+            putString(KEY_HISTORY_REF, request.historyRef)
+        }
         RunPhaseTrace.mark("wire.encoded")
         putString(KEY_RUN_ID, request.runId)
         AgentWireText.put(this, KEY_PROMPT, request.prompt, payloadDirectory)
@@ -525,6 +538,7 @@ internal object AgentRuntimeWire {
                 customHeaders = decodeCustomHeaders(bundle.getString(KEY_CUSTOM_HEADERS_JSON)),
                 customBody = decodeCustomBody(bundle.getString(KEY_CUSTOM_BODY_JSON))
             ),
+            historyRef = bundle.getString(KEY_HISTORY_REF).orEmpty(),
             history = if (!readText) emptyList() else AgentWireText.read(bundle, "history_json")?.let(AgentConversationCodec::decodeTranscript)
                 ?: bundle.getParcelableArrayList(KEY_HISTORY, Bundle::class.java).orEmpty().map { message ->
                 AgentModelClient.ConversationMessage(

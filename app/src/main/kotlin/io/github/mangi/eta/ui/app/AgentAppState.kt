@@ -95,6 +95,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 internal class AgentAppState(
     context: Context,
@@ -102,6 +104,11 @@ internal class AgentAppState(
     initialConversations: AgentConversationStore.Snapshot = AgentConversationStore.load(context),
 ) {
     private val appContext = context.applicationContext
+    /** 只用于本地保存/恢复"上次使用的角色"，与网络无关。 */
+    private val roleplayJson = Json {
+        encodeDefaults = true
+        ignoreUnknownKeys = true
+    }
     private val runConversationIds = mutableMapOf<String, String>()
     private val runMessageProjector = AgentRunMessageProjector()
     private val runEventCoalescer = AgentRunEventCoalescer()
@@ -860,7 +867,10 @@ internal class AgentAppState(
         if (homeState.messageEdit != null) cancelMessageEdit()
         fileAttachmentOwnerVersion += 1
         selectedConversationId = null
-        homeState = emptyChatState(defaultThinkingEnabled)
+        // 新会话默认沿用上次使用的角色设定（设置里可关）。没有历史绑定就是普通会话。
+        homeState = defaultRoleplayBinding()?.let { binding ->
+            emptyChatState(defaultThinkingEnabled).copy(roleplay = binding)
+        } ?: emptyChatState(defaultThinkingEnabled)
         refreshConversationModel()
         conversationPaneState = conversationPaneState.copy(
             selectedConversationId = null,
@@ -870,6 +880,8 @@ internal class AgentAppState(
     }
 
     fun startCharacterConversation(binding: RoleplayBinding, greeting: String) {
+        // 记成"默认角色"：下次点新建会话时自动带上，不用每次都从角色卡进来。
+        rememberDefaultRoleplay(binding)
         createConversation()
         val id = newConversationId()
         val greetingId = "greeting-$id"
@@ -895,6 +907,23 @@ internal class AgentAppState(
         conversationPaneState = conversationPaneState.copy(selectedConversationId = id, searchQuery = "")
         refreshConversationSummaries()
         persistConversations()
+    }
+
+    private fun rememberDefaultRoleplay(binding: RoleplayBinding) {
+        val prefs = Prefs.localAgentPreferences() ?: return
+        runCatching {
+            prefs.edit()
+                .putString(Prefs.Keys.AGENT_DEFAULT_ROLEPLAY_JSON, roleplayJson.encodeToString(binding))
+                .apply()
+        }
+    }
+
+    private fun defaultRoleplayBinding(): RoleplayBinding? {
+        val prefs = Prefs.localAgentPreferences() ?: return null
+        if (!prefs.getBoolean(Prefs.Keys.AGENT_ROLEPLAY_DEFAULT, true)) return null
+        val raw = prefs.getString(Prefs.Keys.AGENT_DEFAULT_ROLEPLAY_JSON, null)
+            ?.takeIf(String::isNotBlank) ?: return null
+        return runCatching { roleplayJson.decodeFromString<RoleplayBinding>(raw) }.getOrNull()
     }
 
     fun selectReplyCandidate(messageId: String, index: Int) {
@@ -1413,6 +1442,8 @@ internal class AgentAppState(
                         config = config,
                         images = modelImages,
                         history = history,
+                        // 历史不再跨 binder 搬运：runtime 直接读库里那份（写前落盘已保证一致）。
+                        historyRef = conversationId,
                         handoff = AgentRuntimeWire.EntryHandoff(
                             id = runId,
                             source = AgentRuntimeWire.AGENT_UI_HANDOFF_SOURCE,

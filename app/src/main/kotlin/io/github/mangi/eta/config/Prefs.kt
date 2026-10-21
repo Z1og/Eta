@@ -47,6 +47,12 @@ internal object Prefs {
         const val AGENT_REFUSAL_FAILOVER_ENABLED = "agent_refusal_failover_enabled"
         const val AGENT_RUNTIME_CONFIG_JSON = "agent_runtime_config_json"
 
+        /** 新会话是否自动带上上次使用的角色设定。 */
+        const val AGENT_ROLEPLAY_DEFAULT = "agent_roleplay_default"
+
+        /** 上次使用的角色绑定（JSON），只在本地保存，不上传。 */
+        const val AGENT_DEFAULT_ROLEPLAY_JSON = "agent_default_roleplay_json"
+
         /** 全部布尔开关及其默认值。 */
         val BOOLEAN_DEFAULTS: Map<String, Boolean> = mapOf(
             POWER_KEY_TAKEOVER to false,
@@ -66,6 +72,7 @@ internal object Prefs {
             AGENT_THINKING_ENABLED to true,
             AGENT_AUTO_COMPACTION_ENABLED to true,
             AGENT_REFUSAL_FAILOVER_ENABLED to true,
+            AGENT_ROLEPLAY_DEFAULT to true,
         )
 
         /** 由 Eta Runtime 最终裁决、不要求 Xposed 框架在线的开关。 */

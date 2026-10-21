@@ -651,7 +651,9 @@ fun AgentAppRoot(
                 SettingsScreen(
                     context = context,
                     onNavigate = { route -> pushRoute(route) },
-                    onBack = ::popRoute
+                    onBack = ::popRoute,
+                    reverseModeEnabled = skills.skillsState.reverseModeEnabled,
+                    onToggleReverseMode = { enabled -> skills.toggleReverseMode(enabled) },
                 )
             }
             entry<AppRoute.SpeechSettings>(swipeDismiss = swipeDismiss) {

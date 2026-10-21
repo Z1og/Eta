@@ -10,6 +10,7 @@ import io.github.mangi.eta.agent.roleplay.RoleplayMessageState
 import io.github.mangi.eta.data.db.ConversationEntity
 import io.github.mangi.eta.data.db.ConversationMessageEntity
 import io.github.mangi.eta.data.db.ConversationStateEntity
+import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.data.model.ReasoningEffort
 import io.github.mangi.eta.ui.model.AgentChatHomeUiState
@@ -516,11 +517,19 @@ class AgentConversationStoreTest {
             assertTrue(state.homeState.appliedRuntimeRunIds.isEmpty())
             assertTrue(state.homeState.roleplayMessages.pendingRewrites.isEmpty())
 
+            // 新会话默认沿用上次使用的角色设定（设置 → 上下文与扩展 可关）。
             state.createConversation()
-            assertEquals(null, state.homeState.roleplay)
+            assertEquals(binding, state.homeState.roleplay)
             assertTrue(state.homeState.history.isEmpty())
             assertTrue(state.homeState.messages.isEmpty())
             assertFalse(state.homeState.isStreaming)
+
+            // 关掉开关后回到普通会话。
+            requireNotNull(Prefs.localAgentPreferences()).edit()
+                .putBoolean(Prefs.Keys.AGENT_ROLEPLAY_DEFAULT, false)
+                .commit()
+            state.createConversation()
+            assertEquals(null, state.homeState.roleplay)
         } finally {
             scope.cancel()
         }

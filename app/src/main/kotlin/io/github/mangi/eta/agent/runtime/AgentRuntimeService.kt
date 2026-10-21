@@ -40,6 +40,7 @@ import io.github.mangi.eta.EtaApp
 import io.github.mangi.eta.agent.accessibility.AgentAccessibilityService
 import io.github.mangi.eta.agent.device.RootAccess
 import io.github.mangi.eta.agent.media.AgentImageCodec
+import io.github.mangi.eta.agent.model.AgentConversationCodec
 import io.github.mangi.eta.agent.model.AgentModelClient
 import io.github.mangi.eta.agent.overlay.AgentHapticFeedback
 import io.github.mangi.eta.agent.overlay.AgentOverlayGlow
@@ -56,6 +57,7 @@ import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.ModuleConfig
 import io.github.mangi.eta.core.RunPhaseTrace
+import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.core.safeLogType
 import io.github.mangi.eta.core.safeStackTrace
 import io.github.mangi.eta.data.repository.RuntimeConfigRepository
@@ -373,7 +375,11 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
         pendingStartRequest = pending
         thread(name = "agent-runtime-image-ingest") {
             val prepared = runCatching {
-                val request = AgentRuntimeImageTransfer.materialize(incoming)
+                var request = AgentRuntimeImageTransfer.materialize(incoming)
+                // 历史只传了会话 id：同进程直接从库里读，省掉整段历史的跨进程编解码。
+                if (request.history.isEmpty() && request.historyRef.isNotBlank()) {
+                    request = request.copy(history = conversationHistory(request.historyRef))
+                }
                 if (!AgentRuntimeRequestConfigResolver.requiresRuntimeConfig(request)) {
                     request
                 } else {
@@ -418,6 +424,15 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
             }
         }
     }
+
+    /** 发送前的 write-ahead 落盘保证库里的 history 与 UI 内存一致，这里直接读回来用。 */
+    private fun conversationHistory(conversationId: String): List<AgentModelClient.ConversationMessage> =
+        runBlocking {
+            val checkpoint = runCatching {
+                EtaDatabase.get(this@AgentRuntimeService).conversationDao().contextCheckpoint(conversationId)
+            }.getOrNull()
+            AgentConversationCodec.decodeTranscript(checkpoint?.historyJson)
+        }
 
     private fun startRun(
         request: AgentRuntimeWire.RunRequest,

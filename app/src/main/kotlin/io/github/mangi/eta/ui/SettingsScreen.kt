@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.mangi.eta.EtaApp
 import io.github.mangi.eta.R
 import io.github.mangi.eta.core.LogExporter
+import io.github.mangi.eta.data.datastore.SettingsDataStore
 import io.github.mangi.eta.agent.accessibility.AccessibilityProtectionClient
 import io.github.mangi.eta.agent.accessibility.AgentAccessibilityService
 import io.github.mangi.eta.config.PowerAssistantTarget
@@ -104,8 +106,16 @@ internal fun SettingsScreen(
     context: Context,
     onNavigate: (AppRoute) -> Unit,
     onBack: () -> Unit,
+    reverseModeEnabled: Boolean = false,
+    onToggleReverseMode: (Boolean) -> Unit = {},
 ) {
-    SettingsPageContent(context = context, onNavigate = onNavigate, onBack = onBack)
+    SettingsPageContent(
+        context = context,
+        onNavigate = onNavigate,
+        onBack = onBack,
+        reverseModeEnabled = reverseModeEnabled,
+        onToggleReverseMode = onToggleReverseMode,
+    )
 }
 
 @Composable
@@ -113,8 +123,23 @@ private fun SettingsPageContent(
     context: Context,
     onNavigate: (AppRoute) -> Unit,
     onBack: () -> Unit,
+    reverseModeEnabled: Boolean,
+    onToggleReverseMode: (Boolean) -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
+    // 作战协议与破甲记忆是同一个注入开关，两行必须同步显示，所以状态提到页面级。
+    var promptInjectionEnabled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        promptInjectionEnabled = runCatching { SettingsDataStore.userPromptEnabled() }
+            .getOrDefault(false)
+    }
+    val setPromptInjection: (Boolean) -> Unit = { value ->
+        promptInjectionEnabled = value
+        coroutineScope.launch {
+            runCatching { SettingsDataStore.setUserPromptEnabled(value) }
+                .onFailure { promptInjectionEnabled = !value }
+        }
+    }
     val capabilities = rememberDeviceCapabilities()
     val enhancementHistory = remember(context.applicationContext) { EnhancementSettingsHistory(context) }
     var hasConnectedFramework by remember { mutableStateOf(enhancementHistory.hasConnected) }
@@ -335,11 +360,41 @@ private fun SettingsPageContent(
                     )
 
                     EtaPreferenceDivider()
-                    EtaArrowPreference(
+                    ManagedSwitchPref(
+                        title = "逆向能力",
+                        summary = "除原版三个技能外全部启停，与技能页总开关同一状态",
+                        checked = reverseModeEnabled,
+                        icon = Icons.Rounded.Security,
+                        iconTint = EtaPreferenceColors.Orange,
+                        onCheckedChange = onToggleReverseMode,
+                    )
+
+                    EtaPreferenceDivider()
+                    ManagedSwitchPref(
                         title = "作战协议",
+                        summary = "注入 prompts/ 下那份协议（与破甲记忆同一个开关）",
+                        checked = promptInjectionEnabled,
+                        icon = Icons.Rounded.Description,
+                        iconTint = EtaPreferenceColors.Blue,
+                        onCheckedChange = setPromptInjection,
+                    )
+
+                    EtaPreferenceDivider()
+                    ManagedSwitchPref(
+                        title = "破甲记忆注入",
+                        summary = "随包内置的那份破甲记忆，与作战协议同一个开关",
+                        checked = promptInjectionEnabled,
+                        icon = Icons.Rounded.VerifiedUser,
+                        iconTint = EtaPreferenceColors.Green,
+                        onCheckedChange = setPromptInjection,
+                    )
+
+                    EtaPreferenceDivider()
+                    EtaArrowPreference(
+                        title = "编辑作战协议",
                         startAction = {
                             EtaPreferenceIcon(
-                                icon = Icons.Rounded.Description,
+                                icon = Icons.Rounded.ImportContacts,
                                 tint = EtaPreferenceColors.Blue,
                             )
                         },
@@ -368,6 +423,17 @@ private fun SettingsPageContent(
                             )
                         },
                         onClick = { onNavigate(AppRoute.McpServers) },
+                    )
+
+                    EtaPreferenceDivider()
+                    SwitchPref(
+                        context = context,
+                        prefs = agentPrefs,
+                        title = "新会话默认带角色",
+                        summary = "新建会话自动沿用上次使用的角色设定",
+                        key = Prefs.Keys.AGENT_ROLEPLAY_DEFAULT,
+                        icon = Icons.Rounded.SportsBar,
+                        iconTint = EtaPreferenceColors.Orange,
                     )
 
                     EtaPreferenceDivider()
@@ -960,6 +1026,31 @@ private fun SystemizerConfirmDialog(
             onConfirm = onConfirm,
         )
     }
+}
+
+/**
+ * 由页面级状态驱动的开关。
+ *
+ * DataStore 里的布尔（逆向能力、协议注入）不是 SharedPreferences，不能复用 [SwitchPref]；
+ * 而且作战协议与破甲记忆共用同一个值，状态必须提到页面级才能两行同步。
+ */
+@Composable
+private fun ManagedSwitchPref(
+    title: String,
+    summary: String?,
+    checked: Boolean,
+    icon: ImageVector,
+    iconTint: Color,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    EtaSwitchPreference(
+        title = title,
+        summary = summary,
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        startAction = { EtaPreferenceIcon(icon = icon, tint = iconTint) },
+        enabled = true,
+    )
 }
 
 // ── 带图标的布尔开关 ─────────────────────────────────────────────────────────
