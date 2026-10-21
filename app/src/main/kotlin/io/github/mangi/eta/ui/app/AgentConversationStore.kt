@@ -60,6 +60,8 @@ internal object AgentConversationStore {
          * 否则下一次保存会拿 `journal.ifEmpty { history }` 把它覆盖掉。
          */
         val journalNotLoadedIds: Set<String> = emptySet(),
+        /** 同上，history 没读回来的会话；保存时不许写 history 列。 */
+        val historyNotLoadedIds: Set<String> = emptySet(),
     )
 
     private val saveMutex = Mutex()
@@ -76,9 +78,14 @@ internal object AgentConversationStore {
         titles: Map<String, String>,
         updatedAt: Map<String, Long>,
         journalNotLoadedIds: Set<String> = emptySet(),
+        historyNotLoadedIds: Set<String> = emptySet(),
     ) = AgentConversationPersistence().save(
         context,
-        Snapshot(selectedConversationId, conversationsById, titles, updatedAt, journalNotLoadedIds = journalNotLoadedIds),
+        Snapshot(
+            selectedConversationId, conversationsById, titles, updatedAt,
+            journalNotLoadedIds = journalNotLoadedIds,
+            historyNotLoadedIds = historyNotLoadedIds,
+        ),
     )
 
     internal suspend fun saveChanges(
@@ -87,6 +94,7 @@ internal object AgentConversationStore {
         current: Map<String, AgentConversationPersistence.Content>,
         previous: Map<String, AgentConversationPersistence.Content>,
         journalNotLoadedIds: Set<String> = emptySet(),
+        historyNotLoadedIds: Set<String> = emptySet(),
     ) {
         val appContext = context.applicationContext
         saveMutex.withLock {
@@ -125,7 +133,9 @@ internal object AgentConversationStore {
                         if (historyChanged || journalChanged) {
                             val missing = dao.contextCheckpointRow(id) == null
                             phase = "encode_history"
-                            if (missing || historyChanged) {
+                            // history 没读回来的会话：写 null 保持库里的原值，
+                            // 否则空 history 会把上下文检查点覆盖成 "[]"，下一轮直接失忆。
+                            if ((missing || historyChanged) && id !in historyNotLoadedIds) {
                                 history = AgentConversationCodec.encodeConversationCheckpoint(state.history)
                             }
                             phase = "encode_journal"
@@ -277,7 +287,10 @@ internal object AgentConversationStore {
         // 全量还原会在启动时把堆吃干净（"Failed to allocate 33558536 byte" 的直接来源），
         // 而且它一进内存就要在每次保存时整段编码。超阈值的先跳过，选中时再补。
         val selectedRaw = dao.state()?.selectedConversationId
+            ?.takeIf { id -> conversations.any { it.id == id } }
+            ?: conversations.first().id
         val journalNotLoaded = linkedSetOf<String>()
+        val historyNotLoaded = linkedSetOf<String>()
         val states = linkedMapOf<String, AgentChatHomeUiState>()
         val titles = mutableMapOf<String, String>()
         val updatedAt = mutableMapOf<String, Long>()
@@ -298,8 +311,15 @@ internal object AgentConversationStore {
                 unaligned += conversation.id
             }
             val checkpoint = dao.contextCheckpoint(conversation.id)
-            val decodedHistory = AgentConversationCodec.decodeTranscript(checkpoint?.historyJson)
-            if (decodedHistory.isEmpty() && restored.isNotEmpty()) {
+            // 非选中会话的 history 只在真正进入/发送时才需要。载入时一并解析 39 份上下文
+            // 是启动卡在主线程 9 秒的主因，这里先跳过，用的时候再补。
+            val historyJson = checkpoint?.historyJson.orEmpty()
+            val deferHistory = conversation.id != selectedRaw &&
+                declaredTextChars(historyJson) > MAX_EAGER_HISTORY_CHARS
+            if (deferHistory) historyNotLoaded += conversation.id
+            val decodedHistory =
+                if (deferHistory) emptyList() else AgentConversationCodec.decodeTranscript(historyJson)
+            if (!deferHistory && decodedHistory.isEmpty() && restored.isNotEmpty()) {
                 // 上下文检查点缺失/为空时会退化成"全量消息当历史"，压缩成果就此丢失，
                 // 下一轮直接爆上下文。这里留证据，便于判断是没写入还是被覆盖。
                 AndroidAgentLogger.warn(
@@ -324,8 +344,10 @@ internal object AgentConversationStore {
                     boundedJournal(AgentConversationCodec.decodeTranscript(checkpoint?.journalJson))
                 },
                 messages = restored,
-                history = decodedHistory.ifEmpty {
-                    messages.toLegacyHistory()
+                history = when {
+                    deferHistory -> emptyList()
+                    decodedHistory.isEmpty() -> messages.toLegacyHistory()
+                    else -> decodedHistory
                 },
                 appliedRuntimeRunIds = conversation.appliedRuntimeRunIdsJson.toStringList(),
                 input = "",
@@ -349,6 +371,7 @@ internal object AgentConversationStore {
             updatedAt = updatedAt,
             unalignedConversationIds = unaligned,
             journalNotLoadedIds = journalNotLoaded,
+            historyNotLoadedIds = historyNotLoaded,
         )
     }
 
@@ -554,5 +577,7 @@ internal object AgentConversationStore {
     private const val MESSAGE_LOAD_PAGE_SIZE = 128
     /** 非选中会话的 journal 超过这个体积就跳过还原，选中时再补。 */
     private const val MAX_EAGER_JOURNAL_CHARS = 512 * 1024
+    /** 同上，history 的跳过阈值。 */
+    private const val MAX_EAGER_HISTORY_CHARS = 256 * 1024
     private const val LEGACY_UNNAMED_TITLE = "新对话"
 }

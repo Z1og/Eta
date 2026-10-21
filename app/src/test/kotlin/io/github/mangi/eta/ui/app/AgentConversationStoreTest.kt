@@ -123,6 +123,55 @@ class AgentConversationStoreTest {
         assertEquals(listOf("新消息"), restored.history.map { it.content })
     }
 
+    /**
+     * 冷启动默认不还原非选中会话的 history。这里同时验证两件事：
+     * 1. 大 history 确实被延迟（historyNotLoadedIds 里能看到）；
+     * 2. 延迟状态下再保存，不能把库里的 history 覆盖成空。
+     */
+    @Test
+    fun oversizedHistoryOfUnselectedConversationIsDeferredAndPreserved() = runBlocking {
+        val bigHistory = (1..40).map {
+            AgentModelClient.ConversationMessage(role = "assistant", content = "x".repeat(10_000), messageId = "a$it")
+        }
+        val big = AgentChatHomeUiState(
+            messages = listOf(UserMessageUi(id = "user-big", content = "旧消息")),
+            input = "", isStreaming = false, thinkingEnabled = false,
+            history = bigHistory, journal = bigHistory,
+        )
+        val small = AgentChatHomeUiState(
+            messages = listOf(UserMessageUi(id = "user-small", content = "小会话")),
+            input = "", isStreaming = false, thinkingEnabled = false,
+            history = listOf(AgentModelClient.ConversationMessage(role = "user", content = "小会话", messageId = "user-small")),
+        )
+        AgentConversationStore.save(
+            context, "small", mapOf("big" to big, "small" to small),
+            mapOf("big" to "大会话", "small" to "小会话"), mapOf("big" to 1L, "small" to 2L),
+        )
+
+        val loaded = AgentConversationStore.load(context)
+        assertTrue(loaded.historyNotLoadedIds.contains("big"))
+        assertTrue(loaded.conversationsById.getValue("big").history.isEmpty())
+        assertEquals("小会话", loaded.conversationsById.getValue("small").history.single().content)
+
+        // 用"载入后的样子"再存一次：库里的大 history 必须原样保留。
+        AgentConversationStore.save(
+            context,
+            loaded.selectedConversationId,
+            loaded.conversationsById,
+            loaded.titles,
+            loaded.updatedAt,
+            journalNotLoadedIds = loaded.journalNotLoadedIds,
+            historyNotLoadedIds = loaded.historyNotLoadedIds,
+        )
+
+        // 直接读库验证：'big' 仍未选中，重新载入时依旧是延迟态，不能拿内存里的空值当结论。
+        val stored = EtaDatabase.get(context).conversationDao().contextCheckpoint("big")
+        assertEquals(
+            bigHistory.map { it.content },
+            AgentConversationCodec.decodeTranscript(stored?.historyJson).map { it.content },
+        )
+    }
+
     @Test
     fun saveAndLoadPreservesConversations() {
         val conversation = AgentChatHomeUiState(

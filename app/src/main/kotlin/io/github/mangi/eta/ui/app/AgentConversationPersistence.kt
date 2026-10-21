@@ -24,6 +24,7 @@ internal class AgentConversationPersistence(initial: AgentConversationStore.Snap
             current,
             saved,
             journalNotLoadedIds = snapshot.journalNotLoadedIds,
+            historyNotLoadedIds = snapshot.historyNotLoadedIds,
         )
         saved = current
     }

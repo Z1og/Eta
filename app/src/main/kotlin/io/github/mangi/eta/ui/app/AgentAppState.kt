@@ -92,6 +92,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
@@ -129,7 +130,9 @@ internal class AgentAppState(
     private var conversationUpdatedAt: Map<String, Long> = initialConversations.updatedAt
     /** journal 还留在库里、没读进内存的会话；保存时不许覆盖它们的 journal。 */
     private var journalNotLoadedIds: Set<String> = initialConversations.journalNotLoadedIds
-    private val journalHydrating = mutableSetOf<String>()
+    /** 同上，history 没读进内存的会话（冷启动只还原选中会话的上下文）。 */
+    private var historyNotLoadedIds: Set<String> = initialConversations.historyNotLoadedIds
+    private val hydratingConversations = mutableSetOf<String>()
 
     var homeState by mutableStateOf(
         selectedConversationId?.let(conversationsById::get) ?: emptyChatState(defaultThinkingEnabled)
@@ -773,32 +776,84 @@ internal class AgentAppState(
         }
         conversationPaneState = conversationPaneState.copy(selectedConversationId = conversationId)
         persistConversations()
-        hydrateJournalIfNeeded(conversationId)
+        hydrateDeferredConversation(conversationId, blocking = false)
     }
 
     /**
-     * 载入时为了省内存没还原的 journal，等用户真的切到这个会话再补上。
-     * 补完之前 [journalNotLoadedIds] 一直保留它，保存时就不会用 history 覆盖库里的完整记录。
+     * 冷启动只为选中会话还原 history/journal（其余会话读进来会占几百 MB 堆，
+     * 也是启动卡在主线程 9.2 秒的主因），真正用到时在这里补。
+     *
+     * [blocking] = true 用于发送路径：必须在读 `homeState.history` 之前补完，
+     * 否则这一轮会带着空上下文发出去。此时只做 IO 切换，不往主线程 post，避免自锁。
      */
-    private fun hydrateJournalIfNeeded(conversationId: String) {
-        if (conversationId !in journalNotLoadedIds) return
-        if (!journalHydrating.add(conversationId)) return
-        scope.launch(Dispatchers.IO) {
-            val stored = runCatching {
-                EtaDatabase.get(appContext).conversationDao()
-                    .contextCheckpoint(conversationId)?.journalJson
+    private fun hydrateDeferredConversation(conversationId: String, blocking: Boolean) {
+        val needsHistory = conversationId in historyNotLoadedIds
+        val needsJournal = conversationId in journalNotLoadedIds
+        if (!needsHistory && !needsJournal) return
+        if (!hydratingConversations.add(conversationId)) return
+        if (blocking) {
+            val loaded = runCatching { runBlocking { loadDeferredConversation(conversationId, needsHistory, needsJournal) } }
+                .getOrNull()
+            hydratingConversations.remove(conversationId)
+            loaded?.let { applyDeferredConversation(conversationId, needsHistory, needsJournal, it) }
+            return
+        }
+        scope.launch {
+            val loaded = runCatching { loadDeferredConversation(conversationId, needsHistory, needsJournal) }.getOrNull()
+            hydratingConversations.remove(conversationId)
+            loaded?.let { applyDeferredConversation(conversationId, needsHistory, needsJournal, it) }
+        }
+    }
+
+    private suspend fun loadDeferredConversation(
+        conversationId: String,
+        needsHistory: Boolean,
+        needsJournal: Boolean,
+    ): Pair<List<AgentModelClient.ConversationMessage>, List<AgentModelClient.ConversationMessage>> =
+        withContext(Dispatchers.IO) {
+            val checkpoint = runCatching {
+                EtaDatabase.get(appContext).conversationDao().contextCheckpoint(conversationId)
             }.getOrNull()
-            val journal = boundedJournal(AgentConversationCodec.decodeTranscript(stored))
-            withContext(Dispatchers.Main) {
-                journalHydrating.remove(conversationId)
-                val state = conversationsById[conversationId] ?: return@withContext
-                if (journal.isNotEmpty() && state.journal.isEmpty()) {
-                    updateConversation(conversationId, state.copy(journal = journal), updateTimestamp = false)
-                }
-                // 无论有没有读到内容都要摘掉：读不到再留着也只会一直挡住 journal 的后续保存。
-                journalNotLoadedIds = journalNotLoadedIds - conversationId
+            val history = if (needsHistory) {
+                AgentConversationCodec.decodeTranscript(checkpoint?.historyJson)
+            } else {
+                emptyList()
+            }
+            val journal = if (needsJournal) {
+                boundedJournal(AgentConversationCodec.decodeTranscript(checkpoint?.journalJson))
+            } else {
+                emptyList()
+            }
+            history to journal
+        }
+
+    private fun applyDeferredConversation(
+        conversationId: String,
+        needsHistory: Boolean,
+        needsJournal: Boolean,
+        loaded: Pair<List<AgentModelClient.ConversationMessage>, List<AgentModelClient.ConversationMessage>>,
+    ) {
+        val state = conversationsById[conversationId]
+        if (state != null) {
+            val merged = state.copy(
+                history = if (needsHistory && state.history.isEmpty() && loaded.first.isNotEmpty()) {
+                    loaded.first
+                } else {
+                    state.history
+                },
+                journal = if (needsJournal && state.journal.isEmpty() && loaded.second.isNotEmpty()) {
+                    loaded.second
+                } else {
+                    state.journal
+                },
+            )
+            if (merged != state) {
+                updateConversation(conversationId, RoleplayConversationReducer.linkRun(merged, ""), updateTimestamp = false)
             }
         }
+        // 无论读没读到内容都要摘掉：留着只会一直挡住后续保存。
+        if (needsHistory) historyNotLoadedIds = historyNotLoadedIds - conversationId
+        if (needsJournal) journalNotLoadedIds = journalNotLoadedIds - conversationId
     }
 
     fun createConversation() {
@@ -982,6 +1037,8 @@ internal class AgentAppState(
         val conversationId = selectedConversationId ?: newConversationId().also {
             selectedConversationId = it
         }
+        // 首次在这个会话发送：上下文可能还没读回内存，必须先补齐再拼请求。
+        hydrateDeferredConversation(conversationId, blocking = true)
         val runId = "run-${UUID.randomUUID()}"
         val userMessage = UserMessageUi(
             id = editBoundary?.userMessage?.id ?: "user-$runId",
@@ -2245,6 +2302,7 @@ internal class AgentAppState(
                             titles,
                             timestamps,
                             journalNotLoadedIds = journalNotLoadedIds,
+                            historyNotLoadedIds = historyNotLoadedIds,
                         ))
                     RunPhaseTrace.mark("persist.done")
                     onSaved?.invoke()
