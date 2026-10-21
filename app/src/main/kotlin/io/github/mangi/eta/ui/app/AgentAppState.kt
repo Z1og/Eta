@@ -1616,7 +1616,9 @@ internal class AgentAppState(
      * resetForReplay 按 id 前缀清掉同一 run 的旧投影，不会重复追加。
      */
     private fun scheduleStreamPersistence() {
-        if (streamPersistJob?.isActive == true) return
+        // 已经有保存在跑就别再排：持久化是串等的（后一个 join 前一个），
+        // 排队会让"发送下一条"的 write-ahead 等在一长串落盘后面，表现就是卡死。
+        if (streamPersistJob?.isActive == true || persistenceJob?.isActive == true) return
         streamPersistJob = scope.launch {
             delay(STREAM_PERSIST_INTERVAL_MS)
             streamPersistJob = null
@@ -2227,8 +2229,8 @@ internal class AgentAppState(
         /** Runtime 状态查询重试次数与间隔：冷启动 binder 未就绪时给几次机会。 */
         const val RUNTIME_PROBE_RETRY_ATTEMPTS = 3
         const val RUNTIME_PROBE_RETRY_DELAY_MS = 400L
-        /** 流式期间落盘节流间隔。 */
-        const val STREAM_PERSIST_INTERVAL_MS = 2_000L
+        /** 流式期间落盘节流间隔。太密会和 runtime 的 checkpoint 落盘抢写锁。 */
+        const val STREAM_PERSIST_INTERVAL_MS = 5_000L
 
         fun emptyChatState(thinkingEnabled: Boolean): AgentChatHomeUiState =
             AgentChatHomeUiState(

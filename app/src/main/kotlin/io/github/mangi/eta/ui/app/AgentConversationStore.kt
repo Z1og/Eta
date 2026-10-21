@@ -85,57 +85,85 @@ internal object AgentConversationStore {
                 try {
                     val database = EtaDatabase.get(appContext)
                     val dao = database.conversationDao()
+                    val stored = dao.conversationMetadataRows().associateBy { it.id }
+                    val staleIds = stored.keys - current.keys
+
+                    // 重活全部放在事务外：历史/消息的 JSON 编码可能到 MB 级，
+                    // 放进事务会把 Room 写锁一直占着，runtime 侧的 checkpoint 落盘
+                    // （runBlocking 写库）会被它卡住——表现就是"继续对话卡死"。
+                    val plans = current.map { (id, state) ->
+                        val old = previous[id].takeIf { id in stored }
+                        phase = "encode_metadata"
+                        val metadata = if (old == null || !state.sameMetadata(old)) {
+                            ConversationEntity(
+                                id = id, title = state.title,
+                                thinkingEnabled = state.reasoningEffort.enablesReasoning,
+                                reasoningEffort = state.reasoningEffort.wireValue,
+                                appliedRuntimeRunIdsJson = json.encodeToString(state.appliedRuntimeRunIds),
+                                roleplayJson = state.roleplay?.let { json.encodeToString(it) }.orEmpty(),
+                                revisionsJson = if (state.roleplay == null) "" else json.encodeToString(state.roleplayMessages),
+                                createdAt = stored[id]?.createdAt ?: state.updatedAt.takeIf { it != 0L } ?: System.currentTimeMillis(),
+                                updatedAt = state.updatedAt.takeIf { it != 0L } ?: System.currentTimeMillis(),
+                                modelId = state.modelId,
+                            )
+                        } else null
+                        val historyChanged = old == null || state.history != old.history
+                        val journalChanged = old == null || state.journal != old.journal
+                        var history: String? = null
+                        var journal: String? = null
+                        if (historyChanged || journalChanged) {
+                            val missing = dao.contextCheckpointRow(id) == null
+                            phase = "encode_history"
+                            if (missing || historyChanged) {
+                                history = AgentConversationCodec.encodeConversationCheckpoint(state.history)
+                            }
+                            phase = "encode_journal"
+                            if (missing || journalChanged) {
+                                journal = AgentConversationCodec.encodeTranscriptForStorage(state.journal)
+                            }
+                        }
+                        val oldMessages = old?.messages.orEmpty()
+                        var prefix = 0
+                        while (prefix < minOf(oldMessages.size, state.messages.size)) {
+                            val before = oldMessages[prefix]
+                            val after = state.messages[prefix]
+                            if (before != after && before.toEntityOrNull(id, prefix) != after.toEntityOrNull(id, prefix)) break
+                            prefix++
+                        }
+                        val rewriteMessages = old == null || prefix != oldMessages.size || prefix != state.messages.size
+                        phase = "encode_message"
+                        val messageRows = if (rewriteMessages) {
+                            (prefix until state.messages.size).mapNotNull { index ->
+                                state.messages[index].toEntityOrNull(id, index)
+                            }
+                        } else {
+                            emptyList()
+                        }
+                        PersistPlan(
+                            id = id,
+                            metadata = metadata,
+                            history = history,
+                            journal = journal,
+                            deleteMessagesFrom = if (rewriteMessages) prefix else null,
+                            messageRows = messageRows,
+                        )
+                    }
+
+                    phase = "write"
                     database.withTransaction {
-                        val stored = dao.conversationMetadataRows().associateBy { it.id }
-                        phase = "delete_conversations"
-                        (stored.keys - current.keys).forEach { dao.deleteConversation(it) }
-                        for ((id, state) in current) {
-                            val old = previous[id].takeIf { id in stored }
-                            if (old == null || !state.sameMetadata(old)) {
-                                phase = "encode_metadata"
-                                val row = ConversationEntity(
-                                    id = id, title = state.title,
-                                    thinkingEnabled = state.reasoningEffort.enablesReasoning,
-                                    reasoningEffort = state.reasoningEffort.wireValue,
-                                    appliedRuntimeRunIdsJson = json.encodeToString(state.appliedRuntimeRunIds),
-                                    roleplayJson = state.roleplay?.let { json.encodeToString(it) }.orEmpty(),
-                                    revisionsJson = if (state.roleplay == null) "" else json.encodeToString(state.roleplayMessages),
-                                    createdAt = stored[id]?.createdAt ?: state.updatedAt.takeIf { it != 0L } ?: System.currentTimeMillis(),
-                                    updatedAt = state.updatedAt.takeIf { it != 0L } ?: System.currentTimeMillis(),
-                                    modelId = state.modelId,
-                                )
-                                phase = "write_metadata"
-                                dao.insertConversations(listOf(row))
-                            }
-                            if (old == null || state.history != old.history || state.journal != old.journal) {
-                                val missing = dao.contextCheckpointRow(id) == null
-                                phase = "encode_history"
-                                val history = if (missing || old == null || state.history != old.history) {
-                                    AgentConversationCodec.encodeConversationCheckpoint(state.history)
-                                } else null
-                                phase = "encode_journal"
-                                val journal = if (missing || old == null || state.journal != old.journal) {
-                                    AgentConversationCodec.encodeTranscriptForStorage(state.journal)
-                                } else null
+                        staleIds.forEach { dao.deleteConversation(it) }
+                        plans.forEach { plan ->
+                            plan.metadata?.let { dao.insertConversations(listOf(it)) }
+                            if (plan.history != null || plan.journal != null) {
                                 phase = "write_checkpoint"
-                                dao.updateContextCheckpoint(id, history, journal)
+                                dao.updateContextCheckpoint(plan.id, plan.history, plan.journal)
                             }
-                            val oldMessages = old?.messages.orEmpty()
-                            var prefix = 0
-                            while (prefix < minOf(oldMessages.size, state.messages.size)) {
-                                val before = oldMessages[prefix]
-                                val after = state.messages[prefix]
-                                if (before != after && before.toEntityOrNull(id, prefix) != after.toEntityOrNull(id, prefix)) break
-                                prefix++
-                            }
-                            if (old == null || prefix != oldMessages.size || prefix != state.messages.size) {
+                            plan.deleteMessagesFrom?.let { from ->
                                 phase = "delete_message_suffix"
-                                dao.deleteMessagesFrom(id, prefix)
-                                for (index in prefix until state.messages.size) {
-                                    phase = "encode_message"
-                                    val row = state.messages[index].toEntityOrNull(id, index) ?: continue
+                                dao.deleteMessagesFrom(plan.id, from)
+                                if (plan.messageRows.isNotEmpty()) {
                                     phase = "write_message"
-                                    dao.insertMessages(listOf(row))
+                                    dao.insertMessages(plan.messageRows)
                                 }
                             }
                         }
@@ -156,6 +184,15 @@ internal object AgentConversationStore {
             }
         }
     }
+
+    private data class PersistPlan(
+        val id: String,
+        val metadata: ConversationEntity?,
+        val history: String?,
+        val journal: String?,
+        val deleteMessagesFrom: Int?,
+        val messageRows: List<ConversationMessageEntity>,
+    )
 
     private suspend fun loadSnapshot(context: Context): Snapshot {
         val dao = EtaDatabase.get(context).conversationDao()
