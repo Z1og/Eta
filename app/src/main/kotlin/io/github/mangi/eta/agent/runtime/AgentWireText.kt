@@ -12,7 +12,8 @@ internal object AgentWireText {
     private const val INLINE_CHARS = 16_384
     private const val FD_SUFFIX = "_eta_text_fd"
     private const val SIZE_SUFFIX = "_eta_text_bytes"
-    // 单次物化的内存保护，超过时拒绝交付，不截断已落盘的历史。
+    /** 单次物化的内存保护（字符口径），超过时拒绝交付，不截断已落盘的历史。 */
+    const val MAX_TRANSFER_CHARS = 64 * 1024 * 1024
     private const val MAX_TRANSFER_BYTES = 64L * 1024 * 1024
 
     fun put(bundle: Bundle, key: String, text: String, directory: File?) {
@@ -20,9 +21,13 @@ internal object AgentWireText {
             bundle.putString(key, text)
             return
         }
-        require(text.length <= MAX_TRANSFER_BYTES) { "历史传输超过单次内存预算，原始记录仍保留" }
+        if (text.length > MAX_TRANSFER_CHARS) {
+            throw AgentRuntimeWire.PayloadTooLargeException("历史传输超过单次内存预算，原始记录仍保留")
+        }
         val bytes = text.toByteArray(Charsets.UTF_8)
-        require(bytes.size <= MAX_TRANSFER_BYTES) { "历史传输超过单次内存预算，原始记录仍保留" }
+        if (bytes.size.toLong() > MAX_TRANSFER_BYTES) {
+            throw AgentRuntimeWire.PayloadTooLargeException("历史传输超过单次内存预算，原始记录仍保留")
+        }
         val file = File.createTempFile("eta-context-", ".json", directory)
         try {
             file.outputStream().use { it.write(bytes) }

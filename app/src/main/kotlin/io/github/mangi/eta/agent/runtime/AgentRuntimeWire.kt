@@ -39,9 +39,13 @@ internal object AgentRuntimeWire {
     const val AGENT_UI_HANDOFF_SOURCE = "agent_ui"
     const val ETA_VOICE_HANDOFF_SOURCE = "eta_voice"
 
-    internal class PayloadTooLargeException(sizeBytes: Int) : IllegalArgumentException(
-        "Agent Runtime 请求元数据过大（$sizeBytes bytes）；请缩短输入或会话历史后重试"
-    )
+    internal class PayloadTooLargeException : IllegalArgumentException {
+        constructor(sizeBytes: Int) : super(
+            "Agent Runtime 请求元数据过大（$sizeBytes bytes）；请缩短输入或会话历史后重试"
+        )
+
+        constructor(message: String) : super(message)
+    }
 
     /** bind 获取服务端 Messenger 的 Intent action。 */
     const val ACTION_BIND = "io.github.mangi.eta.agent.runtime.BIND"
@@ -311,6 +315,16 @@ internal object AgentRuntimeWire {
     private fun requestBundle(request: RunRequest, imageBundles: List<Bundle>, payloadDirectory: File? = null): Bundle = Bundle().apply {
         require(request.assistantScreenContext.length <= AssistantScreenContextProjection.MAX_CHARS) {
             "助理屏幕上下文超过容量预算"
+        }
+        // 先估总量再编码：历史一大，"编码成 JSON"这一步本身就可能 OOM，
+        // 用户只会看到「请求发送失败（OutOfMemoryError）」这种无从下手的报错。
+        val historyChars = request.history.sumOf {
+            it.content.length + it.contentJson.length + it.reasoningContent.length + it.toolCallsJson.length
+        }
+        if (historyChars > AgentWireText.MAX_TRANSFER_CHARS) {
+            throw PayloadTooLargeException(
+                "会话历史过大（约 ${historyChars / 1024 / 1024} MB），请先压缩上下文后再发送",
+            )
         }
         AgentWireText.put(this, "history_json", AgentConversationCodec.encodeTranscriptForStorage(request.history), payloadDirectory)
         putString(KEY_RUN_ID, request.runId)
