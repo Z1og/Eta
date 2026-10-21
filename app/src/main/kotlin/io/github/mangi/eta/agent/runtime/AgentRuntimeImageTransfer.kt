@@ -9,6 +9,7 @@ import android.util.Base64InputStream
 import io.github.mangi.eta.agent.media.AgentImageCodec
 import io.github.mangi.eta.agent.model.AgentModelClient
 import io.github.mangi.eta.core.AndroidAgentLogger
+import io.github.mangi.eta.core.RunPhaseTrace
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
@@ -198,7 +199,10 @@ internal object AgentRuntimeImageTransfer {
                 preserveOriginal = image.preserveOriginal,
             ) ?: throw ImageTransferException("无法读取旧协议中的图片")
         }
-        request.materializeText().copy(images = images)
+        RunPhaseTrace.mark("runtime.materialize")
+        val materialized = request.materializeText()
+        RunPhaseTrace.markSized("runtime.history", materialized.history.sumOf { it.content.length })
+        materialized.copy(images = images)
     }
 
     private fun AgentModelClient.ModelImage.toWireImage(

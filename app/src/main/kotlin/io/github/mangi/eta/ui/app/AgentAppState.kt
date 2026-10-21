@@ -42,6 +42,7 @@ import io.github.mangi.eta.agent.skill.ReverseSkillCatalog
 import io.github.mangi.eta.agent.skill.SkillRuntime
 import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.core.AndroidAgentLogger
+import io.github.mangi.eta.core.RunPhaseTrace
 import io.github.mangi.eta.core.safeLogType
 import io.github.mangi.eta.data.model.ModelReasoningCapabilities
 import io.github.mangi.eta.data.model.ProviderSetting
@@ -891,6 +892,7 @@ internal class AgentAppState(
     )
 
     fun sendCurrentMessage(submittedText: String? = null) {
+        RunPhaseTrace.mark("ui.send")
         if (homeState.isCompacting) return
         val prompt = (submittedText ?: homeState.input).trim()
         val pendingImages = homeState.pendingImages
@@ -1215,6 +1217,7 @@ internal class AgentAppState(
             )
         )
         refreshConversationSummaries()
+        RunPhaseTrace.markSized("ui.launch.history", history.sumOf { it.content.length })
         val initialPersistence = persistConversations()
 
         val preparationJob = scope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
@@ -2201,8 +2204,10 @@ internal class AgentAppState(
             scope.async(Dispatchers.IO) {
                 try {
                     previous?.join()
+                    RunPhaseTrace.mark("persist.start")
                     persistence.save(appContext,
                         AgentConversationStore.Snapshot(selected, conversations, titles, timestamps))
+                    RunPhaseTrace.mark("persist.done")
                     onSaved?.invoke()
                     true
                 } catch (cancelled: CancellationException) {

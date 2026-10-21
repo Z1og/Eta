@@ -55,7 +55,9 @@ import io.github.mangi.eta.agent.overlay.applyEvent
 import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.ModuleConfig
+import io.github.mangi.eta.core.RunPhaseTrace
 import io.github.mangi.eta.core.safeLogType
+import io.github.mangi.eta.core.safeStackTrace
 import io.github.mangi.eta.data.repository.RuntimeConfigRepository
 import kotlin.concurrent.thread
 import kotlinx.coroutines.runBlocking
@@ -226,11 +228,25 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
             if (!isMessageSenderAllowed(msg)) {
                 if (msg.what == AgentRuntimeWire.MSG_START_RUN) {
                     AgentRuntimeWire.closeImageDescriptors(msg.data)
+                    // 拒绝也必须回执：客户端在 resultLatch 上无限等待，静默丢弃就是永久卡死。
+                    val rejectedRunId = msg.data?.let(AgentRuntimeWire::runIdFromBundle).orEmpty()
+                    sendResultTo(
+                        msg.replyTo,
+                        AgentRuntimeWire.RunResult(
+                            runId = rejectedRunId,
+                            ok = false,
+                            content = "",
+                            error = "Agent Runtime 拒绝了非法来源的请求",
+                            contextSnapshotRef = rejectedRunId,
+                        ),
+                    )
                 }
                 return
             }
             when (msg.what) {
                 AgentRuntimeWire.MSG_START_RUN -> {
+                    // 主线程：这里只允许解析轻量字段，历史解码在 runtime 后台线程做。
+                    RunPhaseTrace.mark("runtime.start")
                     val data = msg.data
                     if (data == null) {
                         finishWithFailure("Agent Runtime 请求缺少消息体", msg.replyTo)
@@ -407,6 +423,7 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
         request: AgentRuntimeWire.RunRequest,
         replyTo: Messenger? = null,
     ) {
+        RunPhaseTrace.mark("runtime.session")
         activeSession?.controller?.cancel()
         val session = AgentRuntimeSession(
             runId = request.runId,
@@ -465,6 +482,35 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
         thread(name = "agent-runtime") {
             try {
                 executeRun(session, request)
+            } catch (failure: Throwable) {
+                // 关键：这里必须兜住。旧代码只有 finally——执行期一旦抛异常（历史过大导致
+                // OOM、上下文压缩失败、工具初始化异常……），线程直接死掉，**没有任何人回复客户端**。
+                // 客户端 run() 里的 resultLatch.await() 没有超时，于是界面永远停在"运行中"，
+                // 用户看到的正是"发消息直接卡死"。
+                RunPhaseTrace.mark("runtime.exec.failed")
+                AndroidAgentLogger.error(
+                    "Agent runtime run failed: runId=${request.runId} type=${failure.safeLogType()}\n${failure.safeStackTrace()}",
+                )
+                runCatching {
+                    session.complete(
+                        AgentRuntimeWire.RunResult(
+                            runId = request.runId,
+                            ok = false,
+                            content = "",
+                            error = if (failure is OutOfMemoryError) {
+                                "运行时内存不足：会话历史过大，请先压缩上下文后重试"
+                            } else {
+                                "运行中断（${failure.safeLogType()}），可在 设置 → 关于 → 导出运行日志 查看详情"
+                            },
+                            contextSnapshotRef = request.runId,
+                            operation = request.operation,
+                        ),
+                    ) {}
+                }.onFailure { report ->
+                    AndroidAgentLogger.error(
+                        "Agent runtime failed to report run failure: type=${report.safeLogType()}",
+                    )
+                }
             } finally {
                 AgentExecutionService.updateRunStatus(this, null)
                 AgentExecutionService.release("run:${request.runId}")
@@ -476,6 +522,7 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
         session: AgentRuntimeSession,
         request: AgentRuntimeWire.RunRequest,
     ) {
+        RunPhaseTrace.mark("runtime.exec")
         val outcome = AgentRuntimeRunExecutor(
             context = this,
             currentPermissions = ::currentRuntimePermissions,

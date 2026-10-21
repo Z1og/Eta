@@ -65,6 +65,8 @@ internal object AnrWatchdog {
             append("主线程卡顿 ").append(stallMs).append("ms | looper=")
             append(runCatching { Looper.getMainLooper().toString() }.getOrDefault("n/a"))
             append('\n')
+            append(RunPhaseTrace.describe())
+            append('\n')
             append(dumpStacks())
         }
         AndroidAgentLogger.error(text.take(MAX_REPORT_CHARS))

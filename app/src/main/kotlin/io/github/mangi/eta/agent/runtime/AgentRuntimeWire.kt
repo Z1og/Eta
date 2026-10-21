@@ -10,6 +10,7 @@ import android.os.Parcel
 import android.os.ParcelFileDescriptor
 import io.github.mangi.eta.agent.model.AgentConversationCodec
 import io.github.mangi.eta.agent.model.AgentModelClient
+import io.github.mangi.eta.core.RunPhaseTrace
 import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.data.model.CustomBody
 import io.github.mangi.eta.data.model.CustomHeader
@@ -326,7 +327,9 @@ internal object AgentRuntimeWire {
                 "会话历史过大（约 ${historyChars / 1024 / 1024} MB），请先压缩上下文后再发送",
             )
         }
+        RunPhaseTrace.markSized("wire.encode", historyChars)
         AgentWireText.put(this, "history_json", AgentConversationCodec.encodeTranscriptForStorage(request.history), payloadDirectory)
+        RunPhaseTrace.mark("wire.encoded")
         putString(KEY_RUN_ID, request.runId)
         AgentWireText.put(this, KEY_PROMPT, request.prompt, payloadDirectory)
         putString(KEY_ASSISTANT_SCREEN_CONTEXT, request.assistantScreenContext)
@@ -363,19 +366,24 @@ internal object AgentRuntimeWire {
         putString(KEY_CUSTOM_HEADERS_JSON, json.encodeToString(request.config.customHeaders))
         putString(KEY_CUSTOM_BODY_JSON, json.encodeToString(request.config.customBody))
         request.handoff?.let { putBundle(KEY_HANDOFF, toBundle(it)) }
-        putParcelableArrayList(
-            KEY_HISTORY,
-            ArrayList(AgentConversationCodec.decodeTranscript(AgentLegacyConversationProjection.encode(request.history, AgentLegacyConversationProjection.DIRECT_CHARS)).map { message ->
-                Bundle().apply {
-                    putString(KEY_ROLE, message.role)
-                    putString(KEY_CONTENT, message.content)
-                    putString(KEY_CONTENT_JSON, message.contentJson)
-                    putString(KEY_TOOL_CALL_ID, message.toolCallId)
-                    putString(KEY_REASONING_CONTENT, message.reasoningContent)
-                    putString(KEY_TOOL_CALLS_JSON, message.toolCallsJson)
-                }
-            })
-        )
+        // history_json 一旦走文件描述符，接收端（requestFromBundle）永远优先读它，
+        // KEY_HISTORY 这份"旧协议内联预览"必然被丢弃。历史一大，它仍要完整投影
+        // （编码+解码+N 个 Bundle+Parcel 写入）——纯浪费，直接不生成。
+        if (!AgentWireText.hasDescriptor(this, "history_json")) {
+            putParcelableArrayList(
+                KEY_HISTORY,
+                ArrayList(AgentConversationCodec.decodeTranscript(AgentLegacyConversationProjection.encode(request.history, AgentLegacyConversationProjection.DIRECT_CHARS)).map { message ->
+                    Bundle().apply {
+                        putString(KEY_ROLE, message.role)
+                        putString(KEY_CONTENT, message.content)
+                        putString(KEY_CONTENT_JSON, message.contentJson)
+                        putString(KEY_TOOL_CALL_ID, message.toolCallId)
+                        putString(KEY_REASONING_CONTENT, message.reasoningContent)
+                        putString(KEY_TOOL_CALLS_JSON, message.toolCallsJson)
+                    }
+                })
+            )
+        }
         putParcelableArrayList(
             KEY_IMAGES,
             ArrayList(imageBundles)
