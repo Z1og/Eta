@@ -49,7 +49,10 @@ internal interface ChunkedTextDao {
         val count = parts[0].toInt()
         val length = parts[1].toInt()
         check(count > 0 && length > 0) { "Invalid history payload size" }
-        val result = StringBuilder()
+        // 参考串里已经写明总长度，直接按最终容量开一次。
+        // 默认 StringBuilder() 靠倍增扩容：16MB 涨到 32MB 时要一次 33MB 的连续分配，
+        // 堆紧张时就是日志里那条 "Failed to allocate a 33558536 byte allocation"。
+        val result = StringBuilder(length)
         var offset = 0
         while (offset < count) {
             val page = textChunks(table, owner, field, minOf(32, count - offset), offset)

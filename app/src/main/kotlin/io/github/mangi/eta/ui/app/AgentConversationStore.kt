@@ -10,6 +10,7 @@ import io.github.mangi.eta.agent.roleplay.RoleplayMessageState
 import io.github.mangi.eta.data.db.ConversationContextCheckpointEntity
 import io.github.mangi.eta.data.db.ConversationEntity
 import io.github.mangi.eta.data.db.ConversationMetadata
+import io.github.mangi.eta.data.db.ChunkedTextDao
 import io.github.mangi.eta.data.db.ConversationMessageEntity
 import io.github.mangi.eta.data.db.ConversationStateEntity
 import io.github.mangi.eta.data.db.EtaDatabase
@@ -54,6 +55,11 @@ internal object AgentConversationStore {
          * 重启后列表被压紧；增量保存按下标截断后缀，这些会话必须先整段重写一次。
          */
         val unalignedConversationIds: Set<String> = emptySet(),
+        /**
+         * journal 故意没从库里读回来的会话（体积过大）。它们的 journal 必须**原样留在库里**：
+         * 否则下一次保存会拿 `journal.ifEmpty { history }` 把它覆盖掉。
+         */
+        val journalNotLoadedIds: Set<String> = emptySet(),
     )
 
     private val saveMutex = Mutex()
@@ -69,8 +75,10 @@ internal object AgentConversationStore {
         conversationsById: Map<String, AgentChatHomeUiState>,
         titles: Map<String, String>,
         updatedAt: Map<String, Long>,
+        journalNotLoadedIds: Set<String> = emptySet(),
     ) = AgentConversationPersistence().save(
-        context, Snapshot(selectedConversationId, conversationsById, titles, updatedAt),
+        context,
+        Snapshot(selectedConversationId, conversationsById, titles, updatedAt, journalNotLoadedIds = journalNotLoadedIds),
     )
 
     internal suspend fun saveChanges(
@@ -78,6 +86,7 @@ internal object AgentConversationStore {
         selectedConversationId: String?,
         current: Map<String, AgentConversationPersistence.Content>,
         previous: Map<String, AgentConversationPersistence.Content>,
+        journalNotLoadedIds: Set<String> = emptySet(),
     ) {
         val appContext = context.applicationContext
         saveMutex.withLock {
@@ -120,7 +129,9 @@ internal object AgentConversationStore {
                                 history = AgentConversationCodec.encodeConversationCheckpoint(state.history)
                             }
                             phase = "encode_journal"
-                            if (missing || journalChanged) {
+                            // journal 没读回来的会话：只写 history，journal 列传 null 保持原值。
+                            // 否则空 journal 会退化成 history 覆盖掉库里的完整记录。
+                            if ((missing || journalChanged) && id !in journalNotLoadedIds) {
                                 journal = encodeJournal(state.journal)
                             }
                         }
@@ -262,6 +273,11 @@ internal object AgentConversationStore {
             )
         }
 
+        // 只为"当前选中"的会话完整还原 journal：其余会话的 journal 动辄几十 MB，
+        // 全量还原会在启动时把堆吃干净（"Failed to allocate 33558536 byte" 的直接来源），
+        // 而且它一进内存就要在每次保存时整段编码。超阈值的先跳过，选中时再补。
+        val selectedRaw = dao.state()?.selectedConversationId
+        val journalNotLoaded = linkedSetOf<String>()
         val states = linkedMapOf<String, AgentChatHomeUiState>()
         val titles = mutableMapOf<String, String>()
         val updatedAt = mutableMapOf<String, Long>()
@@ -298,9 +314,15 @@ internal object AgentConversationStore {
                 } ?: RoleplayMessageState(),
                 // 历史库里可能有修复前写下的超大 journal（数十 MB）。载入时就按上限截尾，
                 // 否则它会一直占着堆，下一次整段编码（journal_json）必然 OOM。
-                journal = boundedJournal(
-                    AgentConversationCodec.decodeTranscript(checkpoint?.journalJson),
-                ),
+                journal = if (
+                    conversation.id != selectedRaw &&
+                    declaredTextChars(checkpoint?.journalJson.orEmpty()) > MAX_EAGER_JOURNAL_CHARS
+                ) {
+                    journalNotLoaded += conversation.id
+                    emptyList()
+                } else {
+                    boundedJournal(AgentConversationCodec.decodeTranscript(checkpoint?.journalJson))
+                },
                 messages = restored,
                 history = decodedHistory.ifEmpty {
                     messages.toLegacyHistory()
@@ -326,7 +348,18 @@ internal object AgentConversationStore {
             titles = titles,
             updatedAt = updatedAt,
             unalignedConversationIds = unaligned,
+            journalNotLoadedIds = journalNotLoaded,
         )
+    }
+
+    /** 分块引用串里写着总字符数；没走分块的直接看长度。用于载入前判断体积，不必先读回内容。 */
+    private fun declaredTextChars(stored: String): Int {
+        if (stored.isEmpty()) return 0
+        if (!stored.startsWith(ChunkedTextDao.REFERENCE_PREFIX)) return stored.length
+        return stored.removePrefix(ChunkedTextDao.REFERENCE_PREFIX)
+            .substringAfter(':')
+            .toIntOrNull()
+            ?: Int.MAX_VALUE
     }
 
     private val ConversationMetadata.reasoningEffortValue: ReasoningEffort
@@ -519,5 +552,7 @@ internal object AgentConversationStore {
     private const val TYPE_TOOL = "tool"
     private const val TYPE_TOOL_SUMMARY = "tool_summary"
     private const val MESSAGE_LOAD_PAGE_SIZE = 128
+    /** 非选中会话的 journal 超过这个体积就跳过还原，选中时再补。 */
+    private const val MAX_EAGER_JOURNAL_CHARS = 512 * 1024
     private const val LEGACY_UNNAMED_TITLE = "新对话"
 }

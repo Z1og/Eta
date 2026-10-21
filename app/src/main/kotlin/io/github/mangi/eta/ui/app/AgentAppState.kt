@@ -1,6 +1,7 @@
 package io.github.mangi.eta.ui.app
 
 import io.github.mangi.eta.agent.model.AgentContextSnapshot
+import io.github.mangi.eta.agent.model.AgentConversationCodec
 
 import android.content.ContentResolver
 import android.content.Context
@@ -44,6 +45,7 @@ import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.RunPhaseTrace
 import io.github.mangi.eta.core.safeLogType
+import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.data.model.ModelReasoningCapabilities
 import io.github.mangi.eta.data.model.ProviderSetting
 import io.github.mangi.eta.data.model.ReasoningEffort
@@ -125,6 +127,9 @@ internal class AgentAppState(
     private var conversationsById: Map<String, AgentChatHomeUiState> = initialConversations.conversationsById
     private var conversationTitles: Map<String, String> = initialConversations.titles
     private var conversationUpdatedAt: Map<String, Long> = initialConversations.updatedAt
+    /** journal 还留在库里、没读进内存的会话；保存时不许覆盖它们的 journal。 */
+    private var journalNotLoadedIds: Set<String> = initialConversations.journalNotLoadedIds
+    private val journalHydrating = mutableSetOf<String>()
 
     var homeState by mutableStateOf(
         selectedConversationId?.let(conversationsById::get) ?: emptyChatState(defaultThinkingEnabled)
@@ -768,6 +773,32 @@ internal class AgentAppState(
         }
         conversationPaneState = conversationPaneState.copy(selectedConversationId = conversationId)
         persistConversations()
+        hydrateJournalIfNeeded(conversationId)
+    }
+
+    /**
+     * 载入时为了省内存没还原的 journal，等用户真的切到这个会话再补上。
+     * 补完之前 [journalNotLoadedIds] 一直保留它，保存时就不会用 history 覆盖库里的完整记录。
+     */
+    private fun hydrateJournalIfNeeded(conversationId: String) {
+        if (conversationId !in journalNotLoadedIds) return
+        if (!journalHydrating.add(conversationId)) return
+        scope.launch(Dispatchers.IO) {
+            val stored = runCatching {
+                EtaDatabase.get(appContext).conversationDao()
+                    .contextCheckpoint(conversationId)?.journalJson
+            }.getOrNull()
+            val journal = boundedJournal(AgentConversationCodec.decodeTranscript(stored))
+            withContext(Dispatchers.Main) {
+                journalHydrating.remove(conversationId)
+                val state = conversationsById[conversationId] ?: return@withContext
+                if (journal.isNotEmpty() && state.journal.isEmpty()) {
+                    updateConversation(conversationId, state.copy(journal = journal), updateTimestamp = false)
+                }
+                // 无论有没有读到内容都要摘掉：读不到再留着也只会一直挡住 journal 的后续保存。
+                journalNotLoadedIds = journalNotLoadedIds - conversationId
+            }
+        }
     }
 
     fun createConversation() {
@@ -2208,7 +2239,13 @@ internal class AgentAppState(
                     previous?.join()
                     RunPhaseTrace.mark("persist.start")
                     persistence.save(appContext,
-                        AgentConversationStore.Snapshot(selected, conversations, titles, timestamps))
+                        AgentConversationStore.Snapshot(
+                            selected,
+                            conversations,
+                            titles,
+                            timestamps,
+                            journalNotLoadedIds = journalNotLoadedIds,
+                        ))
                     RunPhaseTrace.mark("persist.done")
                     onSaved?.invoke()
                     true

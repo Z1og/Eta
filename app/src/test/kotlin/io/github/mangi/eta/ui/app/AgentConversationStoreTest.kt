@@ -91,6 +91,38 @@ class AgentConversationStoreTest {
         assertEquals(listOf(original), switched.journal)
     }
 
+    /**
+     * 载入时为省内存跳过 journal 的会话，保存时必须保持库里的 journal 不变。
+     * 否则 Content 的 `journal.ifEmpty { history }` 会把完整记录替换成 history——静默丢数据。
+     */
+    @Test
+    fun deferredJournalIsNeverOverwrittenByHistoryFallback() = runBlocking {
+        val original = AgentModelClient.ConversationMessage(
+            role = "assistant", content = "原始回答", messageId = "assistant-1",
+        )
+        val full = AgentChatHomeUiState(
+            messages = listOf(AgentMessageUi(id = "assistant-1", content = "原始回答", isStreaming = false)),
+            input = "", isStreaming = false, thinkingEnabled = false,
+            journal = listOf(original), history = listOf(original),
+        )
+        AgentConversationStore.save(
+            context, "c1", mapOf("c1" to full), mapOf("c1" to "标题"), mapOf("c1" to 1L),
+        )
+
+        val deferred = full.copy(
+            journal = emptyList(),
+            history = listOf(AgentModelClient.ConversationMessage(role = "user", content = "新消息", messageId = "user-2")),
+        )
+        AgentConversationStore.save(
+            context, "c1", mapOf("c1" to deferred), mapOf("c1" to "标题"), mapOf("c1" to 2L),
+            journalNotLoadedIds = setOf("c1"),
+        )
+
+        val restored = AgentConversationStore.load(context).conversationsById.getValue("c1")
+        assertEquals(listOf(original), restored.journal)
+        assertEquals(listOf("新消息"), restored.history.map { it.content })
+    }
+
     @Test
     fun saveAndLoadPreservesConversations() {
         val conversation = AgentChatHomeUiState(
