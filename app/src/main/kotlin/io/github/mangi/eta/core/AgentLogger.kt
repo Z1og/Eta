@@ -19,15 +19,19 @@ internal object AndroidAgentLogger : AgentLogger {
     private val logThrottle = LogThrottle()
 
     override fun debug(message: () -> String) {
-        Log.d(ModuleConfig.TAG, message())
+        val text = message()
+        Log.d(ModuleConfig.TAG, text)
+        FileLogSink.append("D", text)
     }
 
     override fun info(message: String) {
         Log.i(ModuleConfig.TAG, message)
+        FileLogSink.append("I", message)
     }
 
     override fun warn(message: String) {
         Log.w(ModuleConfig.TAG, message)
+        FileLogSink.append("W", message)
     }
 
     fun warnThrottled(
@@ -46,6 +50,7 @@ internal object AndroidAgentLogger : AgentLogger {
         } else {
             Log.e(ModuleConfig.TAG, message, throwable)
         }
+        FileLogSink.append("E", message, throwable)
     }
 
     fun errorThrottled(
@@ -54,8 +59,7 @@ internal object AndroidAgentLogger : AgentLogger {
         windowMs: Long = ModuleConfig.HOT_PATH_LOG_WINDOW_MS,
         message: () -> String
     ) {
-        if (logThrottle.shouldLog("error:$key", windowMs)) {
-            error(message(), throwable)
-        }
+        if (!logThrottle.shouldLog("error:$key", windowMs)) return
+        error(message(), throwable)
     }
 }

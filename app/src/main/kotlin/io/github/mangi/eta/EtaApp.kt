@@ -9,6 +9,8 @@ import io.github.mangi.eta.agent.device.RootAccess
 import io.github.mangi.eta.agent.terminal.TerminalRuntime
 import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.core.AndroidAgentLogger
+import io.github.mangi.eta.core.AnrWatchdog
+import io.github.mangi.eta.core.FileLogSink
 import io.github.mangi.eta.core.safeLogType
 import io.github.mangi.eta.data.datastore.SettingsDataStore
 import io.github.mangi.eta.data.repository.AgentGoalRepository
@@ -27,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.io.File
 
 /**
  * 模块 UI 进程的 Application。
@@ -50,6 +53,10 @@ class EtaApp : Application(), XposedServiceHelper.OnServiceListener {
         if (!AppProcessPolicy.shouldInitializeFullRuntime(Application.getProcessName(), packageName)) {
             return
         }
+        // 日志落盘 + 主线程卡死看门狗：卡死/闪退场景没有 adb 也能拿到证据。
+        FileLogSink.start(File(filesDir, "logs"))
+        installCrashLogger()
+        AnrWatchdog.start()
         TerminalRuntime.initialize(this)
         RootAccess.initialize(this)
         applicationScope.launch { TerminalRuntime.backgroundJobs(this@EtaApp).resume() }
@@ -90,6 +97,18 @@ class EtaApp : Application(), XposedServiceHelper.OnServiceListener {
                     "Agent skill index prewarm failed: type=${throwable.safeLogType()}"
                 )
             }
+        }
+    }
+
+    /** 崩溃时把堆栈也写进日志文件，导出后能看到原本只在 logcat 里的 FATAL EXCEPTION。 */
+    private fun installCrashLogger() {
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching {
+                AndroidAgentLogger.error("未捕获异常 in thread=${thread.name}", throwable)
+                FileLogSink.append("E", "进程即将因未捕获异常退出", throwable)
+            }
+            original?.uncaughtException(thread, throwable)
         }
     }
 

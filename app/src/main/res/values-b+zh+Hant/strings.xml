@@ -390,6 +390,10 @@
   <string name="ui_about_update_title">檢查更新</string>
   <string name="ui_about_update_checking">正在檢查…</string>
   <string name="ui_about_feedback_title">問題回饋</string>
+  <string name="ui_about_export_log_title">導出運行日誌</string>
+  <string name="ui_about_export_log_hint">把最近的日誌存到「下載/Eta」，便於回饋問題時附上</string>
+  <string name="ui_about_export_log_done">日誌已保存到 %1$s</string>
+  <string name="ui_about_export_log_failed">日誌導出失敗：%1$s</string>
   <string name="ui_update_already_latest">目前已是最新版本</string>
   <string name="ui_update_check_failed">檢查更新失敗，請稍後重試</string>
   <string name="ui_update_available_title">發現新版本</string>

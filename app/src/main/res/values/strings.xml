@@ -412,6 +412,10 @@
   <string name="ui_about_update_title">Check for updates</string>
   <string name="ui_about_update_checking">Checking…</string>
   <string name="ui_about_feedback_title">Feedback</string>
+  <string name="ui_about_export_log_title">Export run log</string>
+  <string name="ui_about_export_log_hint">Save recent logs to Download/Eta for bug reports</string>
+  <string name="ui_about_export_log_done">Log saved to %1$s</string>
+  <string name="ui_about_export_log_failed">Log export failed: %1$s</string>
   <string name="ui_update_already_latest">Already on the latest version</string>
   <string name="ui_update_check_failed">Update check failed. Try again later</string>
   <string name="ui_update_available_title">Update available</string>

@@ -58,6 +58,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.mangi.eta.EtaApp
 import io.github.mangi.eta.R
+import io.github.mangi.eta.core.LogExporter
 import io.github.mangi.eta.agent.accessibility.AccessibilityProtectionClient
 import io.github.mangi.eta.agent.accessibility.AgentAccessibilityService
 import io.github.mangi.eta.config.PowerAssistantTarget
@@ -152,6 +153,35 @@ private fun SettingsPageContent(
     }
     var checkingUpdate by remember { mutableStateOf(false) }
     var availableUpdate by remember { mutableStateOf<AppLatestRelease?>(null) }
+    // 导出运行日志：卡死/闪退时没有 adb 也能把证据拿出来。
+    var exportingLog by remember { mutableStateOf(false) }
+    val exportLog: () -> Unit = {
+        if (!exportingLog) {
+            exportingLog = true
+            coroutineScope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { LogExporter.export(context.applicationContext) }
+                }
+                exportingLog = false
+                result.onSuccess { path ->
+                    Toast.makeText(
+                        context.applicationContext,
+                        context.getString(R.string.ui_about_export_log_done, path),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }.onFailure { error ->
+                    Toast.makeText(
+                        context.applicationContext,
+                        context.getString(
+                            R.string.ui_about_export_log_failed,
+                            error.message ?: error.javaClass.simpleName,
+                        ),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
+    }
     val checkForUpdate: () -> Unit = {
         if (!checkingUpdate) {
             checkingUpdate = true
@@ -818,6 +848,21 @@ private fun SettingsPageContent(
                             )
                         },
                         onClick = { openUrl("https://github.com/Mangi-11/Eta/issues") },
+                    )
+
+                    EtaPreferenceDivider()
+                    EtaArrowPreference(
+                        title = stringResource(R.string.ui_about_export_log_title),
+                        summary = stringResource(R.string.ui_about_export_log_hint),
+                        startAction = {
+                            EtaPreferenceIcon(
+                                icon = Icons.Rounded.Description,
+                                tint = EtaPreferenceColors.Green,
+                                enabled = !exportingLog,
+                            )
+                        },
+                        enabled = !exportingLog,
+                        onClick = exportLog,
                     )
 
                     EtaPreferenceDivider()

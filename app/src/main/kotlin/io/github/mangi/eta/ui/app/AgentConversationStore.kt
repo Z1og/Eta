@@ -1,6 +1,7 @@
 package io.github.mangi.eta.ui.app
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.room.withTransaction
 import io.github.mangi.eta.agent.model.AgentConversationCodec
 import io.github.mangi.eta.agent.model.AgentModelClient
@@ -81,6 +82,7 @@ internal object AgentConversationStore {
         val appContext = context.applicationContext
         saveMutex.withLock {
             withContext(Dispatchers.IO) {
+                val startedAt = SystemClock.elapsedRealtime()
                 var phase = "read_metadata"
                 try {
                     val database = EtaDatabase.get(appContext)
@@ -150,6 +152,12 @@ internal object AgentConversationStore {
                     }
 
                     phase = "write"
+                    val encodeMs = SystemClock.elapsedRealtime() - startedAt
+                    if (encodeMs >= SLOW_PERSIST_MS) {
+                        AndroidAgentLogger.warn(
+                            "conversation persist slow: encode=${encodeMs}ms conversations=${current.size}",
+                        )
+                    }
                     database.withTransaction {
                         staleIds.forEach { dao.deleteConversation(it) }
                         plans.forEach { plan ->
@@ -173,6 +181,12 @@ internal object AgentConversationStore {
                         if (selected == null) dao.deleteState()
                         else dao.insertState(ConversationStateEntity(selectedConversationId = selected))
                     }
+                    val totalMs = SystemClock.elapsedRealtime() - startedAt
+                    if (totalMs >= SLOW_PERSIST_MS) {
+                        AndroidAgentLogger.warn(
+                            "conversation persist slow: total=${totalMs}ms (encode=${encodeMs}ms) conversations=${current.size}",
+                        )
+                    }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (failure: Throwable) {
@@ -195,6 +209,18 @@ internal object AgentConversationStore {
     )
 
     private suspend fun loadSnapshot(context: Context): Snapshot {
+        val startedAt = SystemClock.elapsedRealtime()
+        val snapshot = loadSnapshotInternal(context)
+        val elapsed = SystemClock.elapsedRealtime() - startedAt
+        if (elapsed >= SLOW_PERSIST_MS) {
+            AndroidAgentLogger.warn(
+                "conversation load slow: ${elapsed}ms conversations=${snapshot.conversationsById.size}",
+            )
+        }
+        return snapshot
+    }
+
+    private suspend fun loadSnapshotInternal(context: Context): Snapshot {
         val dao = EtaDatabase.get(context).conversationDao()
         val conversations = dao.conversations()
         if (conversations.isEmpty()) {
@@ -451,6 +477,7 @@ internal object AgentConversationStore {
             }
         }
 
+    private const val SLOW_PERSIST_MS = 500L
     private const val TYPE_USER = "user"
     private const val TYPE_ASSISTANT = "assistant"
     private const val TYPE_SYSTEM_NOTICE = "system_notice"
