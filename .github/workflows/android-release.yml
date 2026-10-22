@@ -1,9 +1,8 @@
 name: Eta Build
 
 on:
-  push:
-    branches:
-      - main
+  # 只在手动触发时构建双产物；日常推送由 build-only.yml 出 debug APK，避免每次推两个 16 分钟的构建。
+  # 两个 workflow 都只上传 artifact（contents: read），不会自动发 Release，不影响已发布的下载。
   workflow_dispatch:
 
 permissions:
