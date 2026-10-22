@@ -55,7 +55,7 @@ jobs:
         run: sdkmanager --channel=3 "platforms;android-37.0"
 
       - name: Build debug APK
-        if: inputs.build_type == 'debug'
+        if: inputs.build_type != 'release'
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --no-configuration-cache :app:assembleDebug --stacktrace
@@ -79,7 +79,7 @@ jobs:
           ./gradlew --no-daemon --no-configuration-cache :app:assembleRelease --stacktrace
 
       - name: Upload debug APK
-        if: inputs.build_type == 'debug'
+        if: inputs.build_type != 'release'
         uses: actions/upload-artifact@v4
         with:
           name: Eta-debug
