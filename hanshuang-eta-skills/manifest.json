@@ -1951,16 +1951,6 @@
       "hasEvals": false
     },
     {
-      "id": "apk-reverse",
-      "name": "apk-reverse",
-      "description": "Reverse engineer, debloat, de-ad, patch, or re-sign Android APKs, and analyze their runtime and server-side behaviour. Use for an .apk/.aab/.dex/.so sample, smali or dex patching, Frida hooking, repac",
-      "assetPath": "builtin_skills/apk-reverse",
-      "hasScripts": true,
-      "hasReferences": true,
-      "hasAssets": false,
-      "hasEvals": true
-    },
-    {
       "id": "ida-reverse",
       "name": "ida-reverse",
       "description": "|",
@@ -2029,6 +2019,16 @@
       "hasReferences": true,
       "hasAssets": false,
       "hasEvals": false
+    },
+    {
+      "id": "apk-reverse",
+      "name": "apk-reverse",
+      "description": "Reverse engineer, debloat, de-ad, patch, or re-sign Android APKs, and analyze their runtime and server-side behaviour. Use for an .apk/.aab/.dex/.so sample, smali or dex patching, Frida hooking, repac",
+      "assetPath": "builtin_skills/apk-reverse",
+      "hasScripts": true,
+      "hasReferences": true,
+      "hasAssets": false,
+      "hasEvals": true
     }
   ]
 }
