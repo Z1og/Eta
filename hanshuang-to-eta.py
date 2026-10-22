@@ -532,6 +532,15 @@ ETA_APK_REVERSE_NOTE = """
 """
 
 
+def looks_like_deep_apk_reverse(skill_dir: Path) -> bool:
+    """判定某个 apk-reverse 目录是否是深度版。
+
+    hanshuang 的 apk-reverse 是 6 个脚本的 CLI 版（无 references/ 无 evals/）；
+    深度版带 references/、evals/ 与 50+ 脚本。仅用于防降级判定，不参与内容比较。
+    """
+    return (skill_dir / "references").is_dir() or (skill_dir / "evals").is_dir()
+
+
 def promote_apk_reverse_pro(output_dir: Path, pro_cache: Path, dry_run: bool = False) -> bool:
     """用 newliver666/apk-reverse 深度版覆盖同名 apk-reverse skill。
 
@@ -831,6 +840,33 @@ def main():
         except Exception as e:
             print(f"  [警告] 扫描 builtin_dir 失败: {e}")
 
+    # --- 防降级保护（转换前冻结）-------------------------------------------
+    # 第二来源 newliver666/apk-reverse 会间歇性 404（实测 10-19、10-21 均发生）。
+    # 源不可用时 promote_apk_reverse_pro 返回 False，但 process_skill 已经把镜像里的
+    # 深度版覆盖成 hanshuang 的 CLI 版，提交后就是「深度版 → CLI 版」降级，且会与
+    # 恢复交替抖动（10-19 edc9e73 ↔ 744d464，10-21 f5f30e4 ↔ 160de3a）。
+    # 所以在覆盖之前先把上一轮产物冻结，promote 失败时原样还原。
+    preserved_apk = None
+    preserved_entry = None
+    pro_src = pro_cache / "skills" / APK_REVERSE_PRO_DIR / "SKILL.md"
+    if not args.dry_run and not pro_src.exists():
+        existing_apk = output_dir / APK_REVERSE_PRO_DIR
+        if existing_apk.is_dir() and looks_like_deep_apk_reverse(existing_apk):
+            preserved_apk = output_dir / ".apk-reverse-preserved"
+            if preserved_apk.exists():
+                shutil.rmtree(preserved_apk)
+            shutil.copytree(existing_apk, preserved_apk)
+            mf_path = output_dir / "manifest.json"
+            if mf_path.exists():
+                try:
+                    for e in json.loads(read_lf(mf_path)).get("skills", []):
+                        if e.get("id") == APK_REVERSE_PRO_DIR:
+                            preserved_entry = e
+                            break
+                except Exception:
+                    preserved_entry = None
+            print("  [保护] 深度版源不可用，已冻结本地深度版，避免本轮降级")
+
     for skill_dir in skill_dirs:
         entry = process_skill(skill_dir, output_dir, dry_run=args.dry_run)
         if entry:
@@ -841,6 +877,20 @@ def main():
     # 第二来源融合：apk-reverse 深度版覆盖同名 skill
     print(f"\n[3.5/4] 融合 apk-reverse 深度版...")
     promoted = promote_apk_reverse_pro(output_dir, pro_cache, dry_run=args.dry_run)
+
+    # 深度版源不可用 → 还原冻结的深度版，不再用 CLI 版覆盖已融合的内容
+    if preserved_apk is not None:
+        if not promoted and preserved_apk.is_dir():
+            dst = output_dir / APK_REVERSE_PRO_DIR
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(preserved_apk, dst)
+            if preserved_entry:
+                manifest_entries = [e for e in manifest_entries if e.get("id") != APK_REVERSE_PRO_DIR]
+                manifest_entries.append(preserved_entry)
+            print("  [保护] 已还原本地深度版 apk-reverse，本次不降级")
+        if preserved_apk.exists():
+            shutil.rmtree(preserved_apk)
 
     # 第三来源融合：reverse-skill 合集（仅新增 id）
     print(f"\n[3.7/4] 融合 reverse-skill 合集...")
