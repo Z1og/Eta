@@ -183,6 +183,42 @@ internal object ModelRepository {
             )
         }
 
+    /**
+     * Importing a filtered subset (e.g. OpenCode free-only) must not remove
+     * other remote models from the same provider.
+     */
+    suspend fun importRemoteSubset(
+        providerId: String,
+        fetched: List<Model>,
+        adoptedModelIds: Set<String>,
+    ): RemoteModelSyncResult = mutationMutex.withLock {
+        val existing = currentModels(providerId)
+        val existingIds = existing.mapTo(mutableSetOf()) { it.modelId.normalizedModelId() }
+        val selected = adoptedModelIds.mapTo(mutableSetOf()) { it.normalizedModelId() }
+        val incoming = fetched
+            .filter { it.modelId.isNotBlank() && it.modelId.normalizedModelId() in selected }
+            .distinctBy { it.modelId.normalizedModelId() }
+            .filterNot { it.modelId.normalizedModelId() in existingIds }
+        if (incoming.isEmpty()) {
+            return@withLock RemoteModelSyncResult(applied = false, fetchedCount = fetched.size)
+        }
+        val merged = existing + incoming.mapIndexed { index, remote ->
+            remote.copy(
+                id = remote.id.ifBlank(::newId),
+                isBuiltIn = false,
+                sortOrder = existing.size + index,
+                source = ModelSource.REMOTE,
+                contextWindowOverride = remote.contextWindow,
+            )
+        }
+        ProviderRepository.replaceModels(providerId, merged)
+        ProviderRepository.repairSelection()
+        RemoteModelSyncResult(
+            applied = true, fetchedCount = fetched.size,
+            addedCount = incoming.size,
+        )
+    }
+
     suspend fun reorderModels(providerId: String, ids: List<String>) {
         mutationMutex.withLock {
             val models = currentModels(providerId)

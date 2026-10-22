@@ -69,6 +69,24 @@ class AgentModelCapabilityProbeTest {
     }
 
     @Test
+    fun openCodeFreeTierDenialExplainsAuthorizationInsteadOfGenericEndpointFailure() {
+        val denied = AgentModelFailure.http(
+            403,
+            """{"error":{"type":"FreeTierError","message":"anonymous denied; private-text"}}""",
+            io.github.mangi.eta.data.model.ProviderSourceTypes.OPENCODE,
+        )
+        assertEquals("OPENCODE_FREE_TIER_RESTRICTED", denied.code)
+        assertFalse(denied.retryable)
+        assertTrue(denied.message.orEmpty().contains("上游 Key"))
+        assertFalse(denied.message.orEmpty().contains("private-text"))
+        val other = AgentModelFailure.http(
+            403, """{"error":{"type":"FreeTierError"}}""",
+            io.github.mangi.eta.data.model.ProviderSourceTypes.DEEPSEEK,
+        )
+        assertEquals("HTTP_403", other.code)
+    }
+
+    @Test
     fun rejectedEffortParameterMeansReasoningUnsupported() = runBlocking {
         var calls = 0
         val outcome = probeWith(client { request ->
@@ -118,6 +136,33 @@ class AgentModelCapabilityProbeTest {
     }
 
     @Test
+    fun freeOpenCodeProbeUsesOnlyOneUpstreamRequest() = runBlocking {
+        var calls = 0
+        val openCode = config.copy(
+            providerSourceType = io.github.mangi.eta.data.model.ProviderSourceTypes.OPENCODE,
+            model = "deepseek-v4.1-flash-free",
+        )
+        val outcome = AgentModelCapabilityProbe {
+            client { calls++; ok() }
+        }.probe(openCode)
+        assertTrue(outcome.reachable)
+        assertNull(outcome.reasoning)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun openCodeQuotaExhaustionIsNotAnAuthenticationOrEndpointFailure() {
+        val result = AgentModelFailure.http(
+            429,
+            """{"error":{"message":"Free usage limit reached. Subscribe to OpenCode Go to keep going"}}""",
+            io.github.mangi.eta.data.model.ProviderSourceTypes.OPENCODE,
+        )
+        assertEquals("OPENCODE_FREE_QUOTA_EXHAUSTED", result.code)
+        assertFalse(result.retryable)
+        assertTrue(result.message.orEmpty().contains("免费额度"))
+    }
+
+    @Test
     fun probeRequestIsMinimalAndToolless() = runBlocking {
         var seen: ProviderRequest? = null
         probeWith(client { request ->
@@ -127,7 +172,7 @@ class AgentModelCapabilityProbeTest {
         val request = checkNotNull(seen)
         assertEquals(0, request.tools.length())
         assertEquals(2, request.messages.length())
-        assertEquals("probe-fixture", request.config.model)
+        assertEquals(config.model, request.config.model)
         assertTrue(request.messages.toString().contains("回 1"))
     }
 }

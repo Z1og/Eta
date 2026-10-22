@@ -373,8 +373,7 @@ internal object AgentUserPromptRepository {
     /**
      * 注入开关。
      *
-     * 与逆向能力开关平级、互不牵连：技能与预读归逆向开关管，破甲记忆归这个开关管。
-     * 判定只看这一个布尔值——不再叠加档位或逆向状态，否则会出现"开关关了但还在注入"。
+     * The reverse capability switch is the sole source of truth for skill and prompt status.
      */
     suspend fun enabled(): Boolean = SettingsDataStore.userPromptEnabled()
 

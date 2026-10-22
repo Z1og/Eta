@@ -8,6 +8,8 @@ import io.github.mangi.eta.data.model.Model
 import io.github.mangi.eta.data.model.ModelReasoningCapabilities
 import io.github.mangi.eta.data.model.ModelSource
 import io.github.mangi.eta.data.model.ProviderSetting
+import io.github.mangi.eta.data.model.ProviderSourceTypes
+import io.github.mangi.eta.data.provider.ProviderSourceRegistry
 import io.github.mangi.eta.data.model.ReasoningEffort
 import io.github.mangi.eta.data.provider.OfficialModelCatalog
 import java.util.UUID
@@ -32,14 +34,45 @@ internal object RemoteModelFetcher {
     suspend fun fetch(provider: ProviderSetting): Result<List<Model>> =
         withContext(Dispatchers.IO) {
             runCatching {
+                val actualProvider = catalogProvider(provider)
                 val fetched = when (provider) {
                     is AnthropicProviderSetting -> fetchAnthropic(provider)
-                    else -> fetchOpenAiCompatible(provider)
+                    else -> fetchOpenAiCompatible(actualProvider)
                 }
                 // 为不返回元数据的端点（中转站等）自动补齐窗口与推理能力；失败静默降级
                 ModelMetadataCatalog.enrich(fetched)
             }
         }
+
+    /**
+     * The official Zen /v1/models catalog is public and does not require the
+     * embedded gateway to finish its own upstream discovery. Keeping these
+     * operations independent avoids 18-second readiness timeouts on Android.
+     * Listing a free model does NOT grant permission to call its inference API.
+     */
+    suspend fun fetchFreeModels(provider: ProviderSetting): Result<List<Model>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                require(ProviderSourceRegistry.resolve(provider) == ProviderSourceTypes.OPENCODE) {
+                    "仅 OpenCode 提供商可拉取 OpenCode 免费目录"
+                }
+                val free = fetchOpenAiCompatible(
+                    catalogProvider(provider), freeOnly = true,
+                )
+                ModelMetadataCatalog.enrich(free)
+            }
+        }
+
+    /** Never redirect a user-configured non-OpenCode endpoint to the official Zen host. */
+    internal fun shouldReadOfficialZenCatalog(provider: ProviderSetting): Boolean =
+        ProviderSourceRegistry.resolve(provider) == ProviderSourceTypes.OPENCODE &&
+            OpenCodeFreeModelCatalog.identifyOfficialOpenCodeUrl(provider.baseUrl)
+
+    internal fun catalogProvider(provider: ProviderSetting): ProviderSetting {
+        if (shouldReadOfficialZenCatalog(provider)) return provider
+        OpenCodeEmbeddedGateway.ensureRunningFor(provider)
+        return OpenCodeEmbeddedGateway.effectiveProvider(provider)
+    }
 
     internal fun parseOpenAiModels(body: String): List<Model> {
         val data = json.parseToJsonElement(body)
@@ -63,7 +96,7 @@ internal object RemoteModelFetcher {
         }
     }
 
-    private fun fetchOpenAiCompatible(provider: ProviderSetting): List<Model> {
+    private fun fetchOpenAiCompatible(provider: ProviderSetting, freeOnly: Boolean = false): List<Model> {
         val request = Request.Builder()
             .url(ProviderUrls.openAiModelsUrl(provider.baseUrl))
             .headers(
@@ -79,7 +112,15 @@ internal object RemoteModelFetcher {
             )
             .get()
             .build()
-        return OfficialModelCatalog.enrich(provider, executeJson(request, "拉取模型失败").let(::parseOpenAiModels))
+        val body = executeJson(request, "拉取模型失败")
+        require(body.length <= 3_000_000) { "远端模型目录超过容量限制" }
+        val allowed = if (freeOnly) OpenCodeFreeModelCatalog.parseFreeModelIds(body) else null
+        val parsed = parseOpenAiModels(body)
+            .filter { allowed == null || (it.modelId in allowed && isChatCapableModel(it)) }
+            .map { model ->
+                if (freeOnly) model.copy(displayName = "免费 · ${model.displayName}") else model
+            }
+        return OfficialModelCatalog.enrich(provider, parsed)
     }
 
     private fun fetchAnthropic(provider: AnthropicProviderSetting): List<Model> {
@@ -125,6 +166,7 @@ internal object RemoteModelFetcher {
             return false
         }
         val id = model.modelId.lowercase()
+        if (id.startsWith("jev-") || id.startsWith("systemone-")) return false
         return NON_CHAT_MODEL_ID_MARKERS.none { it in id }
     }
 

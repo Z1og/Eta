@@ -72,6 +72,10 @@ import io.github.mangi.eta.data.model.Model
 import io.github.mangi.eta.data.model.ModelReasoningCapabilities
 import io.github.mangi.eta.agent.model.AgentModelCapabilityProbe
 import io.github.mangi.eta.data.model.ProviderSetting
+import io.github.mangi.eta.data.model.ProviderSourceTypes
+import io.github.mangi.eta.data.provider.ProviderSourceRegistry
+import io.github.mangi.eta.data.provider.BuiltinProviders
+import io.github.mangi.eta.data.repository.OpenCodeEmbeddedGateway
 import io.github.mangi.eta.data.model.ReasoningEffort
 import io.github.mangi.eta.data.repository.ModelRepository
 import io.github.mangi.eta.data.repository.RemoteModelFetcher
@@ -181,6 +185,7 @@ internal fun ProviderModelsTab(
     contentSidePadding: Dp,
 ) {
     val context = LocalContext.current
+    val isOpenCode = ProviderSourceRegistry.resolve(provider) == ProviderSourceTypes.OPENCODE
     val selectedModelId by RuntimeConfigRepository.selectedModelIdFlow().collectAsState(initial = null)
     var isFetching by remember { mutableStateOf(false) }
     var isMutatingModel by remember { mutableStateOf(false) }
@@ -316,6 +321,61 @@ internal fun ProviderModelsTab(
                                 }
                             },
                         )
+
+                        if (isOpenCode) {
+                            EtaPreferenceDivider()
+                            EtaArrowPreference(
+                                title = if (isFetching) "正在读取免费模型…" else "拉取 OpenCode 免费模型",
+                                summary = if (RemoteModelFetcher.shouldReadOfficialZenCatalog(provider)) {
+                                    "直接读取 OpenCode Zen 官方公开目录，无需等待内置网关；显示免费标记不代表可以匿名推理"
+                                } else {
+                                    "从当前 opencode2api /v1/models 读取免费模型；需要网关自身目录就绪"
+                                },
+                                enabled = !isFetching && !isMutatingModel,
+                                startAction = {
+                                    EtaPreferenceIcon(
+                                        icon = Icons.Rounded.CloudDownload,
+                                        enabled = !isFetching && !isMutatingModel,
+                                        tint = EtaPreferenceColors.Green,
+                                    )
+                                },
+                                onClick = {
+                                    scope.launch {
+                                        isFetching = true
+                                        message = null
+                                        try {
+                                            val models = RemoteModelFetcher.fetchFreeModels(provider)
+                                                .getOrElse { throw it }
+                                            val candidates = ModelRepository.newRemoteModels(provider.id, models)
+                                            message = if (candidates.isEmpty()) {
+                                                if (models.isEmpty()) {
+                                                    "目录已返回，但没有明确标记免费的聊天模型；不会导入未验证的付费模型"
+                                                } else {
+                                                    "已读取 ${models.size} 个免费聊天模型，全部已添加。" +
+                                                        "目录可见不代表推理已获授权；本次不会移除已有模型"
+                                                }
+                                            } else {
+                                                pendingImport = RemoteModelImport(
+                                                    fetched = models, candidates = candidates,
+                                                    additiveOnly = true,
+                                                )
+                                                null
+                                            }
+                                        } catch (cancelled: CancellationException) {
+                                            throw cancelled
+                                        } catch (throwable: Throwable) {
+                                            val source = if (RemoteModelFetcher.shouldReadOfficialZenCatalog(provider)) {
+                                                "官方 Zen 公开目录"
+                                            } else "当前网关目录"
+                                            message = "${source}读取失败：${throwable.message ?: throwable.javaClass.simpleName}。" +
+                                                "模型列表和实际推理授权是两项独立检查"
+                                        } finally {
+                                            isFetching = false
+                                        }
+                                    }
+                                },
+                            )
+                        }
 
                         EtaArrowPreference(
                             title = stringResource(R.string.ui_add_custom_model_a5ddc0),
@@ -603,7 +663,11 @@ internal fun ProviderModelsTab(
             scope.launch {
                 isMutatingModel = true
                 try {
-                    val sync = ModelRepository.syncRemoteModels(provider.id, pending.fetched, adopted)
+                    val sync = if (pending.additiveOnly) {
+                        ModelRepository.importRemoteSubset(provider.id, pending.fetched, adopted)
+                    } else {
+                        ModelRepository.syncRemoteModels(provider.id, pending.fetched, adopted)
+                    }
                     if (sync.applied) {
                         RuntimeConfigRepository.syncToRemotePreferences(EtaApp.serviceInstance)
                     }
@@ -857,6 +921,7 @@ private fun ModelEditDialog(
     onDelete: (() -> Unit)?,
 ) {
     val context = LocalContext.current
+    val isOpenCode = ProviderSourceRegistry.resolve(provider) == ProviderSourceTypes.OPENCODE
     var displayName by remember(model.id, isNew) { mutableStateOf(model.displayName) }
     var modelId by remember(model.id, isNew) { mutableStateOf(model.modelId) }
     var contextWindowOverrideText by remember(model.id, isNew) {
@@ -931,7 +996,22 @@ private fun ModelEditDialog(
                 )
                 val notes = mutableListOf<String>()
                 if (!outcome.reachable) {
-                    notes += context.getString(R.string.ui_probe_capability_unreachable_5d2f18)
+                    notes += context.getString(R.string.ui_probe_capability_unreachable_5d2f18) +
+                        "：" + outcome.detail.take(180)
+                    if (isOpenCode) {
+                        if (provider.id == BuiltinProviders.OPENCODE_ID &&
+                            OpenCodeEmbeddedGateway.useLocal(provider) &&
+                            OpenCodeEmbeddedGateway.zenKey().isBlank() &&
+                            OpenCodeEmbeddedGateway.goKey().isBlank()
+                        ) {
+                            notes += "内置网关未配置 Zen/Go 上游 Key；免费模型目录可读取，不代表匿名推理已授权"
+                        } else if (provider.apiKey.isBlank() &&
+                            (provider.id != BuiltinProviders.OPENCODE_ID ||
+                                !OpenCodeEmbeddedGateway.useLocal(provider))
+                        ) {
+                            notes += "请在 OpenCode 配置页填写有效 API Key；公开目录不代表推理免认证"
+                        }
+                    }
                 }
                 outcome.contextLimitFromError?.let { limit ->
                     contextWindowOverrideText = limit.toString()

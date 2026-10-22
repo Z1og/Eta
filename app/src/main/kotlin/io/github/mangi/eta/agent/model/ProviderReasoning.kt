@@ -33,6 +33,7 @@ internal object ProviderReasoning {
             ProviderSourceTypes.MIMO -> applyToggleOnlyProvider(request, "MiMo", effort)
             ProviderSourceTypes.MINIMAX -> unsupportedEffort("MiniMax", effort)
             ProviderSourceTypes.OPENROUTER -> applyOpenRouter(request, effort)
+            ProviderSourceTypes.OPENCODE -> applyNamedReasoningEffort(request, effort)
             ProviderSourceTypes.STEPFUN -> applyStepFun(request, config, effort)
             ProviderSourceTypes.OPENAI -> applyOpenAi(request, config, effort)
             ProviderSourceTypes.CUSTOM -> applyNamedReasoningEffort(request, effort)

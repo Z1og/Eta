@@ -695,6 +695,41 @@ fun AgentAppRoot(
                         when (action) {
                             AgentMemoryAction.NavigateBack -> popRoute()
                             is AgentMemoryAction.ToggleEnabled -> memory.setMemoryEnabled(action.enabled)
+                            is AgentMemoryAction.ToggleAutoExperience -> memory.setAutoExperienceEnabled(action.enabled)
+                            is AgentMemoryAction.ToggleSmartRetain -> memory.setSmartRetainEnabled(action.enabled)
+                            is AgentMemoryAction.ToggleSemanticRecall ->
+                                memory.setSemanticMemoryEnabled(action.enabled)
+                            AgentMemoryAction.TestChatSemanticRetrieval ->
+                                memory.testChatSemanticRetrieval()
+                            is AgentMemoryAction.ToggleEmbeddingAccelerator ->
+                                memory.setEmbeddingAcceleratorEnabled(action.enabled)
+                            AgentMemoryAction.TestEmbeddingProvider -> memory.testEmbeddingProvider()
+                            is AgentMemoryAction.SaveSemanticModel ->
+                                memory.setSemanticMemoryModel(action.model)
+                            AgentMemoryAction.BuildSemanticIndex -> memory.buildSemanticIndex()
+                            is AgentMemoryAction.ToggleGraphRecall ->
+                                memory.setGraphMemoryEnabled(action.enabled)
+                            AgentMemoryAction.ClassifyExistingRelations -> memory.classifyExistingRelations()
+                            is AgentMemoryAction.ReviewMemoryLink ->
+                                memory.reviewMemoryLink(action.sourceId, action.targetId, action.type, action.status)
+                            is AgentMemoryAction.DeleteRetainedMemory -> memory.deleteRetainedMemory(action.id)
+                            AgentMemoryAction.ClearRetainedMemory -> memory.clearRetainedMemory()
+                            AgentMemoryAction.ClearExperiences -> memory.clearExperiences()
+                            is AgentMemoryAction.SaveWebDav -> memory.saveWebDav(
+                                action.endpoint, action.username, action.password, action.passphrase,
+                            )
+                            AgentMemoryAction.RunWebDavSync -> memory.runWebDavSync()
+                            AgentMemoryAction.ConfirmWebDavMemoryResolution -> memory.runWebDavSync(
+                                resolveReviewedMemoryConflict = true,
+                            )
+                            is AgentMemoryAction.ToggleWebDavAutoSync ->
+                                memory.setWebDavAutoSyncEnabled(action.enabled)
+                            AgentMemoryAction.ClearWebDavConfig -> memory.clearWebDavConfig()
+                            is AgentMemoryAction.SaveKnowledge -> memory.saveKnowledge(
+                                action.title, action.content, action.kind, action.source,
+                                action.tags, action.id, action.revision,
+                            )
+                            is AgentMemoryAction.DeleteKnowledge -> memory.deleteKnowledge(action.id, action.revision)
                             is AgentMemoryAction.DraftChanged -> memory.updateMemoryDraft(action.content)
                             AgentMemoryAction.Save -> memory.saveMemory()
                             AgentMemoryAction.Clear -> memory.clearMemory()

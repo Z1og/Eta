@@ -2,9 +2,10 @@ package io.github.mangi.eta.agent.model
 
 import io.github.mangi.eta.agent.runtime.AgentRunController
 import io.github.mangi.eta.data.model.ReasoningEffort
+import io.github.mangi.eta.data.model.ProviderSourceTypes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
@@ -38,8 +39,22 @@ internal class AgentModelCapabilityProbe(
                 reachable = false,
                 baselineLatencyMillis = baseline.latencyMillis,
                 reasoning = null,
-                contextLimitFromError = parseContextLimit(failure.message.orEmpty()),
+                contextLimitFromError = parseContextLimit(failure.providerError ?: failure.message.orEmpty()),
                 detail = failure.message.orEmpty(),
+            )
+        }
+        // A successful anonymous OpenCode request is sufficient to confirm reachability.
+        // A second paid/quota-limited request is neither necessary nor a safe indicator
+        // that the provider exposes controllable reasoning levels.
+        if (config.providerSourceType == ProviderSourceTypes.OPENCODE &&
+            config.model.endsWith("-free", ignoreCase = true)
+        ) {
+            return Outcome(
+                reachable = true,
+                baselineLatencyMillis = baseline.latencyMillis,
+                reasoning = null,
+                contextLimitFromError = null,
+                detail = "OpenCode 免费模型连接成功；未额外消耗免费额度探测思考档位",
             )
         }
         val effort = attempt(config, withReasoning = true)
@@ -69,7 +84,7 @@ internal class AgentModelCapabilityProbe(
     private suspend fun attempt(
         config: AgentModelClient.ModelConfig,
         withReasoning: Boolean,
-    ): Attempt = coroutineScope {
+    ): Attempt = supervisorScope {
         val controller = AgentRunController()
         val probeConfig = if (withReasoning) {
             config.copy(thinkingEnabled = true, reasoningEffort = ReasoningEffort.MINIMAL)
@@ -94,7 +109,7 @@ internal class AgentModelCapabilityProbe(
             ) { }
         }
         try {
-            withTimeout(TIMEOUT_MS) { work.await() }
+            withTimeout(if (config.providerSourceType == ProviderSourceTypes.OPENCODE) OPENCODE_TIMEOUT_MS else TIMEOUT_MS) { work.await() }
             Attempt(failure = null, latencyMillis = System.currentTimeMillis() - started)
         } catch (failure: Exception) {
             Attempt(
@@ -107,6 +122,8 @@ internal class AgentModelCapabilityProbe(
 
     companion object {
         private const val TIMEOUT_MS = 20_000L
+        // Anonymous gateway initialization and upstream generation can exceed 30 s.
+        private const val OPENCODE_TIMEOUT_MS = 90_000L
         private const val PROBE_SYSTEM = "你是连通性探测，按要求只回一个字符。"
         private const val PROBE_USER = "回 1"
 
@@ -114,6 +131,7 @@ internal class AgentModelCapabilityProbe(
 
         private val LIMIT_PATTERNS = listOf(
             Regex("""(?i)prompt is too long:\s*\d+\s*tokens?\s*>\s*(\d{4,9})"""),
+            Regex("""(?i)\(\s*\d{4,9}\s*>\s*(\d{4,9})\s*\)"""),
             Regex("""(?i)(\d{4,9})\s*tokens?\s*>\s*(\d{4,9})"""),
             Regex("""(?i)maximum context length is\s*(\d{4,9})"""),
             Regex("""(?i)context length[^\d]{0,24}(\d{4,9})"""),
@@ -145,7 +163,7 @@ internal class AgentModelCapabilityProbe(
         /** 只有「参数被拒」才算不支持思考等级；端点静默忽略时探测无法判定，交由调用方记为未知。 */
         fun looksUnsupportedParameter(failure: AgentModelFailure): Boolean {
             if (failure.code != "HTTP_400" && failure.code != "HTTP_404" && failure.code != "HTTP_422") return false
-            return UNSUPPORTED_PATTERNS.any { it.containsMatchIn(failure.message.orEmpty()) }
+            return UNSUPPORTED_PATTERNS.any { it.containsMatchIn(failure.providerError ?: failure.message.orEmpty()) }
         }
     }
 }

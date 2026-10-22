@@ -3,6 +3,8 @@ package io.github.mangi.eta.agent.model
 import io.github.mangi.eta.agent.runtime.AgentRunController
 import io.github.mangi.eta.agent.runtime.AgentTokenUsage
 import io.github.mangi.eta.data.model.OpenAiEndpointMode
+import io.github.mangi.eta.data.model.ProviderSourceTypes
+import io.github.mangi.eta.data.repository.OpenCodeEmbeddedGateway
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -34,6 +36,7 @@ internal object OpenAiResponsesProvider : AgentProviderClient {
         require(config.openAiEndpointMode == OpenAiEndpointMode.RESPONSES) {
             "当前 Provider 未配置为 Responses API"
         }
+        OpenCodeEmbeddedGateway.ensureRunningFor(config)
         val body = buildRequestJson(config, request.messages, request.effectiveTools)
             .toString()
             .toRequestBody(JSON_MEDIA_TYPE)
@@ -43,7 +46,12 @@ internal object OpenAiResponsesProvider : AgentProviderClient {
             .apply {
                 if (config.apiKey.isNotBlank()) add("Authorization", "Bearer ${config.apiKey}")
             }
-            .also { ProviderRequestHeaders.mergeInto(it, config.baseUrl, config.customHeaders, request.sessionId) }
+            .also {
+                ProviderRequestHeaders.mergeInto(
+                    it, config.baseUrl, config.customHeaders,
+                    request.sessionId, config.providerSourceType,
+                )
+            }
             .build()
         val httpRequest = Request.Builder()
             .url(ProviderUrls.openAiResponsesUrl(config.baseUrl))
@@ -60,7 +68,18 @@ internal object OpenAiResponsesProvider : AgentProviderClient {
                 onEvent(ProviderEvent.ResponseHeaders(response.code))
                 runController.throwIfCancelled()
                 if (!response.isSuccessful) {
-                    throw AgentModelFailure.http(response.code, response.peekBody(16_384).string())
+                    val errorBody = response.peekBody(16_384).string()
+                    if (response.code == 502 && OpenCodeEmbeddedGateway.isEmbeddedConfig(config)) {
+                        throw AgentModelFailure.embeddedOpenCode502(
+                            errorBody,
+                            OpenCodeEmbeddedGateway.recentGatewayFailureHint(),
+                            OpenCodeEmbeddedGateway.upstreamProxyDescription(),
+                        )
+                    }
+                    throw AgentModelFailure.http(
+                        response.code, errorBody,
+                        config.providerSourceType.takeIf { it == ProviderSourceTypes.OPENCODE },
+                    )
                 }
                 val assistant = readStreamingResponse(
                     stream = response.body.byteStream(),

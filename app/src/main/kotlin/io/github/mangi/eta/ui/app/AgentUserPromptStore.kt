@@ -58,7 +58,7 @@ internal class AgentUserPromptStore(
                 runCatching { AgentUserPromptRepository.seedBuiltinIfNeeded() }
                 val snapshot = AgentUserPromptRepository.snapshot()
                 val mode = AgentUserPromptRepository.mode()
-                // 作战协议自己的开关，与逆向能力开关平级；关掉逆向不影响这里。
+                // 作战协议与逆向能力共用一个总开关，此处仅展示其状态。
                 val enabled = runCatching {
                     AgentUserPromptRepository.enabled()
                 }.onFailure { throwable ->
@@ -109,7 +109,7 @@ internal class AgentUserPromptStore(
         }
     }
 
-    /** 破甲记忆注入开关。与逆向能力开关平级：关掉它不影响技能与预读。 */
+    /** Legacy handler kept for compatibility; the editing page no longer displays a second switch. */
     fun setEnabled(enabled: Boolean) {
         if (promptState.enabled == enabled) return
         scope.launch(Dispatchers.IO) {

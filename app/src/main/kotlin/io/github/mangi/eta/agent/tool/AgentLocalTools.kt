@@ -53,6 +53,7 @@ import io.github.mangi.eta.core.HookSupport
 import io.github.mangi.eta.data.repository.AgentMemoryException
 import io.github.mangi.eta.data.repository.AgentMemoryMutation
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
+import io.github.mangi.eta.data.repository.AgentKnowledgeRepository
 import io.github.mangi.eta.data.repository.AgentMemoryWriteResult
 import io.github.mangi.eta.data.repository.LinuxEnvironmentSettingsRepository
 import java.util.Locale
@@ -237,6 +238,10 @@ internal class AgentLocalTools(
                 "mcp_call" -> textResult(terminalTool { reverseTools.mcpCall(args) })
                 "memory_get" -> textResult(memoryGet(args))
                 "memory_write" -> textResult(memoryWrite(args))
+                "knowledge_search" -> textResult(knowledgeSearch(args))
+                "knowledge_get" -> textResult(knowledgeGet(args))
+                "knowledge_save" -> textResult(knowledgeSave(args))
+                "knowledge_delete" -> textResult(knowledgeDelete(args))
                 "skills_list" -> textResult(skillsList(args))
                 "skills_read" -> textResult(skillsRead(args))
                 "skills_read_resource" -> textResult(skillsReadResource(args))
@@ -304,7 +309,7 @@ internal class AgentLocalTools(
     }
 
     private fun memoryToolPermissionError(toolName: String): AgentModelClient.ToolResult? {
-        if (toolName == "memory_write" && !memoryWritable) {
+        if (toolName in setOf("memory_write", "knowledge_save", "knowledge_delete") && !memoryWritable) {
             return AgentModelClient.ToolResult(
                 content = errorResult("REAL_MEMORY_READ_ONLY", "角色会话的现实记忆只读；剧情请使用角色记忆工具"),
                 sensitive = true,
@@ -337,6 +342,49 @@ internal class AgentLocalTools(
     } catch (failure: AgentMemoryException) {
         errorResult(failure.code, failure.message ?: "记忆读取失败")
     }
+
+    private fun knowledgeSearch(args: JSONObject): String {
+        val query = args.getString("query").trim()
+        require(query.isNotBlank() && query.length <= 300)
+        val matches = AgentKnowledgeRepository.search(query, args.optInt("limit", 5))
+        return JSONObject().put("ok", true).put("total", matches.size)
+            .put("items", JSONArray().also { arr ->
+                matches.forEach { note ->
+                    arr.put(JSONObject()
+                        .put("id", note.id).put("revision", note.revision)
+                        .put("title", note.title).put("kind", note.kind)
+                        .put("source", note.source).put("updated_at", note.updatedAt)
+                        .put("excerpt", note.content.take(650)))
+                }
+            }).toString()
+    }
+
+    private fun knowledgeGet(args: JSONObject): String {
+        val id = args.getString("id")
+        val note = AgentKnowledgeRepository.get(id)
+            ?: return errorResult("KNOWLEDGE_NOT_FOUND", "没有找到知识条目")
+        return JSONObject().put("ok", true).put("document", note.json()).toString()
+    }
+
+    private fun knowledgeSave(args: JSONObject): String {
+        val tags = args.optJSONArray("tags")?.let { arr ->
+            (0 until arr.length()).map { arr.getString(it) }
+        }.orEmpty()
+        val result = AgentKnowledgeRepository.save(
+            title = args.getString("title"), content = args.getString("content"),
+            kind = args.optString("kind").ifBlank { "reference" },
+            source = args.optString("source"), tags = tags,
+            id = args.optString("id").takeIf { it.isNotBlank() },
+            revision = args.optString("revision").takeIf { it.isNotBlank() },
+        )
+        return JSONObject().put("ok", true).put("id", result.id)
+            .put("revision", result.revision).put("updated_at", result.updatedAt).toString()
+    }
+
+    private fun knowledgeDelete(args: JSONObject): String =
+        JSONObject().put("ok", AgentKnowledgeRepository.delete(
+            args.getString("id"), args.getString("revision"),
+        )).toString()
 
     private fun memoryWrite(args: JSONObject): String = try {
         val revision = args.getString("revision")
@@ -1538,7 +1586,10 @@ internal class AgentLocalTools(
         val DEVICE_TOOL_NAMES =
             DEVICE_DIRECT_TOOL_NAMES + DEVICE_SENSITIVE_READ_TOOL_NAMES +
                 DEVICE_SENSITIVE_ACTION_TOOL_NAMES
-        val MEMORY_TOOL_NAMES = setOf("memory_get", "memory_write")
+        val MEMORY_TOOL_NAMES = setOf(
+            "memory_get", "memory_write",
+            "knowledge_search", "knowledge_get", "knowledge_save", "knowledge_delete",
+        )
     }
 }
 

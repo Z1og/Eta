@@ -46,6 +46,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 internal data class RemoteModelImport(
     val fetched: List<Model>,
     val candidates: List<Model>,
+    val additiveOnly: Boolean = false,
 )
 
 /**

@@ -92,6 +92,8 @@ android {
         jniLibs {
             useLegacyPackaging = true
             keepDebugSymbols += setOf("**/libproot_exec.so", "**/libproot_loader.so", "**/libeta_pty.so")
+            // GPL Go executable is packaged as a native library for Android's executable mount.
+            keepDebugSymbols += "**/libeta_opencode2api.so"
         }
         resources {
             // 合并 Xposed 模块声明，避免 release 裁剪后模块入口失效

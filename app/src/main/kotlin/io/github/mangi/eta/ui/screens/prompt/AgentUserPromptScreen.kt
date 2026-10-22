@@ -98,16 +98,8 @@ internal fun AgentUserPromptScreen(
         item(key = "inject") {
             EtaPreferenceGroup {
                 EtaPreference(
-                    title = "注入破甲记忆",
-                    summary = injectSummary(state),
-                    endActions = {
-                        EtaSwitch(
-                            checked = state.enabled,
-                            onCheckedChange = { onAction(AgentUserPromptAction.EnabledChanged(it)) },
-                            enabled = !state.isLoading && !state.sourceFileName.isNullOrBlank(),
-                            modifier = Modifier.align(Alignment.CenterVertically),
-                        )
-                    },
+                    title = "协议跟随逆向能力",
+                    summary = injectSummary(state) + "；使用设置或技能页的逆向能力总开关",
                 )
             }
         }

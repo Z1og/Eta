@@ -50,12 +50,20 @@ internal object SettingsDataStore {
     private val SELECTED_MODEL_ID = stringPreferencesKey("selected_model_id")
     private val OFFICIAL_MODEL_CATALOG_REVISION = intPreferencesKey("official_model_catalog_revision")
     private val MEMORY_ENABLED = booleanPreferencesKey("memory_enabled")
+    /** Separate opt-in: automatic task experience capture retains tool names and error codes. */
+    private val AUTO_EXPERIENCE_ENABLED = booleanPreferencesKey("auto_experience_enabled")
+    private val SMART_RETAIN_ENABLED = booleanPreferencesKey("smart_retain_enabled")
+    private val SEMANTIC_MEMORY_ENABLED = booleanPreferencesKey("semantic_memory_enabled")
+    private val SEMANTIC_MEMORY_MODEL = stringPreferencesKey("semantic_memory_model")
+    private val SEMANTIC_MEMORY_USE_EMBEDDINGS = booleanPreferencesKey("semantic_memory_use_embeddings")
+    private val GRAPH_MEMORY_ENABLED = booleanPreferencesKey("graph_memory_enabled")
+    private val WEB_DAV_AUTO_SYNC_ENABLED = booleanPreferencesKey("webdav_auto_sync_enabled")
     private val USER_PROMPT_MODE = stringPreferencesKey("user_prompt_mode")
 
     /** 逆向能力总开关；缺省关闭，与既有默认值一致。 */
     private val REVERSE_BUNDLE_ENABLED = booleanPreferencesKey("reverse_bundle_enabled")
 
-    /** 作战协议（破甲记忆）注入开关；与逆向能力开关平级。 */
+    /** Legacy storage key written for compatibility; reverse bundle controls all three behaviors. */
     private val USER_PROMPT_ENABLED = booleanPreferencesKey("user_prompt_enabled")
 
     /** 随包内置破甲记忆是否已自动装配过一次；置位后不再自动重建，尊重用户的删除。 */
@@ -147,6 +155,93 @@ internal object SettingsDataStore {
 
     fun memoryEnabledFlow(): Flow<Boolean> =
         settingsFlow().map { it.memoryEnabled }
+
+    suspend fun autoExperienceEnabled(): Boolean {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause -> if (cause is IOException) emit(emptyPreferences()) else throw cause }
+            .map { preferences -> preferences[AUTO_EXPERIENCE_ENABLED] ?: false }
+            .first()
+    }
+
+    suspend fun setAutoExperienceEnabled(enabled: Boolean) {
+        ensureInitialized()
+        dataStore.edit { it[AUTO_EXPERIENCE_ENABLED] = enabled }
+    }
+
+    suspend fun smartRetainEnabled(): Boolean {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause -> if (cause is IOException) emit(emptyPreferences()) else throw cause }
+            .map { it[SMART_RETAIN_ENABLED] ?: false }.first()
+    }
+
+    suspend fun setSmartRetainEnabled(enabled: Boolean) {
+        ensureInitialized()
+        dataStore.edit { it[SMART_RETAIN_ENABLED] = enabled }
+    }
+
+    suspend fun semanticMemoryEnabled(): Boolean {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause -> if (cause is IOException) emit(emptyPreferences()) else throw cause }
+            .map { it[SEMANTIC_MEMORY_ENABLED] ?: false }.first()
+    }
+
+    suspend fun setSemanticMemoryEnabled(enabled: Boolean) {
+        ensureInitialized()
+        dataStore.edit { it[SEMANTIC_MEMORY_ENABLED] = enabled }
+    }
+
+    suspend fun semanticMemoryModel(): String {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause -> if (cause is IOException) emit(emptyPreferences()) else throw cause }
+            .map { it[SEMANTIC_MEMORY_MODEL] ?: "text-embedding-3-small" }.first()
+    }
+
+    suspend fun setSemanticMemoryModel(model: String) {
+        require(model.matches(Regex("[a-zA-Z0-9._:/-]{1,100}")))
+        ensureInitialized()
+        dataStore.edit { it[SEMANTIC_MEMORY_MODEL] = model }
+    }
+
+    /** The existing chat model is the default semantic reranker. */
+    suspend fun semanticMemoryUseEmbeddings(): Boolean {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause -> if (cause is IOException) emit(emptyPreferences()) else throw cause }
+            .map { it[SEMANTIC_MEMORY_USE_EMBEDDINGS] ?: false }.first()
+    }
+
+    suspend fun setSemanticMemoryUseEmbeddings(value: Boolean) {
+        ensureInitialized()
+        dataStore.edit { it[SEMANTIC_MEMORY_USE_EMBEDDINGS] = value }
+    }
+
+    suspend fun graphMemoryEnabled(): Boolean {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause -> if (cause is IOException) emit(emptyPreferences()) else throw cause }
+            .map { it[GRAPH_MEMORY_ENABLED] ?: false }.first()
+    }
+
+    suspend fun setGraphMemoryEnabled(enabled: Boolean) {
+        ensureInitialized()
+        dataStore.edit { it[GRAPH_MEMORY_ENABLED] = enabled }
+    }
+
+    suspend fun autoWebDavSyncEnabled(): Boolean {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause -> if (cause is IOException) emit(emptyPreferences()) else throw cause }
+            .map { it[WEB_DAV_AUTO_SYNC_ENABLED] ?: false }.first()
+    }
+
+    suspend fun setAutoWebDavSyncEnabled(enabled: Boolean) {
+        ensureInitialized()
+        dataStore.edit { it[WEB_DAV_AUTO_SYNC_ENABLED] = enabled }
+    }
 
     fun linuxDistributionFlow(): Flow<String?> {
         ensureInitialized()
@@ -258,32 +353,19 @@ internal object SettingsDataStore {
 
     suspend fun setReverseBundleEnabled(value: Boolean) {
         ensureInitialized()
-        dataStore.edit { preferences -> preferences[REVERSE_BUNDLE_ENABLED] = value }
+        dataStore.edit { preferences ->
+            preferences[REVERSE_BUNDLE_ENABLED] = value
+            preferences[USER_PROMPT_ENABLED] = value
+        }
     }
 
     /**
-     * 作战协议（破甲记忆）注入开关。
-     *
-     * 与逆向能力开关**平级且互不牵连**：关掉逆向能力不会连带关掉它，反之亦然。
-     * 判定只看这个布尔值——不再叠加档位或逆向状态，否则会出现"关了还在注入"。
+     * Legacy caller alias: no independent switch exists after settings consolidation.
      */
-    suspend fun userPromptEnabled(): Boolean {
-        ensureInitialized()
-        return dataStore.data
-            .catch { cause ->
-                if (cause is IOException) {
-                    emit(emptyPreferences())
-                } else {
-                    throw cause
-                }
-            }
-            .map { preferences -> preferences[USER_PROMPT_ENABLED] ?: false }
-            .first()
-    }
+    suspend fun userPromptEnabled(): Boolean = reverseBundleEnabled()
 
     suspend fun setUserPromptEnabled(value: Boolean) {
-        ensureInitialized()
-        dataStore.edit { preferences -> preferences[USER_PROMPT_ENABLED] = value }
+        setReverseBundleEnabled(value)
     }
 
     /** 内置破甲记忆是否已装配过。读取失败按「未装配」处理：宁可多装一次，也不要静默不装。 */

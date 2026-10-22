@@ -87,6 +87,48 @@ class AgentModelRetryTest {
         assertFalse(AgentModelFailure.http(503, "secret request text").message.orEmpty().contains("secret"))
     }
 
+    @Test
+    fun openCodeUpstreamQuotaAndPausedLaneDoNotTriggerBlindRetries() {
+        val source = io.github.mangi.eta.data.model.ProviderSourceTypes.OPENCODE
+        val exhausted = AgentModelFailure.http(429,
+            """{"error":{"message":"Free usage limit reached"}}""", source)
+        assertEquals("OPENCODE_FREE_QUOTA_EXHAUSTED", exhausted.code)
+        assertFalse(exhausted.retryable)
+        val limited = AgentModelFailure.http(429,
+            """{"error":{"message":"too many requests"}}""", source)
+        assertEquals("OPENCODE_RATE_LIMITED", limited.code)
+        assertFalse(limited.retryable)
+        val paused = AgentModelFailure.http(503,
+            """{"error":{"code":"free_tier_lane_paused","message":"The anonymous free tier is paused"}}""", source)
+        assertEquals("OPENCODE_FREE_LANE_PAUSED", paused.code)
+        assertFalse(paused.retryable)
+        // Do not change retry policy for unrelated API providers.
+        assertTrue(AgentModelFailure.http(429,
+            """{"error":{"message":"too many requests"}}""").retryable)
+    }
+
+    @Test
+    fun embeddedOpenCode502HasSpecificSafeCauseAndDoesNotRepeatWholeGatewayRun() {
+        val failure = AgentModelFailure.embeddedOpenCode502(
+            """{"error":{"message":"all upstream attempts failed; secret=PRIVATE_TOKEN"}}""",
+            "网关无法解析上游域名（DNS）",
+            "系统 HTTP 代理",
+        )
+        assertEquals("OPENCODE_EMBEDDED_UPSTREAM_502", failure.code)
+        assertFalse(failure.retryable)
+        assertTrue(failure.message.orEmpty().contains("DNS"))
+        assertTrue(failure.message.orEmpty().contains("系统 HTTP 代理"))
+        assertFalse(failure.message.orEmpty().contains("PRIVATE_TOKEN"))
+        val retry = AgentModelRetry { _, _ -> fail("Local gateway 502 must not be retried") }
+        var calls = 0
+        val thrown = assertThrows(AgentModelFailure::class.java) {
+            complete(retry, provider { _, _ -> calls++; throw failure })
+        }
+        assertEquals(1, calls)
+        assertEquals(failure.code, thrown.code)
+        assertTrue(AgentModelFailure.http(502, "").retryable)
+    }
+
     private fun complete(
         retry: AgentModelRetry,
         provider: AgentProviderClient,

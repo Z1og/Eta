@@ -31,5 +31,10 @@ class BuiltinProvidersTest {
         assertEquals(ProviderSourceTypes.MIMO, providers.getValue(BuiltinProviders.MIMO_ID).sourceType)
         assertEquals(ProviderSourceTypes.MINIMAX, providers.getValue(BuiltinProviders.MINIMAX_ID).sourceType)
         assertEquals(ProviderSourceTypes.STEPFUN, providers.getValue(BuiltinProviders.STEPFUN_ID).sourceType)
+        val openCode = providers.getValue(BuiltinProviders.OPENCODE_ID) as OpenAiCompatibleProviderSetting
+        assertEquals("https://opencode.ai/zen/v1", openCode.baseUrl)
+        assertEquals(ProviderSourceTypes.OPENCODE, openCode.sourceType)
+        assertEquals(OpenAiEndpointMode.CHAT_COMPLETIONS, openCode.endpointMode)
+        assertEquals("", openCode.apiKey)
     }
 }

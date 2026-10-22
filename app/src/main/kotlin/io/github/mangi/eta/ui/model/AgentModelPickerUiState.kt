@@ -3,6 +3,7 @@ package io.github.mangi.eta.ui.model
 import androidx.compose.runtime.Immutable
 import io.github.mangi.eta.data.model.Model
 import io.github.mangi.eta.data.model.ProviderSetting
+import io.github.mangi.eta.data.model.ProviderSourceTypes
 import io.github.mangi.eta.data.provider.ProviderSourceRegistry
 import java.text.NumberFormat
 import java.util.Locale
@@ -67,7 +68,13 @@ internal object AgentModelPickerProjector {
                 .firstOrNull { it.id == selectedModelId }
         val groups = enabledProviders
             .asSequence()
-            .filter { it.apiKey.isNotBlank() }
+            // OpenCode's embedded gateway supplies its own loopback API key.
+            // Hiding the provider just because the *external* key is blank makes
+            // successfully imported Zen models impossible to select in chat.
+            .filter { provider ->
+                provider.apiKey.isNotBlank() ||
+                    ProviderSourceRegistry.resolve(provider) == ProviderSourceTypes.OPENCODE
+            }
             .mapNotNull { provider ->
                 val sourceType = ProviderSourceRegistry.resolve(provider)
                 val models = provider.models

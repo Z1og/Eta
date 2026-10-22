@@ -43,8 +43,12 @@ import io.github.mangi.eta.data.model.AnthropicProviderSetting
 import io.github.mangi.eta.data.model.CustomProviderSetting
 import io.github.mangi.eta.data.model.OpenAiEndpointMode
 import io.github.mangi.eta.data.model.ProviderSetting
+import io.github.mangi.eta.data.model.ProviderSourceTypes
+import io.github.mangi.eta.data.provider.BuiltinProviders
+import io.github.mangi.eta.data.provider.ProviderSourceRegistry
 import io.github.mangi.eta.data.model.withId
 import io.github.mangi.eta.data.repository.ProviderRepository
+import io.github.mangi.eta.data.repository.OpenCodeEmbeddedGateway
 import io.github.mangi.eta.data.repository.RemoteModelFetcher
 import io.github.mangi.eta.data.repository.RuntimeConfigRepository
 import io.github.mangi.eta.ui.components.EtaCard
@@ -65,7 +69,9 @@ import io.github.mangi.eta.ui.layout.horizontalCutoutPadding
 import io.github.mangi.eta.ui.navigation.NewProviderType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
@@ -210,6 +216,17 @@ private fun ProviderConfigTab(
     var showResetDialog by remember { mutableStateOf(false) }
     var isWorking by remember { mutableStateOf(false) }
     var creationCommitted by remember { mutableStateOf(false) }
+    val hasEmbeddedOpenCode = provider.id == BuiltinProviders.OPENCODE_ID
+    var localOpenCode by remember(provider.id) {
+        mutableStateOf(hasEmbeddedOpenCode && OpenCodeEmbeddedGateway.enabled())
+    }
+    var localGatewayBusy by remember { mutableStateOf(false) }
+    var localGatewayStatus by remember { mutableStateOf<String?>(null) }
+    var localZenKey by remember(provider.id) { mutableStateOf(if (hasEmbeddedOpenCode) OpenCodeEmbeddedGateway.zenKey() else "") }
+    var localGoKey by remember(provider.id) { mutableStateOf(if (hasEmbeddedOpenCode) OpenCodeEmbeddedGateway.goKey() else "") }
+    var localUpstreamProxy by remember(provider.id) {
+        mutableStateOf(if (hasEmbeddedOpenCode) OpenCodeEmbeddedGateway.upstreamProxy() else "")
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -260,6 +277,21 @@ private fun ProviderConfigTab(
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (ProviderSourceRegistry.resolve(provider) == ProviderSourceTypes.OPENCODE) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = if (hasEmbeddedOpenCode) {
+                                "上面的 Base URL / API Key 是外部 API 备用配置；切换到外部模式后生效。" +
+                                    "本地模式使用手机内置网关、随机访问密钥及 127.0.0.1。" +
+                                    "上游是否允许免费推理仍取决于 OpenCode 的实际授权。"
+                            } else {
+                                "自建 opencode2api 网关请使用 HTTPS /v1 地址及其 server_key。" +
+                                    "模型目录公开不代表免费推理已获授权。"
+                            },
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
                     if (provider is AnthropicProviderSetting) {
                         Spacer(modifier = Modifier.height(12.dp))
                         TextField(
@@ -268,6 +300,159 @@ private fun ProviderConfigTab(
                             label = "anthropic-version",
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                if (hasEmbeddedOpenCode) {
+                    EtaPreferenceDivider(hasLeading = false)
+                    EtaSwitchPreference(
+                        title = "手机内置 opencode2api 网关",
+                        summary = "默认开启：网关在本机 127.0.0.1 运行，无需 VPS；关闭即使用上方填写的外部 API 配置",
+                        checked = localOpenCode,
+                        enabled = !isWorking && !localGatewayBusy,
+                        onCheckedChange = { selected ->
+                            scope.launch {
+                                localGatewayBusy = true
+                                try {
+                                    withContext(Dispatchers.IO) {
+                                        OpenCodeEmbeddedGateway.setEnabled(selected)
+                                    }
+                                    localOpenCode = selected
+                                    RuntimeConfigRepository.syncToRemotePreferences(EtaApp.serviceInstance)
+                                    localGatewayStatus = if (selected) {
+                                        "已选择本地模式，首次调用会自动启动网关"
+                                    } else "已切换外部 API，保留原地址和 Key"
+                                } catch (e: Exception) {
+                                    localGatewayStatus = "切换失败：${e.message ?: e.javaClass.simpleName}"
+                                } finally {
+                                    localGatewayBusy = false
+                                }
+                            }
+                        },
+                    )
+                    if (localOpenCode) {
+                        EtaPreferenceDivider(hasLeading = false)
+                        EtaPreference(
+                            title = if (localGatewayBusy) "正在启动并检查服务…" else "启动并检测本地网关",
+                            summary = localGatewayStatus ?: OpenCodeEmbeddedGateway.status(),
+                            enabled = !localGatewayBusy,
+                            onClick = {
+                                scope.launch {
+                                    localGatewayBusy = true
+                                    localGatewayStatus = "正在启动 Android ARM64 本地服务…"
+                                    try {
+                                        localGatewayStatus = withContext(Dispatchers.IO) {
+                                            OpenCodeEmbeddedGateway.ensureRunning()
+                                            OpenCodeEmbeddedGateway.catalogueReadiness() +
+                                                "；上游出口：" + OpenCodeEmbeddedGateway.upstreamProxyDescription()
+                                        }
+                                    } catch (e: Exception) {
+                                        localGatewayStatus = "启动失败：${e.message ?: e.javaClass.simpleName}"
+                                    } finally {
+                                        localGatewayBusy = false
+                                    }
+                                }
+                            },
+                        )
+                        EtaPreferenceDivider(hasLeading = false)
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                "上游网络代理：留空时自动使用 Android 系统 HTTP 代理，否则直连。" +
+                                    "如需手动代理，可填 http://127.0.0.1:端口 或 socks5://127.0.0.1:端口；" +
+                                    "127.0.0.1 指手机，不是电脑。填 direct 可强制直连。",
+                                style = MiuixTheme.textStyles.footnote1,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            TextField(
+                                value = localUpstreamProxy,
+                                onValueChange = { localUpstreamProxy = it },
+                                label = "HTTP / SOCKS5 代理（可选）",
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            EtaTextButton(
+                                text = "保存上游代理并重启网关",
+                                enabled = !localGatewayBusy,
+                                onClick = {
+                                    scope.launch {
+                                        localGatewayBusy = true
+                                        try {
+                                            withContext(Dispatchers.IO) {
+                                                OpenCodeEmbeddedGateway.setUpstreamProxy(localUpstreamProxy)
+                                            }
+                                            localGatewayStatus = "已保存；下次调用自动重启。" +
+                                                OpenCodeEmbeddedGateway.upstreamProxyDescription()
+                                        } catch (e: Exception) {
+                                            localGatewayStatus = "代理配置无效：${e.message ?: e.javaClass.simpleName}"
+                                        } finally {
+                                            localGatewayBusy = false
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                        EtaPreferenceDivider(hasLeading = false)
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                "可选：填写合法的 Zen / Go 上游 Key；没有 Key 时仅使用网关支持的匿名模式。" +
+                                    "网关只暴露免费模型，但上游有权限制匿名调用。",
+                                style = MiuixTheme.textStyles.footnote1,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            TextField(
+                                value = localZenKey,
+                                onValueChange = { localZenKey = it },
+                                label = "Zen 上游 Key（可选）",
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            TextField(
+                                value = localGoKey,
+                                onValueChange = { localGoKey = it },
+                                label = "Go 上游 Key（可选）",
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            EtaTextButton(
+                                text = "保存上游 Key",
+                                enabled = !localGatewayBusy,
+                                onClick = {
+                                    scope.launch {
+                                        localGatewayBusy = true
+                                        try {
+                                            withContext(Dispatchers.IO) {
+                                                OpenCodeEmbeddedGateway.setUpstreamKeys(localZenKey, localGoKey)
+                                            }
+                                            localGatewayStatus = "上游 Key 已保存，网关将在下一次请求时重启"
+                                        } catch (e: Exception) {
+                                            localGatewayStatus = "保存失败：${e.message ?: e.javaClass.simpleName}"
+                                        } finally {
+                                            localGatewayBusy = false
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                        EtaPreferenceDivider(hasLeading = false)
+                        EtaPreference(
+                            title = "停止内置网关",
+                            summary = "停止本机子进程；下次拉取或发送时会自动启动",
+                            enabled = !localGatewayBusy,
+                            onClick = {
+                                scope.launch {
+                                    localGatewayBusy = true
+                                    withContext(Dispatchers.IO) { OpenCodeEmbeddedGateway.stop() }
+                                    localGatewayStatus = "已停止，下次需要时自动启动"
+                                    localGatewayBusy = false
+                                }
+                            },
                         )
                     }
                 }
@@ -595,7 +780,14 @@ private suspend fun testConnection(
     provider: ProviderSetting,
 ): String =
     RemoteModelFetcher.fetch(provider)
-        .map { context.resources.getQuantityString(R.plurals.provider_models_fetched, it.size, it.size) }
+        .map { models ->
+            if (ProviderSourceRegistry.resolve(provider) == ProviderSourceTypes.OPENCODE) {
+                "OpenCode 目录连接成功（${models.size} 个模型）。这只验证模型列表，" +
+                    "不代表免费推理已获授权；需选择模型发送测试消息。"
+            } else {
+                context.resources.getQuantityString(R.plurals.provider_models_fetched, models.size, models.size)
+            }
+        }
         .getOrElse { throwable ->
             context.getString(
                 R.string.provider_error,

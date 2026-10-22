@@ -1,10 +1,10 @@
 package io.github.mangi.eta.data.repository
 
 import android.content.Context
-import android.util.AtomicFile
 import io.github.mangi.eta.data.datastore.SettingsDataStore
 import java.io.File
 import java.io.IOException
+import java.io.RandomAccessFile
 import java.security.MessageDigest
 import kotlinx.coroutines.flow.Flow
 
@@ -60,10 +60,11 @@ internal class AgentMemoryStore(
     rootDir: File,
 ) {
     private val memoryDir = File(rootDir, DIRECTORY_NAME)
-    private val atomicFile = AtomicFile(File(memoryDir, FILE_NAME))
+    private val atomicFile = DurableAtomicFile(File(memoryDir, FILE_NAME))
+    private val lockFile = File(memoryDir, "memory.lock")
     private val lock = Any()
 
-    fun snapshot(): AgentMemorySnapshot = synchronized(lock) {
+    fun snapshot(): AgentMemorySnapshot = diskLocked {
         snapshotLocked()
     }
 
@@ -71,7 +72,7 @@ internal class AgentMemoryStore(
         query: String? = null,
         startLine: Int = DEFAULT_START_LINE,
         maxChars: Int = DEFAULT_READ_CHARS,
-    ): AgentMemoryReadResult = synchronized(lock) {
+    ): AgentMemoryReadResult = diskLocked {
         val snapshot = snapshotLocked()
         val boundedChars = maxChars.coerceIn(MIN_READ_CHARS, MAX_READ_CHARS)
         if (query.isNullOrBlank()) {
@@ -81,10 +82,10 @@ internal class AgentMemoryStore(
         }
     }
 
-    fun mutate(mutation: AgentMemoryMutation): AgentMemoryWriteResult = synchronized(lock) {
+    fun mutate(mutation: AgentMemoryMutation): AgentMemoryWriteResult = diskLocked {
         val current = snapshotLocked()
         if (mutation.revision != current.revision) {
-            return@synchronized AgentMemoryWriteResult.Conflict(current)
+            return@diskLocked AgentMemoryWriteResult.Conflict(current)
         }
         val updated = when (mutation) {
             is AgentMemoryMutation.ReplaceRange -> replaceRange(current, mutation)
@@ -95,21 +96,21 @@ internal class AgentMemoryStore(
         AgentMemoryWriteResult.Success(snapshotOf(updated))
     }
 
-    fun replaceAll(content: String): AgentMemorySnapshot = synchronized(lock) {
+    fun replaceAll(content: String): AgentMemorySnapshot = diskLocked {
         writeLocked(content)
         snapshotOf(content)
     }
 
-    fun replaceAllIfRevision(content: String, revision: String): AgentMemoryWriteResult = synchronized(lock) {
+    fun replaceAllIfRevision(content: String, revision: String): AgentMemoryWriteResult = diskLocked {
         val current = snapshotLocked()
-        if (current.revision != revision) return@synchronized AgentMemoryWriteResult.Conflict(current)
+        if (current.revision != revision) return@diskLocked AgentMemoryWriteResult.Conflict(current)
         writeLocked(content)
         AgentMemoryWriteResult.Success(snapshotOf(content))
     }
 
     private fun snapshotLocked(): AgentMemorySnapshot {
         val file = atomicFile.baseFile
-        if (!file.exists()) return snapshotOf("")
+        if (!atomicFile.exists()) return snapshotOf("")
         val bytes = try {
             atomicFile.openRead().use { it.readBytes() }
         } catch (throwable: IOException) {
@@ -289,6 +290,15 @@ internal class AgentMemoryStore(
                 (byte.toInt() and 0xff).toString(16).padStart(2, '0')
             }
 
+    /** Shared file lock makes revision checks atomic across app and agent-runtime processes. */
+    private fun <T> diskLocked(action: () -> T): T = synchronized(lock) {
+        check(memoryDir.isDirectory || memoryDir.mkdirs()) { "Cannot create memory directory" }
+        RandomAccessFile(lockFile, "rw").channel.use { channel ->
+            val acquired = channel.lock()
+            try { action() } finally { acquired.release() }
+        }
+    }
+
     companion object {
         const val MAX_FILE_BYTES = 1024 * 1024
         const val DEFAULT_READ_CHARS = 12_000
@@ -334,6 +344,11 @@ internal object AgentMemoryRepository {
     fun replaceAll(content: String): AgentMemorySnapshot {
         ensureInitialized()
         return store.replaceAll(content)
+    }
+
+    fun replaceAllIfRevision(content: String, revision: String): AgentMemoryWriteResult {
+        ensureInitialized()
+        return store.replaceAllIfRevision(content, revision)
     }
 
     fun enabledFlow(): Flow<Boolean> = SettingsDataStore.memoryEnabledFlow()

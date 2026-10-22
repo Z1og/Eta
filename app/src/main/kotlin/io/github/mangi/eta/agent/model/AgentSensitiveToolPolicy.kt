@@ -43,6 +43,10 @@ internal object AgentSensitiveToolPolicy {
         "set_setting",
         "memory_get",
         "memory_write",
+        "knowledge_search",
+        "knowledge_get",
+        "knowledge_save",
+        "knowledge_delete",
         "character_memory_get",
         "character_memory_write",
     )

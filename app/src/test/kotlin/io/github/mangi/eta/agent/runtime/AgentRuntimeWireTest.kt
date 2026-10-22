@@ -206,6 +206,17 @@ class AgentRuntimeWireTest {
     }
 
     @Test
+    fun retryMessageExposesNonSensitiveFailureReason() {
+        val paused = AgentEvent.ModelRetryScheduled(1, 1, 3, 2_000, "HTTP_503")
+        assertTrue(paused.displayMessage.contains("HTTP 503"))
+        assertTrue(paused.displayMessage.contains("2 秒后重试"))
+        val disconnected = AgentEvent.ModelRetryScheduled(2, 2, 3, 4_000, "MODEL_CONNECTION_FAILED")
+        assertTrue(disconnected.displayMessage.contains("网络连接中断"))
+        val unknown = AgentEvent.ModelRetryScheduled(1, 1, 3, 2_000, "CUSTOM_SECRET_EMAIL@test")
+        assertFalse(unknown.displayMessage.contains("EMAIL@test"))
+    }
+
+    @Test
     fun retryEventSurvivesIpcAndArchiveJson() {
         val event = AgentEvent.ModelRetryScheduled(7, 2, 3, 4_000, "MODEL_TIMEOUT")
         assertEquals(event, AgentRuntimeWire.eventFromBundle(AgentRuntimeWire.eventToBundle(event)))

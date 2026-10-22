@@ -69,6 +69,42 @@ sealed interface AgentSystemEnhanceAction {
 sealed interface AgentMemoryAction {
     data object NavigateBack : AgentMemoryAction
     data class ToggleEnabled(val enabled: Boolean) : AgentMemoryAction
+    data class ToggleAutoExperience(val enabled: Boolean) : AgentMemoryAction
+    data class ToggleSmartRetain(val enabled: Boolean) : AgentMemoryAction
+    data class ToggleSemanticRecall(val enabled: Boolean) : AgentMemoryAction
+    data object TestChatSemanticRetrieval : AgentMemoryAction
+    data class ToggleEmbeddingAccelerator(val enabled: Boolean) : AgentMemoryAction
+    data object TestEmbeddingProvider : AgentMemoryAction
+    data class SaveSemanticModel(val model: String) : AgentMemoryAction
+    data object BuildSemanticIndex : AgentMemoryAction
+    data class ToggleGraphRecall(val enabled: Boolean) : AgentMemoryAction
+    data object ClassifyExistingRelations : AgentMemoryAction
+    data class ReviewMemoryLink(
+        val sourceId: String, val targetId: String, val type: String, val status: String,
+    ) : AgentMemoryAction
+    data class DeleteRetainedMemory(val id: String) : AgentMemoryAction
+    data object ClearRetainedMemory : AgentMemoryAction
+    data object ClearExperiences : AgentMemoryAction
+    data class SaveWebDav(
+        val endpoint: String,
+        val username: String,
+        val password: String,
+        val passphrase: String,
+    ) : AgentMemoryAction
+    data object RunWebDavSync : AgentMemoryAction
+    data object ConfirmWebDavMemoryResolution : AgentMemoryAction
+    data class ToggleWebDavAutoSync(val enabled: Boolean) : AgentMemoryAction
+    data object ClearWebDavConfig : AgentMemoryAction
+    data class SaveKnowledge(
+        val title: String,
+        val content: String,
+        val kind: String,
+        val source: String,
+        val tags: List<String>,
+        val id: String? = null,
+        val revision: String? = null,
+    ) : AgentMemoryAction
+    data class DeleteKnowledge(val id: String, val revision: String) : AgentMemoryAction
     data class DraftChanged(val content: String) : AgentMemoryAction
     data object Save : AgentMemoryAction
     data object Clear : AgentMemoryAction

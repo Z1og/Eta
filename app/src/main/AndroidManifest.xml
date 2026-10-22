@@ -144,6 +144,11 @@
             tools:ignore="ExportedService" />
 
         <service
+            android:name=".data.repository.EtaWebDavSyncJobService"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <service
             android:name=".agent.runtime.AgentExecutionService"
             android:exported="false"
             android:foregroundServiceType="specialUse">

@@ -127,19 +127,6 @@ private fun SettingsPageContent(
     onToggleReverseMode: (Boolean) -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
-    // 作战协议与破甲记忆是同一个注入开关，两行必须同步显示，所以状态提到页面级。
-    var promptInjectionEnabled by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        promptInjectionEnabled = runCatching { SettingsDataStore.userPromptEnabled() }
-            .getOrDefault(false)
-    }
-    val setPromptInjection: (Boolean) -> Unit = { value ->
-        promptInjectionEnabled = value
-        coroutineScope.launch {
-            runCatching { SettingsDataStore.setUserPromptEnabled(value) }
-                .onFailure { promptInjectionEnabled = !value }
-        }
-    }
     val capabilities = rememberDeviceCapabilities()
     val enhancementHistory = remember(context.applicationContext) { EnhancementSettingsHistory(context) }
     var hasConnectedFramework by remember { mutableStateOf(enhancementHistory.hasConnected) }
@@ -362,31 +349,11 @@ private fun SettingsPageContent(
                     EtaPreferenceDivider()
                     ManagedSwitchPref(
                         title = "逆向能力",
-                        summary = "除原版三个技能外全部启停，与技能页总开关同一状态",
+                        summary = "统一控制逆向技能、作战协议与破甲记忆（与技能页同一开关）",
                         checked = reverseModeEnabled,
                         icon = Icons.Rounded.Security,
                         iconTint = EtaPreferenceColors.Orange,
                         onCheckedChange = onToggleReverseMode,
-                    )
-
-                    EtaPreferenceDivider()
-                    ManagedSwitchPref(
-                        title = "作战协议",
-                        summary = "注入 prompts/ 下那份协议（与破甲记忆同一个开关）",
-                        checked = promptInjectionEnabled,
-                        icon = Icons.Rounded.Description,
-                        iconTint = EtaPreferenceColors.Blue,
-                        onCheckedChange = setPromptInjection,
-                    )
-
-                    EtaPreferenceDivider()
-                    ManagedSwitchPref(
-                        title = "破甲记忆注入",
-                        summary = "随包内置的那份破甲记忆，与作战协议同一个开关",
-                        checked = promptInjectionEnabled,
-                        icon = Icons.Rounded.VerifiedUser,
-                        iconTint = EtaPreferenceColors.Green,
-                        onCheckedChange = setPromptInjection,
                     )
 
                     EtaPreferenceDivider()
@@ -1031,8 +998,7 @@ private fun SystemizerConfirmDialog(
 /**
  * 由页面级状态驱动的开关。
  *
- * DataStore 里的布尔（逆向能力、协议注入）不是 SharedPreferences，不能复用 [SwitchPref]；
- * 而且作战协议与破甲记忆共用同一个值，状态必须提到页面级才能两行同步。
+ * The reverse bundle is one DataStore-backed switch across all settings screens.
  */
 @Composable
 private fun ManagedSwitchPref(

@@ -19,6 +19,7 @@ internal object ProviderSourceRegistry {
         ProviderSourceTypes.STEPFUN,
         ProviderSourceTypes.SILICONFLOW,
         ProviderSourceTypes.OPENROUTER,
+        ProviderSourceTypes.OPENCODE,
     )
 
     fun normalize(sourceType: String?): String {
@@ -64,6 +65,7 @@ internal object ProviderSourceRegistry {
             BuiltinProviders.STEPFUN_ID -> ProviderSourceTypes.STEPFUN
             BuiltinProviders.SILICONFLOW_ID -> ProviderSourceTypes.SILICONFLOW
             BuiltinProviders.OPENROUTER_ID -> ProviderSourceTypes.OPENROUTER
+            BuiltinProviders.OPENCODE_ID -> ProviderSourceTypes.OPENCODE
             else -> null
         }
 
@@ -83,6 +85,8 @@ internal object ProviderSourceRegistry {
             httpUrl.host.endsWith(".maas.aliyuncs.com") -> ProviderSourceTypes.BAILIAN
             httpUrl.host == "api.siliconflow.cn" -> ProviderSourceTypes.SILICONFLOW
             httpUrl.host == "openrouter.ai" -> ProviderSourceTypes.OPENROUTER
+            httpUrl.host == "opencode.ai" && httpUrl.encodedPath.startsWith("/zen") ->
+                ProviderSourceTypes.OPENCODE
             else -> null
         }
     }

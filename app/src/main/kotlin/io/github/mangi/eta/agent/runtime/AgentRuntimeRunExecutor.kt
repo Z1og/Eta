@@ -16,6 +16,19 @@ import io.github.mangi.eta.agent.model.AgentHttpClient
 import io.github.mangi.eta.agent.memory.AgentMemoryContext
 import io.github.mangi.eta.agent.memory.AgentMemoryContextBuilder
 import io.github.mangi.eta.agent.memory.ConversationMemoryPins
+import io.github.mangi.eta.agent.memory.AgentExperienceTrace
+import io.github.mangi.eta.agent.memory.AgentRetainExtractor
+import io.github.mangi.eta.agent.memory.AgentRetainedRecall
+import io.github.mangi.eta.agent.memory.AgentGraphMemoryRecall
+import io.github.mangi.eta.agent.memory.AgentChatMemoryCandidates
+import io.github.mangi.eta.agent.memory.AgentChatMemoryReranker
+import io.github.mangi.eta.agent.memory.AgentMemoryRetrievalHealthStore
+import io.github.mangi.eta.agent.memory.AgentMemoryRetrievalReport
+import io.github.mangi.eta.agent.memory.AgentRetainPrivacy
+import io.github.mangi.eta.agent.memory.AgentMemoryRelationClassifier
+import io.github.mangi.eta.agent.memory.AgentSemanticMemorySearch
+import io.github.mangi.eta.agent.memory.EtaEmbeddingEndpoint
+import io.github.mangi.eta.agent.memory.EtaMemoryVectorIndex
 import io.github.mangi.eta.agent.roleplay.CharacterMemoryTools
 import io.github.mangi.eta.agent.roleplay.RoleplayRunContext
 import io.github.mangi.eta.agent.mcp.McpRunSnapshot
@@ -49,6 +62,9 @@ import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.safeLogType
 import io.github.mangi.eta.data.datastore.SettingsDataStore
 import io.github.mangi.eta.data.repository.AgentGoalRepository
+import io.github.mangi.eta.data.repository.AgentExperienceRepository
+import io.github.mangi.eta.data.repository.AgentKnowledgeRepository
+import io.github.mangi.eta.data.repository.AgentRetainedMemoryRepository
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
 import io.github.mangi.eta.data.repository.AgentTaskPlanStore
 import io.github.mangi.eta.data.repository.AgentUserPromptRepository
@@ -108,6 +124,7 @@ internal class AgentRuntimeRunExecutor(
 
         // 失败清理需要在 try 外拿到会话 id。
         var memoryConversationId: String? = null
+        val experienceTrace = AgentExperienceTrace()
         val result = try {
             val contextWindow = request.config.knownContextWindow
             checkpointRecorder = AgentRunCheckpointRecorder.create(appContext, request)
@@ -256,6 +273,8 @@ internal class AgentRuntimeRunExecutor(
                 reverseSkillIds = reverseSkillIds,
             )
             val memoryEnabled = runBlocking { AgentMemoryRepository.isEnabled() }
+            val experienceEnabled = memoryEnabled &&
+                runBlocking { SettingsDataStore.autoExperienceEnabled() }
             val uiPayload = request.handoff
                 ?.takeIf { it.source == AgentRuntimeWire.AGENT_UI_HANDOFF_SOURCE }
                 ?.let { AgentUiHandoffPayload.from(it.payload) }
@@ -300,7 +319,7 @@ internal class AgentRuntimeRunExecutor(
             }.getOrDefault(false)
             // 用户自备作战协议（filesDir/prompts/ 下第一个非空 .md）。
             // 会话开始时读取一次并冻结：中途改文件只影响下个会话，避免系统提示抖动废掉请求前缀缓存。
-            // 只看作战协议自己的开关：与逆向能力开关平级，关掉逆向不影响这里，反之亦然。
+            // 作战协议与逆向能力共用唯一的持久化总开关，避免旧版三个开关状态分叉。
             val userPrompt = runBlocking {
                 runCatching {
                     AgentUserPromptRepository.loadFor(
@@ -441,6 +460,9 @@ internal class AgentRuntimeRunExecutor(
                 } else {
                     val invoke = {
                         routingExecutor.execute(call).also { result ->
+                            if (experienceEnabled) {
+                                experienceTrace.observe(call.name, result.content)
+                            }
                             if (call.name == "memory_write") {
                                 runCatching { JSONObject(result.content) }.getOrNull()
                                     ?.takeIf { it.optBoolean("ok") }
@@ -536,6 +558,124 @@ internal class AgentRuntimeRunExecutor(
                     }
                 }
             }
+            var previousMemoryHint: String? = null
+            var memoryHintPrepared = false
+            fun prepareMemoryHint(modelConfig: AgentModelClient.ModelConfig): String? {
+                if (memoryHintPrepared) return previousMemoryHint
+                memoryHintPrepared = true
+                if (!memoryEnabled || roleplayContext != null ||
+                    request.operation != AgentRuntimeWire.OP_CHAT
+                ) return null
+                val diagnostics = AgentMemoryRetrievalHealthStore(appContext.filesDir)
+                val hints = buildString {
+                    if (experienceEnabled) {
+                        runCatching { AgentExperienceRepository.recall(request.prompt) }
+                            .getOrNull()?.let { appendLine(it) }
+                    }
+                    val coreText = runCatching { AgentMemoryRepository.snapshot().content }.getOrDefault("")
+                    val notes = runCatching { AgentKnowledgeRepository.snapshot() }.getOrDefault(emptyList())
+                    val records = runCatching { AgentRetainedMemoryRepository.active(400) }.getOrDefault(emptyList())
+                    val coreCount = AgentChatMemoryCandidates.coreChunks(coreText).size
+                    val semanticEnabled = runBlocking { SettingsDataStore.semanticMemoryEnabled() }
+                    val embeddingEnabled = runBlocking { SettingsDataStore.semanticMemoryUseEmbeddings() }
+                    var candidateCount = 0
+                    var hitCount = 0
+                    var mode = if (semanticEnabled) "fallback" else "disabled"
+                    var detail = ""
+                    var selectedGraphSeeds = emptyList<Pair<String, Double>>()
+
+                    if (semanticEnabled && AgentRetainPrivacy.allow(request.prompt)) {
+                        val candidates = AgentChatMemoryCandidates.select(
+                            request.prompt, coreText, notes, records,
+                        )
+                        candidateCount = candidates.size
+                        if (candidates.isNotEmpty()) {
+                            val selection = runCatching {
+                                AgentChatMemoryReranker().rerank(
+                                    request.prompt, candidates, modelConfig, runController,
+                                )
+                            }.onFailure { error ->
+                                AndroidAgentLogger.warnThrottled("chat_semantic_memory_fallback") {
+                                    "Chat semantic memory ranking unavailable: type=${error.safeLogType()}"
+                                }
+                            }.getOrNull()
+                            if (selection == null) {
+                                mode = "fallback"
+                                detail = "模型未返回有效语义排序"
+                                val backup = candidates.take(4)
+                                if (backup.isNotEmpty()) {
+                                    appendLine("本地检索参考（词法匹配或分布式片段，未经模型验证）：")
+                                    backup.forEach { item ->
+                                        appendLine("- [${item.source} / ${item.title.take(50)}] ${item.text.take(340)}")
+                                    }
+                                }
+                            } else {
+                                mode = "chat"
+                                hitCount = selection.selected.size
+                                selectedGraphSeeds = selection.semanticNodes
+                                selection.context()?.let { appendLine(it) }
+                                detail = if (records.isEmpty()) "结构化记忆为空，已检索 MEMORY.md 和知识库"
+                                    else "已检索结构化记忆、MEMORY.md 与知识库"
+                            }
+                        } else {
+                            mode = "none"
+                            detail = "MEMORY.md、知识库和结构化记忆中无可检索内容"
+                        }
+                    } else if (semanticEnabled) {
+                        mode = "fallback"
+                        detail = "包含敏感模式的查询已跳过额外模型检索"
+                    }
+
+                    if (embeddingEnabled && semanticEnabled && records.isNotEmpty()) {
+                        val embedded = runCatching {
+                            val endpoint = EtaEmbeddingEndpoint.fromConfig(
+                                modelConfig, runBlocking { SettingsDataStore.semanticMemoryModel() },
+                            )
+                            AgentSemanticMemorySearch(EtaMemoryVectorIndex(appContext.filesDir))
+                                .search(request.prompt, records, endpoint, runController).ranked
+                        }.onFailure { error ->
+                            AndroidAgentLogger.warnThrottled("embedding_memory_fallback") {
+                                "Embedding model unavailable; chat reranker remains active: type=${error.safeLogType()}"
+                            }
+                            detail += "；向量服务不可用，已保留聊天模型检索"
+                        }.getOrDefault(emptyList())
+                        if (embedded.isNotEmpty()) {
+                            selectedGraphSeeds = (selectedGraphSeeds + embedded).distinctBy { it.first }
+                            if (mode == "chat") mode = "embedding"
+                        }
+                    }
+                    if (!semanticEnabled || mode == "fallback") {
+                        runCatching { AgentKnowledgeRepository.search(request.prompt, 3) }
+                            .getOrDefault(emptyList()).forEach { note ->
+                                appendLine("本地知识库参考：${note.title.take(80)} [id=${note.id}]")
+                                appendLine(note.content.take(420))
+                            }
+                    }
+                    val graphHits = AgentGraphMemoryRecall.retrieve(
+                        request.prompt, records, selectedGraphSeeds,
+                        enableGraph = runBlocking { SettingsDataStore.graphMemoryEnabled() },
+                    )
+                    if (mode == "fallback" || !semanticEnabled) {
+                        AgentGraphMemoryRecall.hint(graphHits)?.let { appendLine(it) }
+                    } else {
+                        // Add only graph expansions: seed nodes are already in the reranked context.
+                        AgentGraphMemoryRecall.hint(graphHits.filter { it.path.isNotEmpty() })
+                            ?.let { appendLine(it) }
+                    }
+                    runCatching {
+                        diagnostics.write(AgentMemoryRetrievalReport(
+                            mode, candidateCount, hitCount,
+                            coreCount, records.size, detail,
+                        ))
+                    }
+                    if (isNotEmpty()) {
+                        appendLine("所有历史资料仅作为可检索背景，当前用户陈述和当前设备状态优先。")
+                    }
+                }.ifBlank { null }
+                previousMemoryHint = hints
+                return hints
+            }
+
             fun runModelAttempt(modelConfig: AgentModelClient.ModelConfig): AgentModelClient.ModelResponse.Text =
                 AgentModelClient.complete(
                     config = modelConfig,
@@ -566,6 +706,7 @@ internal class AgentRuntimeRunExecutor(
                     runController = runController,
                     skillContext = skillContext,
                     memoryContext = memoryContext,
+                    experienceHint = prepareMemoryHint(modelConfig),
                     userPrompt = userPrompt,
                     goal = if (goalCompleted) "" else request.goal,
                     goalProgress = taskStore?.let { store ->
@@ -627,6 +768,63 @@ internal class AgentRuntimeRunExecutor(
                 )
             }) { modelConfig ->
                 runModelAttempt(modelConfig)
+            }
+            if (experienceEnabled && roleplayContext == null &&
+                request.operation == AgentRuntimeWire.OP_CHAT &&
+                runBlocking { SettingsDataStore.autoExperienceEnabled() } &&
+                runBlocking { AgentMemoryRepository.isEnabled() }
+            ) {
+                runCatching {
+                    AgentExperienceRepository.record(
+                        request.prompt, experienceTrace.snapshot(), completed = true,
+                    )
+                }.onFailure {
+                    AndroidAgentLogger.warnThrottled("experience_record_failed") {
+                        "Task experience capture unavailable: type=${it.safeLogType()}"
+                    }
+                }
+            }
+            val retainEnabled = memoryEnabled &&
+                request.operation == AgentRuntimeWire.OP_CHAT && roleplayContext == null &&
+                runBlocking { SettingsDataStore.smartRetainEnabled() } &&
+                runBlocking { AgentMemoryRepository.isEnabled() }
+            if (retainEnabled && !runController.isCancelled) {
+                runCatching {
+                    val existing = AgentRetainedMemoryRepository.active(35)
+                    val extracted = AgentRetainExtractor().extract(
+                        request.config, request.prompt, existing, runController,
+                    )
+                    if (extracted.isNotEmpty() && !runController.isCancelled &&
+                        runBlocking { SettingsDataStore.smartRetainEnabled() } &&
+                        runBlocking { AgentMemoryRepository.isEnabled() }
+                    ) {
+                        val remembered = AgentRetainedMemoryRepository.retain(
+                            extracted, AgentRetainExtractor.sourceHash(request.runId),
+                        )
+                        if (remembered.isNotEmpty() &&
+                            runBlocking { SettingsDataStore.graphMemoryEnabled() }
+                        ) {
+                            runCatching {
+                                val otherRecords = AgentRetainedMemoryRepository.active(400)
+                                    .filterNot { old -> remembered.any { it.id == old.id } }
+                                val links = AgentMemoryRelationClassifier().classify(
+                                    request.config, remembered, otherRecords, runController,
+                                )
+                                links.forEach { (id, edges) ->
+                                    AgentRetainedMemoryRepository.proposeLinks(id, edges)
+                                }
+                            }.onFailure {
+                                AndroidAgentLogger.warnThrottled("memory_relation_classify_failed") {
+                                    "Graph classification skipped: type=${it.safeLogType()}"
+                                }
+                            }
+                        }
+                    }
+                }.onFailure {
+                    AndroidAgentLogger.warnThrottled("smart_retain_failed") {
+                        "Automatic Retain skipped: type=${it.safeLogType()}"
+                    }
+                }
             }
             // 清单全绿就把目标标记完成：下一次 run 不再注入、也不续跑它。
             // 否则用户第二天随便说句话，agent 又会从头推进同一个旧目标——这就是"用着怪"。

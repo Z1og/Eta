@@ -23,6 +23,7 @@ internal fun providerBrandLogoRes(sourceType: String): Int? =
         ProviderSourceTypes.STEPFUN -> R.drawable.provider_logo_stepfun
         ProviderSourceTypes.SILICONFLOW -> R.drawable.provider_logo_siliconflow
         ProviderSourceTypes.OPENROUTER -> R.drawable.provider_logo_openrouter
+        ProviderSourceTypes.OPENCODE -> R.drawable.provider_logo_opencode
         else -> null
     }
 

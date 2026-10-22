@@ -113,6 +113,7 @@ internal object AgentModelClient {
         goalProgress: (() -> GoalProgress?)? = null,
         /** 与技能提示共用同一注入点：返回非空时作为一条上下文提示进 messages，不进会话 UI。 */
         taskPlanHint: (() -> String?)? = null,
+        experienceHint: String? = null,
         /** 本地轮次上限，0 表示不设限；子代理必须显式给值。 */
         maxRounds: Int = 0,
         onContextSnapshot: (AgentContextSnapshot) -> Unit = {},
@@ -123,7 +124,8 @@ internal object AgentModelClient {
         val initialCapabilities = capabilitiesProvider()
         val messages = AgentPromptBuilder.buildInitialMessages(
             config,
-            prompt,
+            if (experienceHint.isNullOrBlank()) prompt else
+                "$prompt\n\n<local_task_experience>\n$experienceHint\n</local_task_experience>",
             images,
             history,
             skillContext,

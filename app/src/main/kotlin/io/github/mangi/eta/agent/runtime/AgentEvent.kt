@@ -60,7 +60,24 @@ internal sealed interface AgentEvent {
         val reasonCode: String,
     ) : AgentEvent {
         val displayMessage: String
-            get() = "模型请求暂时中断，${delayMs / 1000} 秒后重试（$attempt/$maxAttempts）；此前工具结果已保留。"
+            get() {
+                if (reasonCode.startsWith("MODEL_REFUSAL")) {
+                    return "模型返回拒绝答复，正在调整请求（$attempt/$maxAttempts）。"
+                }
+                val reason = when (reasonCode) {
+                    "MODEL_CONNECTION_FAILED" -> "网络连接中断"
+                    "MODEL_TIMEOUT" -> "请求超时"
+                    "STREAM_INCOMPLETE" -> "流式响应未完整结束"
+                    "HTTP_429" -> "模型接口限流（HTTP 429）"
+                    "HTTP_502" -> "上游代理错误（HTTP 502）"
+                    "HTTP_503" -> "模型服务暂不可用（HTTP 503）"
+                    "HTTP_504" -> "上游请求超时（HTTP 504）"
+                    "HTTP_500" -> "服务端异常（HTTP 500）"
+                    else -> reasonCode.takeIf { it.matches(Regex("[A-Z0-9_]{1,48}")) }
+                        ?: "未知原因"
+                }
+                return "模型请求暂时中断（$reason），${delayMs / 1000} 秒后重试（$attempt/$maxAttempts）；此前工具结果已保留。"
+            }
 
         override fun toLogLine(): String =
             "model_retry_scheduled round=$round, attempt=$attempt, delay_ms=$delayMs, code=${reasonCode.toSafeLogToken()}"

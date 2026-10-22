@@ -72,6 +72,42 @@ class AgentModelPickerProjectorTest {
     }
 
     @Test
+    fun project_showsKeylessOpenCodeModelsAlongsideConfiguredProviders() {
+        val zen = model(
+            id = "zen-free-record",
+            modelId = "deepseek-v4.1-flash-free",
+            displayName = "免费 · deepseek-v4.1-flash-free",
+        )
+        val result = AgentModelPickerProjector.project(
+            providers = listOf(
+                provider(
+                    id = "hagimi",
+                    name = "哈基米",
+                    models = listOf(model(id = "hagimi-model", modelId = "deepseek-v4.1-flash")),
+                ),
+                provider(
+                    id = "builtin-opencode",
+                    name = "OpenCode",
+                    sourceType = ProviderSourceTypes.OPENCODE,
+                    apiKey = "",
+                    models = listOf(zen),
+                ),
+                provider(
+                    id = "unconfigured-custom",
+                    apiKey = "",
+                    models = listOf(model(id = "hidden-model")),
+                ),
+            ),
+            selectedProviderId = "builtin-opencode",
+            selectedModelId = zen.id,
+        )
+        assertEquals(listOf("hagimi", "builtin-opencode"), result.providerGroups.map { it.providerId })
+        assertEquals("builtin-opencode", result.selectedModel?.providerId)
+        assertEquals("deepseek-v4.1-flash-free", result.selectedModel?.modelId)
+        assertEquals(zen.id, result.providerGroups.last().models.single().id)
+    }
+
+    @Test
     fun filterGroups_matchesModelNamesIdsAndProviderNames() {
         fun option(id: String, providerId: String, providerName: String, displayName: String) =
             AgentModelOptionUi(

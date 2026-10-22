@@ -156,7 +156,7 @@ internal object UserScriptRules {
     /** 把仅含 `*` 通配的 glob 编译为整串匹配的正则；失败时返回永不匹配。 */
     private fun globToRegex(glob: String): Regex = runCatching {
         Regex(
-            glob.split("*", limit = -1).joinToString(separator = ".*") { phase ->
+            glob.split("*").joinToString(separator = ".*") { phase ->
                 Regex.escape(phase)
             },
             RegexOption.DOT_MATCHES_ALL,

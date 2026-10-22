@@ -5,6 +5,7 @@ import io.github.mangi.eta.agent.runtime.AgentTokenUsage
 import io.github.mangi.eta.data.model.OpenAiEndpointMode
 import io.github.mangi.eta.data.model.ProviderSourceTypes
 import io.github.mangi.eta.data.provider.ProviderSourceRegistry
+import io.github.mangi.eta.data.repository.OpenCodeEmbeddedGateway
 import java.util.UUID
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -38,6 +39,7 @@ internal object OpenAiChatCompletionsProvider : AgentProviderClient {
         require(config.openAiEndpointMode == OpenAiEndpointMode.CHAT_COMPLETIONS) {
             "当前 Provider 未配置为 Chat Completions API"
         }
+        OpenCodeEmbeddedGateway.ensureRunningFor(config)
         val url = ProviderUrls.openAiChatCompletionsUrl(config.baseUrl)
         val headers = okhttp3.Headers.Builder()
             .add("Content-Type", "application/json; charset=utf-8")
@@ -47,7 +49,12 @@ internal object OpenAiChatCompletionsProvider : AgentProviderClient {
                     add("Authorization", "Bearer ${config.apiKey}")
                 }
             }
-            .also { ProviderRequestHeaders.mergeInto(it, config.baseUrl, config.customHeaders, request.sessionId) }
+            .also {
+                ProviderRequestHeaders.mergeInto(
+                    it, config.baseUrl, config.customHeaders,
+                    request.sessionId, config.providerSourceType,
+                )
+            }
             .build()
 
         val requestJson = buildRequestJson(config, request.messages, request.effectiveTools).apply {
@@ -80,7 +87,20 @@ internal object OpenAiChatCompletionsProvider : AgentProviderClient {
 
                 if (!response.isSuccessful) {
                     val errorBody = response.peekBody(16_384).string()
-                    throw AgentModelFailure.http(code, errorBody)
+                    if (code == 502 && OpenCodeEmbeddedGateway.isEmbeddedConfig(config)) {
+                        throw AgentModelFailure.embeddedOpenCode502(
+                            errorBody,
+                            OpenCodeEmbeddedGateway.recentGatewayFailureHint(),
+                            OpenCodeEmbeddedGateway.upstreamProxyDescription(),
+                        )
+                    }
+                    throw AgentModelFailure.http(
+                        code, errorBody,
+                        ProviderSourceRegistry.resolve(
+                            config.providerId, config.providerSourceType,
+                            config.baseUrl, config.providerType,
+                        ),
+                    )
                 }
 
                 val assistantMessage = readStreamingAssistantMessage(

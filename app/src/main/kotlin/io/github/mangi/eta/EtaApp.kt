@@ -13,6 +13,11 @@ import io.github.mangi.eta.core.AnrWatchdog
 import io.github.mangi.eta.core.FileLogSink
 import io.github.mangi.eta.core.safeLogType
 import io.github.mangi.eta.data.datastore.SettingsDataStore
+import io.github.mangi.eta.data.repository.AgentExperienceRepository
+import io.github.mangi.eta.data.repository.AgentKnowledgeRepository
+import io.github.mangi.eta.data.repository.AgentRetainedMemoryRepository
+import io.github.mangi.eta.data.repository.EtaWebDavSyncRepository
+import io.github.mangi.eta.data.repository.EtaWebDavSyncScheduler
 import io.github.mangi.eta.data.repository.AgentGoalRepository
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
 import io.github.mangi.eta.data.repository.AgentUserPromptRepository
@@ -20,6 +25,7 @@ import io.github.mangi.eta.data.repository.AppearanceSettingsRepository
 import io.github.mangi.eta.data.repository.McpServerRepository
 import io.github.mangi.eta.data.repository.LinuxEnvironmentSettingsRepository
 import io.github.mangi.eta.data.repository.ProviderRepository
+import io.github.mangi.eta.data.repository.OpenCodeEmbeddedGateway
 import io.github.mangi.eta.ui.app.PredictiveBackController
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
@@ -61,11 +67,23 @@ class EtaApp : Application(), XposedServiceHelper.OnServiceListener {
         RootAccess.initialize(this)
         applicationScope.launch { TerminalRuntime.backgroundJobs(this@EtaApp).resume() }
         SettingsDataStore.init(this)
+        OpenCodeEmbeddedGateway.init(this)
         val predictiveBackEnabled = runBlocking(Dispatchers.IO) {
             AppearanceSettingsRepository.settings().predictiveBackEnabled
         }
         PredictiveBackController.apply(applicationInfo, predictiveBackEnabled)
         AgentMemoryRepository.init(this)
+        AgentExperienceRepository.init(this)
+        AgentKnowledgeRepository.init(this)
+        AgentRetainedMemoryRepository.init(this)
+        EtaWebDavSyncRepository.init(this)
+        applicationScope.launch {
+            runCatching {
+                EtaWebDavSyncScheduler.configure(
+                    this@EtaApp, SettingsDataStore.autoWebDavSyncEnabled(),
+                )
+            }
+        }
         AgentUserPromptRepository.init(this)
         AgentGoalRepository.init(this)
         // 首启装配随包破甲记忆。只装一次、失败静默：**装配 ≠ 注入**——
