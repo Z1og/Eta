@@ -1,13 +1,9 @@
 name: Sync Skills & Build APK
 
 on:
-  # 每日一次统一管线（UTC 2:00 = 北京 10:00）：上游 merge → 技能适配 → 编译发布
-  schedule:
-    - cron: '0 2 * * *'
-  # 接收外部 webhook 触发（上游更新时可用 curl 触发）
-  repository_dispatch:
-    types: [hanshuang-codex-updated]
-  # 手动触发
+  # 只保留手动触发：上游合并与技能适配是"有破坏性"的动作，
+  # 不再定时跑、也不接受 webhook 自动触发。要同步时说一声或手动 Run workflow。
+  # 日常改动推送到 main 只会走 build-only.yml（只编译，不合并上游）。
   workflow_dispatch:
     inputs:
       build_type:
@@ -31,13 +27,6 @@ on:
         options:
           - skip
           - ours
-  # 推送到 main 时也构建
-  push:
-    branches: [ main ]
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
-      - '.github/workflows/*.yml'
 
 permissions:
   contents: write
@@ -130,7 +119,7 @@ jobs:
               echo ""
               echo "${CONFLICT_LIST:-（详见 workflow 日志）}"
             } >> "$GITHUB_STEP_SUMMARY"
-            gh issue create -R Z1og/Eta \
+            gh issue create -R Z1og/Eta2 \
               --title "上游合并冲突：需要手动解决" \
               --body "上游 Mangi-11/Eta 更新与 fork 代码冲突，本次跳过上游合并；技能适配与构建照常进行。
 
@@ -194,7 +183,7 @@ jobs:
         run: |
           if [ "${COMPILE_FAILED:-false}" = "true" ]; then
             git reset --hard "$PRE_MERGE_SHA"
-            gh issue create -R Z1og/Eta \
+            gh issue create -R Z1og/Eta2 \
               --title "上游合并后编译失败：已自动回滚本次合并" \
               --body "上游更新与 fork 合并后 :app:compileDebugKotlin 失败，已回滚到合并前（${PRE_MERGE_SHA}）。技能适配与构建照常进行（基于合并前代码）。人工核对后可用 workflow_dispatch 重跑本管线；编译错误摘要见 workflow 日志。" \
               || echo "::warning::issue create failed"
@@ -202,7 +191,7 @@ jobs:
             exit 1
           fi
           if [ -n "${SKIPPED_UPSTREAM:-}" ]; then
-            gh issue create -R Z1og/Eta \
+            gh issue create -R Z1og/Eta2 \
               --title "上游合并采用 ours 策略：以下文件的上游改动被跳过" \
               --body "code_conflict_policy=ours，以下上游文件改动未合入（保留 fork 版），请人工核对是否需要回补：
 

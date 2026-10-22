@@ -1,252 +1,119 @@
-# Eta
+# Eta2
 
-**简体中文** | [English](README_EN.md)
+**Eta 的定制分支**：在 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 Agent 运行时之上，重点做**稳定性、上下文体积与逆向技能体系**。
 
-<p><a href="https://github.com/Z1og/Eta/releases"><img src="https://img.shields.io/github/downloads/Z1og/Eta/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"> <img src="https://img.shields.io/badge/Skills-190%20%E5%86%85%E7%BD%AE-7F52FF" alt="190 built-in skills"></p>
+<p><a href="https://github.com/Z1og/Eta2/releases"><img src="https://img.shields.io/github/downloads/Z1og/Eta2/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Skills-200%2B%20%E5%86%85%E7%BD%AE-7F52FF" alt="200+ built-in skills"></p>
 
-**面向 Android 的系统级 AI 助手 · 内置 190 个技能，其中 87 个为逆向与安全研究技能，一键开启**
+产品本体仍是 Eta，用法与上游一致：自备模型 API Key（BYOK），Android 14+，基础功能不需要 Root。
 
-Eta 是面向 Android 的系统级 AI Agent：直接调用系统 API 与工具完成任务，支持 Skills 与 MCP 扩展。本版本在上游 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 Agent 运行时之上，内置了覆盖**逆向工程、渗透测试、游戏安全与移动安全**的完整技能体系，随 App 预装、开箱即用，专为手机上的逆向与安全研究场景打磨。
+---
 
-**系统级能力**：
+## 这个分支改了什么
 
-- **系统操作**：直接调用 Android API，完成设置闹钟、控制媒体、调整音量等操作。
-- **厂商数据**：在对应系统与授权条件下，直接检索小布记忆、便签、录音摘要等数据。
-- **系统入口**：通过 Xposed 接管电源键、小布和超级小爱，从熟悉的助手入口发起 Eta 任务。
+### 稳定性：把"卡死/丢消息"这一类问题逐个钉死
 
-Eta 内置 Agent Runtime，通过 Agent Loop 编排模型调用、工具执行和结果反馈。使用 AI 功能需要自备模型服务的 **API Key（BYOK）**，模型与服务商由你选择。
+| 问题 | 原因 | 处理 |
+|---|---|---|
+| 发消息直接卡死 | 会话 `journal` 无界增长 → 整段编码进 `journal_json` 时 OOM → 写前落盘判失败 → 失败分支回主线程跑 `linkRun` 的 M×N 字符串拼接 | journal 按 4MB 字符上限保留尾部；编码 OOM 时逐级退化（4MB→512KB）再存；`linkRun` 改哈希索引单趟 O(n) |
+| 回到前台必崩 | 重建 ViewModel 时把 39 个会话的 messages + history + journal 全量读进堆（实测堆占用 265MB / 上限 256MB） | 只为选中会话还原 history/journal，其余切到该会话或发送前再补；`restoreText` 按声明长度预分配；开启 `largeHeap` |
+| 运行中无响应、不报错 | 运行线程只有 `finally` 没有 `catch`，异常后无人回复，客户端 `await()` 无超时 | 兜住 `Throwable` 并回一条可读的失败结果；拒绝请求时也回执 |
+| 越聊越慢 | 压缩找切分点是 O(n²)（每档重扫前缀 + 逐条解析 tool_calls） | 单趟记录前缀未闭合集合，O(n) |
 
-支持 **Android 14 及以上版本**，App 本体不限手机品牌，基础功能无需 Root。Root 和 LSPosed 可进一步扩展系统访问与助手入口，具体能力取决于授权和 ROM 适配。
+同时加了**日志落盘 + 主线程卡死看门狗（含阶段追踪）+ 设置里一键导出**——上面几条都是靠它定位的，不是猜的。
 
-[下载 APK](https://github.com/Z1og/Eta/releases) · [快速开始](#快速开始) · [内置逆向与安全技能](#内置逆向与安全技能) · [为什么做 Eta](#为什么做-eta)
+### 性能：不再把历史搬来搬去
 
-## 界面预览
+- **发送不再跨进程传历史**：只传 `historyRef`（会话 id），runtime 直接从库里读那份已落盘的上下文。省掉每次约 700ms 的编码 + 临时文件传输。
+- **冷启动只解析选中会话的上下文**：实测 `conversation load slow` 从 9.2s 降下来，内存压力同步下降。
 
-| GUI Agent | 小布助手 BYOK |
-| :-------: | :-----------: |
-| <img src="docs/Screenshots/demo_gui_agent.gif" width="320" alt="Eta GUI Agent 执行演示"> | <img src="docs/Screenshots/demo_tools.gif" width="320" alt="从小布助手入口发起 Eta 任务"> |
+### 注入：能关的都做成开关，默认更克制
 
-更多界面：聊天、设备工具与设置
+- **技能正文自动注入只保留原版三个**（`self-improving-agent` / `skill-creator` / `skill-installer`）。其余技能正文动辄几千字、靠关键词猜，收益低；改成需要时由模型自己 `skills_read`。
+- **候选短名单、已启用技能索引表、运行中技能提示全部移除**：同属关键词猜测，且索引表每次请求都要带上几百行元信息。
+- **破甲记忆：随包装配，但默认不注入**。装配只让「编辑作战协议」有内容可看；是否注入只看一个开关。
+- **设置 → 上下文与扩展**新增三行开关：**逆向能力**（一键启停除原版外全部技能）、**作战协议**、**破甲记忆注入**。
+- **新会话默认带角色**：沿用上次使用的角色卡，不必每次从角色列表进入；开关可关。
+- 角色的注入链路（persona / 世界书 / depth prompt / 后置指令 / 剧情记忆）**保持原样**。
 
-|                  聊天首页                  |                        小布入口执行命令                        |                       系统 API 调用                       |
-| :-----------------------------------------: | :------------------------------------------------------------: | :-------------------------------------------------------: |
-| ![聊天首页](docs/Screenshots/chat_home.jpg) | ![小布入口执行命令](docs/Screenshots/chat_breeno_analysis.jpg) | ![系统 API 调用](docs/Screenshots/chat_device_direct.jpg) |
+### 技能体系与同步
 
-|                  设置                  |                工具能力                |                 Skills                 |
-| :------------------------------------: | :-------------------------------------: | :------------------------------------: |
-| ![设置](docs/Screenshots/settings.jpg) | ![工具能力](docs/Screenshots/tools.jpg) | ![Skills](docs/Screenshots/skills.jpg) |
+- 随包 **200+ 个技能**，除原版三个外均为逆向与安全方向：APK/DEX/SO、Frida、脱壳、抓包与反检测、IL2CPP/UE dump、硬件追踪、渗透、游戏安全等。
+- **逆向模式总开关**：一键启停全部逆向技能，并常驻注入逆向交付契约（首行命名交付物、缺参自造占位符、直接给可执行命令）。
+- 仓库自带三源技能适配脚本（`hanshuang-to-eta.py` 等）与 CI 管线。
+  **自动同步已关闭**：`sync-build.yml` 只保留手动触发（不再定时、不再接受 webhook）；
+  日常推送到 main 只跑 `build-only.yml` 出 APK，不合并上游、不动技能。需要适配时再说。
 
+---
 
-## 核心能力
+## 原版要点
+
+> 以下为上游 Eta 的简介，完整说明见 [上游仓库](https://github.com/Mangi-11/Eta) 与 `docs/`。
+
+### 系统级能力
+
+- **系统操作**：直接调用 Android API 与系统 Intent（闹钟、媒体、音量、设备状态）。
+- **厂商数据**：对应系统与授权下检索小布记忆、便签、录音摘要等。
+- **系统入口**：通过 Xposed 接管电源键、小布与超级小爱，从熟悉的入口发起任务。
 
 ### 执行工具
 
-- **系统 API 调用**：通过 Android API 与系统 Intent 设置闹钟、控制媒体、调整音量、读取设备状态，无需逐步操作界面。
-- **GUI Agent**：结合无障碍 UI 树、控件定位与按需截图，执行点击、滚动和输入；截图按原始尺寸与像素传递，不在上传前缩放或转 JPEG。通过浮层展示执行状态，支持停止和接管。
-- **内置浏览器**：通过 WebView 加载 JavaScript 页面、读取正文、操作 DOM 与截图；用户可打开同一浏览器会话接管。
-- **终端与文件**：Android user/root Shell、Alpine / Debian Linux、文件读写与脚本执行，支持会话、异步命令和守护任务。
-
-同一项任务可以组合多种工具：例如先读取网页资料，再用脚本整理文件；或从通知中找到订单线索，再打开应用确认状态。
+- **GUI Agent**：无障碍 UI 树 + 控件定位 + 按需截图，浮层显示状态，可停止/接管。
+- **内置浏览器**：WebView 加载 JS 页面、读正文、操作 DOM、截图。
+- **终端与文件**：Android user/root Shell、Alpine / Debian Linux、会话、异步命令与守护任务。
 
 ### 上下文与扩展
 
-- **个人上下文**：按需检索通知、应用使用情况与位置；相册、日历、短信、录音、健康摘要、聊天图片等专用检索需要 Root，部分来源还要求对应 ROM 与应用支持。
-- **长期记忆**：使用本机 `MEMORY.md` 保存跨对话背景，核心内容按预算加入上下文，其余按需读取；支持编辑、清空和关闭。
-- **Skills**：按需加载任务方法、参考资料与脚本资源，支持公开 GitHub 仓库安装和本地 ZIP 导入；安装不会执行脚本或开启额外权限。
-- **MCP**：通过 Streamable HTTP 连接远程工具，支持 Bearer Token；工具逐项启用，与本机工具共同参与任务。
+- **个人上下文**：通知、应用使用、位置；相册/日历/短信/录音等专用检索需 Root。
+- **长期记忆**：本机 `MEMORY.md`，核心内容按预算进上下文，其余按需读取。
+- **Skills / MCP**：技能按需加载、支持 GitHub 与 ZIP 安装；MCP 走 Streamable HTTP，工具逐项启用。
 
-### Agent Runtime
+### Agent Runtime 与角色
 
-Agent Runtime 运行在 Eta App 内，来自聊天页面和系统助手的请求共用同一个 Agent Loop。模型通过 Tool Calling 选择工具，执行结果回到上下文，再决定下一步。工具调用按 JSON Schema 校验，并在执行前检查权限；Hook 进程只负责入口与结果回传。
+- 运行时在 App 内，聊天与系统助手共用同一个 Agent Loop；工具按 JSON Schema 校验并检查权限。
+- 支持流式事件、steering、取消、增量 transcript 与中断恢复（不自动重放操作）。
+- **角色**：可导入兼容酒馆的 PNG / JSON 角色卡，支持用户人设、内嵌世界书与独立剧情记忆；角色会话仍能调用手机工具。
 
-Runtime 同时管理流式事件、steering、取消和增量 transcript。追加指令在当前 turn 完成后进入下一轮，会话与结果在本机归档；中断后尝试恢复已有记录，不自动重放操作。详细设计见 [Agent Runtime](docs/AGENT_RUNTIME.md)。
+### 模型与 BYOK
 
-### 可选角色
+内置 OpenAI、Anthropic、阿里百炼、DeepSeek、Kimi、MiMo、MiniMax、StepFun、硅基流动、OpenRouter 等配置，也可自定义服务地址/请求头/请求体；支持 Chat Completions、Responses 与 Anthropic Messages（SSE、Tool Calling、图片输入、推理内容）。可从 [models.dev](https://models.dev/) 目录挑选兼容服务。
 
-侧边栏的“角色”可管理、导入和导出兼容酒馆的 PNG / JSON 角色卡，并从角色开始对话。角色会话仍能调用 Eta 的手机工具，支持用户人设、内嵌世界书和独立剧情记忆；普通对话及系统助手入口保持默认 Eta。角色正文可原位编辑，重新生成只改写回复，不重复执行设备动作。兼容范围和记忆说明见[角色功能](docs/CHARACTERS.md)。
+### 权限与数据边界
 
-## 内置逆向与安全技能
+系统工具、敏感读取、敏感操作、终端与文件、网页浏览、记忆各有独立开关。任务所需的对话、图片与工具结果会发送给你配置的模型服务；自定义 HTTP 地址会明文传输 API Key。会话、记忆与模型配置支持导入导出（备份含 API Key）。
 
-本版本内置 **190 个技能**，其中 **87 个**为逆向工程与安全研究方向，随 App 预装、开箱即用：
-
-- **逆向工程**：APK / DEX / SO 逆向，IDA、Ghidra、Binary Ninja、radare2 反编译与分析，二进制分析与补丁对比，.NET 逆向，JS 逆向，协议逆向，虚拟机保护还原，浏览器插件与 macOS 逆向。
-- **动态分析**：Frida 动态插桩与 Hook 模板、内存取证、脱壳与重打包、ELF 本地鉴权 patch、**进程/内存一等工具**（`process_list`/`mem_read`/`mem_search`/`mem_write`/`frida_ps`/`frida_script`）与**最小 MCP client**（`mcp_call`）。
-- **对抗与抓包**：反 Frida/反调试检测面绕过（anti-frida-bypass）、抓包与中间人链路（capture-mitm，tcpdump/mitmproxy/SSL unpinning）、IL2CPP 与 UE 游戏 dump（il2cpp-dump）。
-- **硬件层观测**：Arm CoreSight 硬件追踪（ETE/TRBE 指令追踪、SPE 延迟剖析、BRBE 分支记录）与硬件断点/观察点——不注入、不改指令地拿执行流，用于 VMP 壳还原、OLLVM 平坦化恢复与反调试绕过。
-- **渗透测试**：网络渗透、API 安全、Web 渗透、SRC 漏洞挖掘、攻击链编排、完整渗透流程、漏洞利用。
-- **游戏安全**：游戏内存分析与修改、反作弊机制研究、图形 API Hook、Windows 内核安全、DMA 攻击面研究、移动竞技游戏安全。
-- **专项方向**：固件渗透、恶意样本分析、数字取证、硬件安全、LLM 安全、威胁狩猎与情报、供应链安全、无线安全、工控安全、云与容器安全。
-
-### 逆向模式：一键开关
-
-「技能」页顶部提供**逆向模式**总开关，一键启停全部 87 个逆向类技能。开启后：
-
-- 运行时常驻注入**逆向交付契约**：首行以标题或代码块命名交付物、缺失参数自造占位符（TARGET / OFFSET / HOOK_FN）、每步给可执行命令与完整代码——所有逆向与安全任务按统一格式直接出结果，不停留在思路描述。
-- 全部逆向技能进入任务索引：消息命中技能关键词时正文自动注入，也可由模型按语义经 `skills_read` 按需加载，单个任务最多取用 2-3 个最相关技能。
-- **多信号触发**：匹配不只看当前一句——同时纳入最近若干轮对话、消息里的文件扩展名（`.apk`/`.so`/`.dex`…）与常见工具名（frida/ida/jadx/nmap…）；逆向模式开启时逆向技能加权，并做同族去冗余（`eni-`/`seagull-`/`coldbrew-` 最多占一个名额），零关键词命中也能靠文件与工具信号兜底路由到对口技能。
-- **触发精准度**：触发词按 **IDF 降权**（"逆向/渗透"这类被大量技能共享的泛词自动降权，`ollvm`/`il2cpp`/脱壳 等专词升权）；置信度不够时不硬注入正文，改为注入**按相关度排序的候选短名单**让模型用 `skills_read` 精准取 1-2 个；本地记录被实际读取的技能并温和加权（自学习）。
-- **运行中调用技能**：除开局自动加载外，模型可在一轮长回答的任意一步调用 `skills_list` / **`skills_read`** / **`skills_suggest`**（用一句话查询"当前该用哪些技能"）；工具输出出现新的强信号时，运行时还会自动追加一条技能提示。
-
-### 交付契约与模板库（reverse-delivery）
-
-本版本新增的第一方技能，沉淀逆向任务的交付纪律与过程模板，通过 `skills_read_resource` 按需取用：
-
-- **Frida 动态分析模板**：Java / Native 层 Hook、SSL Pinning 与 Root 检测绕过、加密函数追踪、强制返回值桩替换。
-- **账号枚举与爆破模板**：登录接口响应差异探测、hydra / ffuf 词表爆破、分片并行与限流规避。
-- **APK / DEX / SO 全流程模板**：解包 → 校验点定位 → smali / SO patch → 重打包签名 → 加固识别与脱壳。
-
-### SRC 漏洞挖掘工作流（src-hunt）
-
-由 clown-src SRC 工作流适配进 Eta 的第一方安全研究技能，沉淀「授权 SRC 挖洞 + 白盒 0day 审计」的完整方法论，通过 `skills_read_resource` 按需取用：
-
-- **黑盒 SRC 挖洞**：锁面 / 自由跳范围模式、一种子闭环节奏、价值导向挖什么（越权/注入/SSRF/XSS/RCE/逻辑/认证接管）、进站打法路由表，直接对准有差分面打，不空扫、不误报、不堆低危。
-- **白盒 0day 审计**：Phase 0～6 源码审计流程（Linux Kernel / Chromium / Laravel / Spring / Django 等）。
-- **知识库 49 篇**：idor / injection / ssrf / xss / file-upload / logic / graphql / oauth-jwt / race-condition / http-smuggling / cache-poisoning / deserialization / xxe / prototype-pollution / waf-bypass / cloud-ide-codex-rce-chain / agent-tool-exec 等测试模板，进站先开 `打穿短表.md` 当开场几枪。
-- **行为规则 12 条**：dig-scope-workflow（范围/节奏）、src-value-hunting（挖什么）、vuln-report-format（报告唯一格式）、anti-over-moralization（反误拒反说教）、hunt-iter（能力迭代）等。
-- **资产测绘**：FOFA MCP 源码与 Alpine 下用法（`references/fofa-mcp/` + `references/fofa-recon.md`），或直连 FOFA REST API；多账号限流闸认 dig-scope §2.1.4。
-- **安全红线**：越权最小伤害、禁止登出用户会话、CORS 永久不挖、禁止真资损与破坏性利用。
-
-### 技能环境适配
-
-全部技能面向 Eta 的 **Android Root Shell + Alpine Linux** 运行环境转换：PowerShell → Shell、各平台包管理 → `apk add`、`frida -U` → 本地模式；技能可直接调用 Eta 的 shell、文件、设备与浏览器工具，产物落到共享工作区并返回绝对路径。
-
-## 为移动设备重新设计的终端
-
-Eta 的终端可以由 Agent 调用，也可以由你直接操作。多个会话各自保留工作目录与环境；简洁模式按命令展示输入输出，PTY 控制台支持 TUI、快捷键与 ANSI 渲染。异步命令和守护任务都可以查看日志、主动停止。
-
-- **Linux 环境**：可选 Alpine 或 Debian，普通设备使用 PRoot，Root 设备还可选择 chroot。两种后端独立安装，不自动迁移数据；PRoot 中的模拟 root 不提供 Android 系统权限。
-- **开发工具**：Python、Node.js、SSH、APK 分析与 Kimi Code 按需安装。
-- **文件管理**：私有工作区支持导入、导出；已授权的 Android 目录可共享到 Linux 的 `/workspace/mounts/`，也可在 App 内浏览 Linux 文件。
-
-Eta 本体可以读取项目、修改代码、运行命令并验证结果。如果想在手机上持续进行编程工作，[Kimi Code](https://github.com/MoonshotAI/kimi-code) 的 **Kimi Web** 提供了更适合移动端的 Web UI，可以在浏览器中持续对话、查看代码修改与执行结果，享受完整的 Coding Agent 工作体验，随时随地 Vibe Coding。
-
-在 Eta 中安装 Linux、Node.js 与 Kimi Code 后，即可从首页一键启动 Kimi Web，也可以在终端运行 `kimi`。Kimi 使用独立的模型配置与会话，需单独完成登录或配置；离开页面后可返回继续使用，也可从 Eta 主动停止。
-
-## 模型与 BYOK
-
-使用 Eta 的 AI 功能需要自备模型服务的 **API Key**。内置 OpenAI、Anthropic、阿里百炼、DeepSeek、Kimi、MiMo、MiniMax、StepFun、硅基流动和 OpenRouter 等提供商配置，也可添加自定义服务。
-
-内置提供商附带常用对话模型预设；目录更新会为已有内置配置补充新型号，并保留用户的模型设置和当前选择。硅基流动与 OpenRouter 的模型目录变化较快，可在提供商的「模型」页面从服务端拉取。
-
-提供商列表还可从 [models.dev](https://models.dev/) 社区目录挑选兼容的对话服务和模型；联网时更新目录，离线时使用本地缓存或随应用打包的快照。导入后的提供商默认停用，需核对服务地址、填写该服务的 API Key 并启用；Eta 读取目录时不发送已保存的 API Key。
-
-Provider 层支持 OpenAI-compatible Chat Completions、Responses API 和 Anthropic Messages，包括 SSE、Tool Calling、图片输入与推理内容。你可以自定义服务地址、请求头和请求体，拉取或手动添加模型，调整上下文长度与思考档位。具体能力取决于模型与接口，部分 Responses 提供商还可开启服务端网页搜索。
-
-提供商配置中的“自定义请求头”默认折叠，可添加、编辑和删除名称/值，保存后用于模型列表与对话请求；“测试连接”会使用尚未保存的配置。支持覆盖 `User-Agent`，认证和传输请求头仍由 Eta 管理。连接 OpenCode 官方端点时，Eta 自动发送每段对话稳定的 `x-opencode-session`，无需手动填写；默认客户端标识为 `Eta`。
-
-## 系统助手入口
-
-- **长按电源键**：选择唤起系统默认助手、Gemini 或 Eta。
-- **Eta 系统助手**：从电源键入口打开全局语音浮窗，竖屏下光效从按键位置沿屏幕边缘进入并汇聚到底部，也可切换键盘或点击建议提问；自动附带唤醒时的截图与应用内容，无需额外点击或开启无障碍截图。语音识别可选择系统服务、千问或豆包；云端模式只需麦克风权限与对应服务配置，不依赖设备自带识别服务。支持助手回答自动播报、聊天听写和手动朗读，详见[语音配置](docs/VOICE.md)。
-- **小布 / 超级小爱接管**：保留厂商助手的电源键入口，将请求交给 Eta，使用自己配置的模型。
-
-电源键接管需要 LSPosed 与对应系统支持。
-
-## 解锁 Gemini 与一圈即搜
-
-- **Gemini 解锁**：补齐 Gemini 系统助手能力，支持 Google App 系统化、锁屏与亮屏语音输入、息屏热词补偿。
-- **一圈即搜**：解锁一圈即搜，通过手势条长按或双指识屏触发。
-
-需要 LSPosed 与对应系统支持，具体功能与适配说明见[技术实现](docs/TECHNICAL.md)。
-
-## 权限与数据边界
-
-系统工具、敏感读取、敏感操作、终端与文件、网页浏览、记忆均有独立开关，当前默认开启。Runtime 在执行前重新检查权限，撤权或断连不会覆盖已保存的配置。
-
-- **数据去向**：任务所需的对话、图片和工具结果会发送给配置的模型服务；本地 Runtime 不代表本地推理。自定义 HTTP 地址会明文传输 API Key 与请求内容。
-- **本机记录**：敏感工具及 MCP 的原始参数、结果不写入持久会话，模型回复仍会保存。通知历史在授权后保存最近 7 天、最多 1000 条；MCP 认证令牌加密保存。
-- **会话与备份**：支持消息复制、编辑、从某轮删除和回复重新生成；单个对话可导出为 Markdown，也可整体导入导出对话、模型配置、角色资料与记忆；备份包含 API Key。分享角色卡只导出角色设定和卡片图片，不包含私人对话与记忆。
-- **运行边界**：任务可停止或接管。后台运行受 Android 与厂商进程管理影响，强停或重启后需手动启动；系统与应用更新也可能需要重新适配 Hook。
+---
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/Z1og/Eta/releases) 下载 APK，安装后在“模型提供商”中填写 API Key 并选择模型。执行任务需要 Tool Calling，理解图片还需模型支持图片输入。
-2. 按任务需要配置工具开关与权限：GUI Agent 需要无障碍服务；通知、应用使用情况分别授权；位置工具需要“始终允许”。工具页可查看当前设备的可用能力。
-3. 需要逆向与安全能力时，在「技能」页一键开启**逆向模式**；全部技能也可逐项启停，或通过 GitHub 仓库 / 本地 ZIP 安装扩展。
-4. 开始对话。需要 Linux 时，在“Linux 工具环境”中安装发行版、基础工具及所需开发工具；需要系统入口时，参见[系统助手入口](#系统助手入口)。
+1. 从 [Releases](https://github.com/Z1og/Eta2/releases) 下载 APK，在"模型提供商"填 API Key 并选模型（需要 Tool Calling；看图需模型支持图片输入）。
+2. 按需授权：GUI 需要无障碍；通知、应用使用情况分别授权；位置需"始终允许"。
+3. 需要逆向/安全能力时到「技能」页打开**逆向模式**，或逐项启停；也可用 GitHub 仓库 / 本地 ZIP 安装。
+4. 开始对话。需要命令行时在"Linux 工具环境"安装发行版与开发工具。
 
-- **普通设备**：Android 14+，可使用聊天、浏览器、记忆、Skills、MCP、普通终端与私有工作区；GUI 和本机信息读取按需授权。Linux 支持对应的 64 位设备。
-- **Root 设备**：进一步开放系统设置修改、应用管理、受保护文件与专用个人数据检索，以及 Root Shell 和 chroot——逆向与安全技能在 Root 环境下能力最完整。
-- **LSPosed 与适配 ROM**：开放厂商助手接管、系统快捷入口及 Google 能力增强；部分功能另需 Root。
+- **普通设备**：Android 14+，可聊天、浏览器、记忆、Skills、MCP、普通终端与私有工作区。
+- **Root 设备**：开放系统设置修改、应用管理、受保护文件与专用数据检索、Root Shell 与 chroot。
+- **LSPosed**：开放厂商助手接管与系统快捷入口，部分功能另需 Root。
 
-联系人、短信、日历等专用检索目前仍需要 Root。完整条件与验证范围见[设备支持说明](docs/ROOTLESS_SUPPORT.md)。
+---
 
-## 为什么做 Eta
+## 文档
 
-### 从不好用的手机助手开始
-
-做 Eta 的起点很直接：我觉得很多手机厂商的 AI 助手不好用。回答不够准确，稍复杂的需求就需要自己接着操作。我最早想解决的只是屏幕问答：刷到一个陌生概念，就在当前屏幕上问清楚，让模型结合内容搜索、解释，省去复制文字、切换应用和重新描述背景的过程。
-
-这样的体验很依赖模型能力。模型迭代很快，我希望手机助手也能及时用上更好的模型。因此，我把自选模型作为 Eta 的基础能力，让用户保留熟悉的手机入口，用自己选择的模型问答和执行任务。
-
-### 桌面 Agent 百花齐放，手机 AI 却处处碰壁
-
-桌面端有完整的 Shell 环境、成熟的命令行工具和开放的文件系统。模型在用户权限范围内，可以读写文件、安装依赖、执行程序，把现有工具组合起来完成各种任务。这给了 Agent 充分的发挥空间，也是 Coding Agent 能在桌面端百花齐放的重要原因。
-
-Android 虽然也有 Shell，但普通 App 能访问的目录、系统能力和执行环境都受到较多限制。补上一套 Linux 环境可以解决命令与依赖，手机里的应用和数据却仍然隔着一道墙。许多服务封闭在各自的 App 中，没有供 Agent 直接调用的接口，系统助手也很难把它们串起来。
-
-这也是我对手机 AI 最不满意的地方。大模型已经迭代了几年，桌面端的工作方式不断变化，手机上的很多 AI 体验却依然停留在问答、摘要和几个预设场景里。功能越来越多，真正改变使用方式的产品却不多；一到跨应用、跨服务的任务，用户还是要自己接着做。
-
-豆包手机助手让我看到了不同的可能。它以豆包 App 为基础，与手机厂商在操作系统层面合作，让 AI 理解屏幕并执行跨应用任务。但这样的尝试很快碰到了生态边界：2025 年 12 月，部分用户遇到微信异常退出和登录限制，豆包随后下线了操作微信的能力；同期还有淘宝人机验证、银行 App 要求关闭屏幕共享的反馈。微信方面当时表示，可能触发了原有安全风控。
-
-同月，豆包还宣布限制刷激励、金融应用和部分游戏场景。在我看来，这些事件说明，即使拿到系统级权限，也很难独自打通应用生态。App 将账号、数据、服务和交易留在自己的闭环里，手机厂商也有各自的设备与服务生态。Agent 改变了用户入口和服务分发方式，接口能否开放，同时涉及技术、安全和商业选择。
-
-我能理解手机厂商在商业合作和生态之间的顾虑，但这不该成为 AI 助手不好用的借口。跨应用能力暂时受限，至少也应该提供一个理解到位、回答可靠的模型，或者让用户接入自己选择的模型。
-
-### 把 Agent 装进手机之后
-
-把 OpenClaw（“龙虾”）或桌面 Coding Agent 搬进手机的 Linux 环境，可以让它继续处理文件、运行脚本。但如果接不到手机的系统能力和个人上下文，它仍是一只困在沙盒里的龙虾。运行环境迁移之后，手机上的应用、数据和系统入口仍要逐一接通。
-
-我既是第三方开发者，也是 Android 玩机用户，没有预装合作和自有生态的商业包袱，所以愿意在系统适配上做得更激进一些，尽可能把手机已有的能力开放给用户自己选择的模型。
-
-Eta 在这一层做适配：通过 Xposed 接管小布、超级小爱和电源键入口，直接调用 Android 系统 API，并检索小布记忆、便签、录音摘要等已适配的数据源。Shell 与 Linux 提供计算环境，GUI Agent 覆盖缺少接口的应用操作。这些能力共用同一套 Agent Runtime，让模型既能了解手机上的事情，也有工具把事情做下去。
-
-我也不认为每件事都值得交给 AI。几次点击就能完成的操作，如果要多花时间、支付调用费用，还得盯着模型纠错，我宁愿自己动手。我更期待它帮我处理需要结合本机信息、跨应用重复操作，或不方便手动完成的任务。手机 Agent 的价值取决于对系统能力、本机数据和移动交互的理解与适配，功能数量本身不足以说明产品是否好用。
-
-### 对 AI 手机与 Agentic OS 的展望
-
-> 以下是长期愿景，部分能力尚未在 Eta 中实现。
-
-GUI 是为人设计的，通过层层菜单把模糊需求变成具体操作。对模型而言，直接调用 API、CLI、MCP 等接口更友好，能减少截图、控件识别和页面变化带来的开销与错误。GUI Agent 用来补齐没有开放接口的场景。
-
-我期待的 Agentic OS 中，操作系统会成为用户表达需求的第一入口。用户说出目标，系统结合当前情境理解意图，通过 Agent Runtime 选择模型、调用工具、检查结果。过去由用户在不同应用和菜单之间串起的步骤，可以交给系统组织。
-
-App 在其中的角色也会改变：它们继续提供专业功能和服务，同时成为 Agent 可以调用的资源。一次任务可以组合多个应用的能力，结果由系统统一呈现，用户在需要时进入具体界面查看或接管。这样的变化也涉及入口和服务分发，需要应用生态共同开放。
-
-个人上下文、记忆和任务状态则应随用户跨设备延续。例如，在手机上规划好出行，上车后车机就能理解目的并接续导航，无需重新交代背景。手机、电脑、汽车和眼镜可以共享同一个个人 Agent 的记忆，利用各自的感知与执行能力协作。语音、视觉和动作进一步拓展交互方式，让设备在合适的时机主动响应，逐步把 Agent 的能力延伸到物理世界。
-
-Eta 先从现有 Android 上的模型、上下文与工具做起。真正落地到手机上的 Agentic OS，还需要手机厂商、Android 应用开发者、模型服务商与硬件生态共同推进；技术要成熟，接口要开放，各方利益也要协调，完整形态仍然遥遥无期。
-
-## 深入了解
-
-- [设备支持与权限边界](docs/ROOTLESS_SUPPORT.md)：普通设备、Root、文件工作区与后台运行。
-- [技术实现](docs/TECHNICAL.md)：设备工具、数据检索、浏览器、终端与系统集成。
-- [Agent Runtime](docs/AGENT_RUNTIME.md)：Agent Loop、Provider、steering、transcript 与结果恢复。
-- [HyperOS 系统入口](docs/HYPEROS_SYSTEM_ENTRY.md)：电源键、一圈即搜的适配条件与验证边界。
-- [终端原生组件](docs/TERMINAL_NATIVE.md)：PTY、PRoot 及随包源码的构建方式。
-
-## 自动同步与编译
-
-项目配置了 CI/CD 自动化，**每日一次统一管线**（北京时间上午 10 点）串行执行：合并上游 Eta → 适配技能源 → 编译并发布 Release：
-
-| 来源 | 同步机制 | 频率 |
-|---------|---------|------|
-| 上游 Eta（[Mangi-11/Eta](https://github.com/Mangi-11/Eta)） | `sync-build.yml` Job 0：自动 merge（生成产物路径冲突自动取 fork 版，代码冲突自动建 issue 留痕） | 每 24h |
-| 技能源（社区开源技能仓库） | `sync-build.yml` Job 1：三源合流适配，存量技能动态保留 | 每 24h |
-| 编译发布 | `sync-build.yml` Job 2：签名 release APK → GitHub Release | 随每轮管线 |
-
-也支持 `repository_dispatch` Webhook 即时触发（`eta-upstream-updated` / `hanshuang-codex-updated`）、手动触发完整管线或仅构建（`build-only.yml`）；推送实质变更到 main 同样会触发构建。详见 [`.github/workflows/`](.github/workflows/) 与仓库根目录适配脚本。
+- [设备支持与权限边界](docs/ROOTLESS_SUPPORT.md)
+- [技术实现](docs/TECHNICAL.md)
+- [Agent Runtime](docs/AGENT_RUNTIME.md)
+- [角色功能](docs/CHARACTERS.md)
+- [语音配置](docs/VOICE.md)
+- [终端原生组件](docs/TERMINAL_NATIVE.md)
 
 ## 参考与致谢
 
-- [Pi Coding Agent](https://github.com/earendil-works/pi)：Eta Agent Runtime 的核心参考，包括 Agent Loop、Tool Calling、steering 与 transcript 状态管理。
-- [OmniBot](https://github.com/omnimind-ai/OmniBot)：Android AI Agent 方向的参考项目。
-- [libxposed API](https://github.com/libxposed/api)：现代 Xposed API。
-- [Miuix](https://github.com/compose-miuix-ui/miuix)：UI 组件库。
-- 本版本内置技能融合自多个社区开源技能仓库，感谢各位作者的分享。
+- [Mangi-11/Eta](https://github.com/Mangi-11/Eta)：本分支的上游。
+- [Pi Coding Agent](https://github.com/earendil-works/pi)：Agent Runtime 的核心参考。
+- [OmniBot](https://github.com/omnimind-ai/OmniBot)、[libxposed API](https://github.com/libxposed/api)、[Miuix](https://github.com/compose-miuix-ui/miuix)。
+- 内置技能融合自多个社区开源技能仓库，感谢各位作者。
 
 ## 许可证
 
-Eta 采用 [PolyForm Noncommercial License 1.0.0](LICENSE)，未经[作者](https://github.com/Mangi-11)书面授权，禁止个人二次分发、贩卖、收费代装及其他商业使用。
+沿用上游：[PolyForm Noncommercial License 1.0.0](LICENSE)。未经[原作者](https://github.com/Mangi-11)书面授权，禁止个人二次分发、贩卖、收费代装及其他商业使用。
 
 <sub></sub>社区：<a href="https://linux.do">LINUX DO</sub>

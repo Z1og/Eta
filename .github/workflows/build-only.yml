@@ -1,6 +1,13 @@
 name: Build APK Only
 
 on:
+  # 推送即编译（只出 APK，不碰上游、不动技能）
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/workflows/*.yml'
   workflow_dispatch:
     inputs:
       build_type:

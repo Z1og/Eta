@@ -1,4 +1,6 @@
-# Eta + hanshuang-codex
+# Eta2
+
+> This English README has not been updated for the Eta2 fork yet — see [README.md](README.md) (Chinese) for the current description.
 
 [简体中文](README.md) | **English**
 
