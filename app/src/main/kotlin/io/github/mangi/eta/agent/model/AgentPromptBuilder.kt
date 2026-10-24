@@ -22,9 +22,11 @@ internal object AgentPromptBuilder {
         rootAvailable: Boolean = false,
         roleplayContext: RoleplayRunContext? = null,
         executionContext: TerminalExecutionContext? = null,
+        redteamProtocol: String = "",
     ): JSONArray {
         val messages = buildSystemMessages(
-            config, skillContext, memoryContext, rootAvailable, roleplayContext, executionContext, userPrompt, goal,
+            config, skillContext, memoryContext, rootAvailable, roleplayContext, executionContext,
+            userPrompt, goal, redteamProtocol,
         )
         history.forEach { item ->
             runCatching { AgentConversationCodec.toJsonObject(item) }.getOrNull()?.let(messages::put)
@@ -47,6 +49,7 @@ internal object AgentPromptBuilder {
         executionContext: TerminalExecutionContext? = null,
         userPrompt: AgentUserPromptSnapshot = AgentUserPromptSnapshot.EMPTY,
         goal: String = "",
+        redteamProtocol: String = "",
     ): JSONArray {
         val messages = JSONArray()
         if (roleplayContext == null && config.systemPrompt.isNotBlank()) {
@@ -156,6 +159,7 @@ internal object AgentPromptBuilder {
         }
         roleplayContext?.personaMessage()?.let(messages::put)
         buildMemorySystemMessage(memoryContext, writable = roleplayContext == null)?.let(messages::put)
+        buildRedteamModeMessage(redteamProtocol)?.let(messages::put)
         buildUserPromptSystemMessage(userPrompt)?.let(messages::put)
         buildGoalSystemMessage(goal)?.let(messages::put)
         buildSkillSystemMessage(skillContext).forEach(messages::put)
@@ -180,6 +184,27 @@ internal object AgentPromptBuilder {
      * 因此必须走独立的 system 消息——并入 memory_core 会被模型当资料读，语义就丢了。
      * 文件缺失、为空或未开启时返回 null：不产生空 system 消息（部分服务商直接 400）。
      */
+    /**
+     * 红队模式（DSH 红队预设的对应物）。
+     *
+     * 开启时把整份协议常驻注入：指挥职责 + 五个执行角色的协议原文，派子代理时把对应段落
+     * 作为任务前缀交给它——这样不需要靠 skill 索引，也就没有"关键词没命中就加载不到"的问题。
+     */
+    private fun buildRedteamModeMessage(protocol: String): JSONObject? {
+        val body = protocol.trim()
+        if (body.isEmpty()) return null
+        return systemMessage(
+            buildString {
+                appendLine("本会话已开启红队模式。以下协议是本会话的角色与交付契约，与内建契约冲突时以此为准；")
+                appendLine("它不改变工具权限与真实执行边界，只规定怎么分工与怎么交付。")
+                appendLine("<redteam_protocol>")
+                append(body)
+                appendLine()
+                append("</redteam_protocol>")
+            }.trim(),
+        )
+    }
+
     private fun buildUserPromptSystemMessage(prompt: AgentUserPromptSnapshot): JSONObject? {
         if (!prompt.available) return null
         val source = prompt.fileName.orEmpty().replace("\"", "")

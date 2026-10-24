@@ -109,6 +109,8 @@ internal object AgentModelClient {
         rewriteReply: Boolean = false,
         assistantScreenContext: String = "",
         userPrompt: AgentUserPromptSnapshot = AgentUserPromptSnapshot.EMPTY,
+        /** 红队模式协议全文；空串表示未开启。 */
+        redteamProtocol: String = "",
         goal: String = "",
         goalProgress: (() -> GoalProgress?)? = null,
         /** 与技能提示共用同一注入点：返回非空时作为一条上下文提示进 messages，不进会话 UI。 */
@@ -131,6 +133,7 @@ internal object AgentModelClient {
             skillContext,
             memoryContext,
             userPrompt = userPrompt,
+            redteamProtocol = redteamProtocol,
             goal = goal,
             rootAvailable = initialCapabilities.rootAvailable,
             roleplayContext = roleplayContext,
@@ -190,7 +193,8 @@ internal object AgentModelClient {
             val capabilities = capabilitiesProvider()
             if (capabilities.rootAvailable != promptRootAvailable) {
                 val systemMessages = AgentPromptBuilder.buildSystemMessages(
-                    config, skillContext, memoryContext, capabilities.rootAvailable, roleplayContext, executionContext, userPrompt, goal,
+                    config, skillContext, memoryContext, capabilities.rootAvailable, roleplayContext,
+                    executionContext, userPrompt, goal, redteamProtocol,
                 )
                 for (index in 0 until systemMessages.length()) {
                     messages.put(index, systemMessages.getJSONObject(index))

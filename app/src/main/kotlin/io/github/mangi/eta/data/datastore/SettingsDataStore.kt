@@ -68,6 +68,7 @@ internal object SettingsDataStore {
 
     /** 随包内置破甲记忆是否已自动装配过一次；置位后不再自动重建，尊重用户的删除。 */
     private val USER_PROMPT_BUILTIN_SEEDED = booleanPreferencesKey("user_prompt_builtin_seeded")
+    private val REDTEAM_MODE = booleanPreferencesKey("redteam_mode")
     private val LINUX_DISTRIBUTION = stringPreferencesKey("linux_distribution")
     private val APPEARANCE_THEME_MODE = stringPreferencesKey("appearance_theme_mode")
     private val APPEARANCE_MONET_ENABLED = booleanPreferencesKey("appearance_monet_enabled")
@@ -363,6 +364,27 @@ internal object SettingsDataStore {
      * Legacy caller alias: no independent switch exists after settings consolidation.
      */
     suspend fun userPromptEnabled(): Boolean = reverseBundleEnabled()
+
+    /**
+     * 红队模式总开关。
+     *
+     * 开启后在 system prompt 常驻注入 `assets/user_protocol/redteam-mode.md`
+     * （指挥协议 + 五个执行角色协议），相当于 DSH 的红队预设；关闭即回到普通会话。
+     */
+    suspend fun redteamMode(): Boolean {
+        ensureInitialized()
+        return dataStore.data
+            .catch { cause ->
+                if (cause is IOException) emit(emptyPreferences()) else throw cause
+            }
+            .map { preferences -> preferences[REDTEAM_MODE] ?: false }
+            .first()
+    }
+
+    suspend fun setRedteamMode(value: Boolean) {
+        ensureInitialized()
+        dataStore.edit { preferences -> preferences[REDTEAM_MODE] = value }
+    }
 
     suspend fun setUserPromptEnabled(value: Boolean) {
         setReverseBundleEnabled(value)

@@ -244,7 +244,7 @@ def adapt_text(role: str, text: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", required=True, help="dsh-purge-allowed 仓库根目录")
-    ap.add_argument("--builtin", action="store_true", help="写入 app/src/main/assets/builtin_skills")
+    ap.add_argument("--builtin", action="store_true", help="写入 app/src/main/assets/user_protocol/redteam-mode.md")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -262,47 +262,50 @@ def main() -> int:
 
     pkg = json.load(open(os.path.join(args.source, "package.json"), encoding="utf-8"))
     version = pkg.get("version", "unknown")
-    rt_src = os.path.join(STAGE, "rt.sh")
-    if not os.path.isfile(rt_src):
-        print(f"缺少 {rt_src}（台账 CLI 源文件）", file=sys.stderr)
-        return 1
 
-    out_root = Eta if args.builtin else os.path.join(STAGE, "skills")
-    manifest_added = []
-    for role, meta in ROLES.items():
+    sections = [
+        f"# 红队模式协议（源自 dsh-purge-allowed v{version}）",
+        "",
+        "## 使用方式",
+        "",
+        "- 你是主会话的**指挥**，按下面「一、指挥」执行；五个执行角色是你要派出去的分工。",
+        "- 派子代理时，把「二」～「六」中对应角色的整段正文作为 `spawn_agents` 任务说明的前缀，"
+        "再接上本次具体目标（目标范围、已知信息、已经测过什么、期望产出）。",
+        "- 台账统一走 `scripts/rt.sh`（bash + sqlite3，`$RT_HOME/rt.db`）；"
+        "没装脚本时用 `sqlite3` 按各角色「落库」小节里的字段自己建表。",
+        "- 报告与交付口径沿用本协议里的公共要求；只写实际看到回显、实际登录成功、实际跑通的东西。",
+        "",
+    ]
+    order = ["plan", "recon", "assess", "vuln-scan", "exploit", "internal"]
+    cn = {
+        "plan": "一、指挥（主会话）",
+        "recon": "二、信息收集（recon）",
+        "assess": "三、资产梳理（assess）",
+        "vuln-scan": "四、漏洞发现（vuln-scan）",
+        "exploit": "五、漏洞利用（exploit）",
+        "internal": "六、内网渗透（internal）",
+    }
+    for role in order:
         body = adapt_text(role, prompts[role])
-        fm = FM.format(
-            skill=meta["skill"], desc=meta["desc"], role=role, version=version,
-            triggers=meta["triggers"], title=f"{meta['name']} · {role}",
-        )
-        text = fm + body
-        dest = os.path.join(out_root, meta["skill"])
-        print(f"{role:9s} -> {dest}  ({len(text)} chars)")
-        if args.dry_run:
-            continue
-        os.makedirs(os.path.join(dest, "scripts"), exist_ok=True)
-        open(os.path.join(dest, "SKILL.md"), "w", encoding="utf-8").write(text)
-        shutil.copyfile(rt_src, os.path.join(dest, "scripts", "rt.sh"))
-        os.chmod(os.path.join(dest, "scripts", "rt.sh"), 0o755)
-        manifest_added.append({
-            "id": meta["skill"], "name": meta["skill"], "description": meta["desc"],
-            "assetPath": f"builtin_skills/{meta['skill']}",
-            "hasScripts": True, "hasReferences": False, "hasAssets": False, "hasEvals": False,
-        })
+        sections.append(f"## {cn[role]}")
+        sections.append("")
+        sections.append(body.strip())
+        sections.append("")
+        print(f"{role:9s} {len(body)} chars")
+
+    protocol = "\n".join(sections).strip() + "\n"
+    print(f"协议总长 {len(protocol)} chars")
 
     if args.dry_run:
         return 0
 
+    os.makedirs(STAGE, exist_ok=True)
+    open(os.path.join(STAGE, "redteam-mode.md"), "w", encoding="utf-8").write(protocol)
     if args.builtin:
-        mpath = os.path.join(Eta, "manifest.json")
-        manifest = json.load(open(mpath, encoding="utf-8"))
-        by_id = {s["id"]: s for s in manifest["skills"]}
-        for entry in manifest_added:
-            by_id[entry["id"]] = {**by_id.get(entry["id"], {}), **entry}
-        manifest["skills"] = sorted(by_id.values(), key=lambda s: s["id"])
-        json.dump(manifest, open(mpath, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-        print(f"manifest 更新：+{len(manifest_added)} 条，共 {len(manifest['skills'])} 条")
-
+        dest = "app/src/main/assets/user_protocol/redteam-mode.md"
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        open(dest, "w", encoding="utf-8").write(protocol)
+        print(f"写入 {dest}")
     return 0
 
 

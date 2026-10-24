@@ -332,6 +332,22 @@ internal class AgentRuntimeRunExecutor(
                     AgentUserPromptSnapshot.EMPTY
                 }
             }
+            // 红队模式：整份协议随包，开启时读一次（会话内冻结，避免系统提示抖动废掉前缀缓存）。
+            val redteamProtocol = runBlocking {
+                runCatching {
+                    if (!SettingsDataStore.redteamMode()) {
+                        ""
+                    } else {
+                        appContext.assets.open("user_protocol/redteam-mode.md")
+                            .bufferedReader().use { it.readText() }
+                    }
+                }.getOrElse { throwable ->
+                    AndroidAgentLogger.warnThrottled("redteam_mode_unavailable") {
+                        "Redteam mode asset unavailable: type=${throwable.safeLogType()}"
+                    }
+                    ""
+                }
+            }
             if (request.config.terminalTools) {                // 启动探测由 App 拥有；模型首轮等待其结果，避免把检测中的授权当成普通设备。
                 runBlocking {
                     while (io.github.mangi.eta.agent.device.RootAccess.state.value.isChecking) {
@@ -708,6 +724,7 @@ internal class AgentRuntimeRunExecutor(
                     memoryContext = memoryContext,
                     experienceHint = prepareMemoryHint(modelConfig),
                     userPrompt = userPrompt,
+                    redteamProtocol = redteamProtocol,
                     goal = if (goalCompleted) "" else request.goal,
                     goalProgress = taskStore?.let { store ->
                         {

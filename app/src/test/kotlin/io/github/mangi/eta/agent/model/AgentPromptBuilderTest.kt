@@ -190,6 +190,25 @@ class AgentPromptBuilderTest {
     }
 
     @Test
+    fun redteamProtocolIsInjectedOnlyWhenProvided() {
+        fun systemContentsOf(protocol: String): List<String> =
+            AgentPromptBuilder.buildInitialMessages(
+                config = modelConfig("", terminalTools = false, browserTools = false),
+                prompt = "测试",
+                images = emptyList(),
+                history = emptyList(),
+                skillContext = SkillContext(),
+                redteamProtocol = protocol,
+            ).systemContents()
+
+        assertTrue(systemContentsOf("").none { it.contains("<redteam_protocol>") })
+        val injected = systemContentsOf("# 红队协议\n指挥职责")
+        assertTrue(injected.any { it.contains("<redteam_protocol>") && it.contains("指挥职责") })
+        // 正文是包在标签里的，不额外改写原文
+        assertTrue(injected.none { it.contains("# 红队协议") && !it.contains("<redteam_protocol>") })
+    }
+
+    @Test
     fun reverseDeliveryContractIsInjectedOnlyWhenReverseModeEnabled() {
         fun systemContentsOf(reverseModeEnabled: Boolean): List<String> {
             val messages = AgentPromptBuilder.buildInitialMessages(

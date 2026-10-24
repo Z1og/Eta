@@ -271,66 +271,6 @@
       "hasEvals": false
     },
     {
-      "id": "dsh-redteam-assess",
-      "name": "dsh-redteam-assess",
-      "description": "红队资产梳理角色：逐条评估已收集资产的易打性、标记优先级与可疑面，写回台账并交给漏洞发现角色，不自行验证漏洞也不打分。",
-      "assetPath": "builtin_skills/dsh-redteam-assess",
-      "hasScripts": true,
-      "hasReferences": false,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "dsh-redteam-exploit",
-      "name": "dsh-redteam-exploit",
-      "description": "红队漏洞利用角色：把已确认漏洞打成实际权限（WebShell / 命令执行 / 数据库），登记后台会话、隧道与凭据并证明可用。",
-      "assetPath": "builtin_skills/dsh-redteam-exploit",
-      "hasScripts": true,
-      "hasReferences": false,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "dsh-redteam-internal",
-      "name": "dsh-redteam-internal",
-      "description": "红队内网渗透角色：借已打通的隧道做内网横向、凭据复用与集权系统突破，把内网资产与新入口继续落台账。",
-      "assetPath": "builtin_skills/dsh-redteam-internal",
-      "hasScripts": true,
-      "hasReferences": false,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "dsh-redteam-plan",
-      "name": "dsh-redteam-plan",
-      "description": "红队作战指挥角色：把目标拆成任务、派给执行角色、汇总成果并决定下一步；用户只给单位名时按 信息收集→资产梳理→漏洞发现→漏洞利用→内网渗透 顺序推进。",
-      "assetPath": "builtin_skills/dsh-redteam-plan",
-      "hasScripts": true,
-      "hasReferences": false,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "dsh-redteam-recon",
-      "name": "dsh-redteam-recon",
-      "description": "红队信息收集角色：子域枚举、证书透明、测绘平台、端口与服务指纹，把目标单位的互联网资产逐条落台账，供后续资产梳理与漏洞发现使用。",
-      "assetPath": "builtin_skills/dsh-redteam-recon",
-      "hasScripts": true,
-      "hasReferences": false,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
-      "id": "dsh-redteam-vuln-scan",
-      "name": "dsh-redteam-vuln-scan",
-      "description": "红队漏洞发现角色：优先 Nday/1day 已知漏洞，再打接口未授权与逻辑缺陷，每条发现带请求证据落台账，交漏洞利用角色。",
-      "assetPath": "builtin_skills/dsh-redteam-vuln-scan",
-      "hasScripts": true,
-      "hasReferences": false,
-      "hasAssets": false,
-      "hasEvals": false
-    },
-    {
       "id": "dsl-vm-reverse",
       "name": "dsl-vm-reverse",
       "description": "Reverse custom JavaScript/WASM DSL virtual machines, recover opcodes, state transitions, and runtime behavior in authorized local artifacts.",
